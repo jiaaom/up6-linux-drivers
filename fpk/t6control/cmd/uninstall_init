@@ -1,5 +1,5 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
-stop_webd
+remove_webd
 remove_daemons
 exit 0

@@ -1,0 +1,6 @@
+#!/bin/bash
+# Build and install the DKMS modules for the running kernel, then load them.
+. "$(dirname "$0")/common"
+
+run_installer
+exit 0

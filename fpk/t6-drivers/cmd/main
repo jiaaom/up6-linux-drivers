@@ -1,0 +1,7 @@
+#!/bin/bash
+# The drivers are kernel modules loaded at boot; there is no service to run.
+case "$1" in
+    start|stop) exit 0 ;;
+    status) [ -d /sys/module/t6_platform ] && exit 0 || exit 3 ;;
+    *) exit 1 ;;
+esac

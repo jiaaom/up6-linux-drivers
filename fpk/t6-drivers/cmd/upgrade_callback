@@ -1,0 +1,6 @@
+#!/bin/bash
+# Same as install: older DKMS versions are removed and the new one built.
+. "$(dirname "$0")/common"
+
+run_installer
+exit 0

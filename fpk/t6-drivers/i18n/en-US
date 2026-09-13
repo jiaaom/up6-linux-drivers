@@ -1,0 +1,4 @@
+[common]
+display_name="T6 Drivers"
+desc="Kernel drivers (DKMS) for the UnifyDrive UP6 / ZSpace T6 / PA60: fans, temperatures, LEDs, backlight, beeper, keys, battery charge control and touchscreen."
+changelog="Initial package."

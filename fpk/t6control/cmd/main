@@ -1,0 +1,11 @@
+#!/bin/bash
+# Runtime control of the web backend. The fan daemon is a systemd service
+# and keeps running whether or not the app is started.
+. "$(dirname "$0")/common"
+
+case "$1" in
+    start) start_webd ;;
+    stop) stop_webd ;;
+    status) webd_pid >/dev/null && exit 0 || exit 3 ;;
+    *) exit 1 ;;
+esac

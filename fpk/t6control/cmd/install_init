@@ -1,0 +1,4 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+[ -d /sys/module/t6_platform ] || fail "Install and load the T6 Drivers package first."
+exit 0

@@ -11,8 +11,8 @@ Tested on x86-64 Debian 12.
 
 | package | module | covers |
 |---|---|---|
-| [`t6-platform/`](t6-platform/) | `t6_platform` | EC: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
-| [`focaltech-ft8722/`](focaltech-ft8722/) | `ft8722_ts` | front-panel touchscreen |
+| [`t6-platform-dkms/`](t6-platform-dkms/) | `t6_platform` | EC: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
+| [`focaltech-ft8722-dkms/`](focaltech-ft8722-dkms/) | `ft8722_ts` | front-panel touchscreen |
 
 
 ## Optional userspace helpers

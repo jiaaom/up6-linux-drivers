@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install (or remove) the t6-driver DKMS packages: t6-platform and focaltech-ft8722.
+# Install (or remove) the DKMS packages from t6-platform-dkms/ and focaltech-ft8722-dkms/.
 #
 #   sudo ./install-dkms.sh            install/upgrade both packages for the running kernel
 #   sudo ./install-dkms.sh --remove   remove both packages and their boot-time config
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-PACKAGES=(t6-platform focaltech-ft8722)
+PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
 MODULES_LOAD_CONF=/etc/modules-load.d/t6-platform.conf
 
 LOG=$(mktemp -t install-dkms.XXXXXX)
@@ -35,6 +35,14 @@ conf_value() {
 }
 
 module_loaded() { [ -d "/sys/module/$1" ]; }
+
+# rmmod rather than modprobe -r: the latter also tries to remove soft
+# dependencies (pinctrl_meteorlake, always busy) and reports failure
+# even though the module itself was unloaded.
+unload_module() {
+    module_loaded "$1" || return 0
+    rmmod "$1" || die "cannot unload $1"
+}
 
 require_root() {
     [ "$(id -u)" -eq 0 ] || die "run as root (sudo $0 $*)"
@@ -91,9 +99,7 @@ install_boot_config() {
 load_modules() {
     local m
     for m in t6_platform ft8722_ts; do
-        if module_loaded "$m"; then
-            modprobe -r "$m" || die "cannot unload $m"
-        fi
+        unload_module "$m"
         modprobe "$m" || die "cannot load $m (see dmesg)"
     done
     # Reloading t6_platform renumbers its hwmon device; the fan daemon caches paths.
@@ -104,11 +110,12 @@ load_modules() {
 }
 
 do_install() {
-    local load=$1 dir
+    local load=$1 dir names=()
     check_prerequisites
     for dir in "${PACKAGES[@]}"; do
         [ -f "$SCRIPT_DIR/$dir/dkms.conf" ] || die "missing $SCRIPT_DIR/$dir/dkms.conf"
         install_package "$SCRIPT_DIR/$dir"
+        names+=("$(conf_value "$SCRIPT_DIR/$dir" PACKAGE_NAME)")
     done
     install_boot_config
     if [ "$load" = yes ]; then
@@ -116,15 +123,13 @@ do_install() {
         load_modules
     fi
     log "done"
-    dkms status | grep -E "^($(IFS='|'; echo "${PACKAGES[*]}"))/" || true
+    dkms status | grep -E "^($(IFS='|'; echo "${names[*]}"))/" || true
 }
 
 do_remove() {
     local m dir name
     for m in ft8722_ts t6_platform; do
-        if module_loaded "$m"; then
-            modprobe -r "$m" || die "cannot unload $m"
-        fi
+        unload_module "$m"
     done
     for dir in "${PACKAGES[@]}"; do
         name=$(conf_value "$SCRIPT_DIR/$dir" PACKAGE_NAME)

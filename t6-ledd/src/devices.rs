@@ -1,0 +1,248 @@
+//! The indicator devices of the T6 and how each maps onto the `t6:*` LED
+//! class devices, plus the automatic rules.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+const LEDS_ROOT: &str = "/sys/class/leds";
+
+/// Automatic behaviour of a device.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Auto {
+    /// Always this colour.
+    Fixed(&'static str),
+    /// White while a drive sits in the bay (1-based).
+    BayPresent(u8),
+    /// Blue while a Bluetooth adapter is present and not rfkill-blocked.
+    Bluetooth,
+    /// Blue while a wireless interface is up.
+    Wifi,
+    /// All colours off: the EC breathes the LED on its own.
+    Breathing,
+    /// Driven by the driver's charge control / the EC; never written here.
+    ChargeControl,
+}
+
+pub struct Device {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// LED class devices, in the order the colour tables reference them.
+    pub leds: &'static [&'static str],
+    /// Colour name -> LEDs that are on. `off` must be first.
+    pub colors: &'static [(&'static str, &'static [&'static str])],
+    pub auto: Option<Auto>,
+    /// What `auto` does, for the UI.
+    pub auto_desc: &'static str,
+}
+
+macro_rules! rgb_colors {
+    ($r:literal, $g:literal, $b:literal) => {
+        &[
+            ("off", &[]),
+            ("red", &[$r]),
+            ("green", &[$g]),
+            ("blue", &[$b]),
+            ("yellow", &[$r, $g]),
+            ("cyan", &[$g, $b]),
+            ("magenta", &[$r, $b]),
+            ("white", &[$r, $g, $b]),
+        ]
+    };
+}
+
+macro_rules! bay {
+    ($n:literal, $id:literal, $w:literal, $r:literal) => {
+        Device {
+            id: $id,
+            label: concat!("Bay ", $n),
+            leds: &[$w, $r],
+            colors: &[("off", &[]), ("white", &[$w]), ("red", &[$r])],
+            auto: Some(Auto::BayPresent($n)),
+            auto_desc: "white while a drive is installed",
+        }
+    };
+}
+
+pub const CATALOG: &[Device] = &[
+    Device {
+        id: "power",
+        label: "Power button",
+        leds: &["t6:system:white", "t6:system:red", "t6:system:green"],
+        colors: &[("off", &[]), ("white", &["t6:system:white"]), ("red", &["t6:system:red"]), ("green", &["t6:system:green"])],
+        auto: Some(Auto::Fixed("white")),
+        auto_desc: "white while running",
+    },
+    bay!(1, "bay1", "t6:bay0:white", "t6:bay0:red"),
+    bay!(2, "bay2", "t6:bay1:white", "t6:bay1:red"),
+    bay!(3, "bay3", "t6:bay2:white", "t6:bay2:red"),
+    bay!(4, "bay4", "t6:bay3:white", "t6:bay3:red"),
+    bay!(5, "bay5", "t6:bay4:white", "t6:bay4:red"),
+    bay!(6, "bay6", "t6:bay5:white", "t6:bay5:red"),
+    Device {
+        id: "rgb",
+        label: "Tray light",
+        leds: &["t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"],
+        // "off" here is the EC's breathing pattern: the register has no
+        // host-controlled dark state that we know of.
+        colors: rgb_colors!("t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"),
+        auto: Some(Auto::Breathing),
+        auto_desc: "breathing (EC pattern)",
+    },
+    Device {
+        id: "bt",
+        label: "Bluetooth",
+        leds: &["t6:bt:red", "t6:bt:green", "t6:bt:blue"],
+        colors: rgb_colors!("t6:bt:red", "t6:bt:green", "t6:bt:blue"),
+        auto: Some(Auto::Bluetooth),
+        auto_desc: "blue while Bluetooth is enabled",
+    },
+    Device {
+        id: "wifi",
+        label: "Wi-Fi",
+        leds: &["t6:wifi:red", "t6:wifi:green", "t6:wifi:blue"],
+        colors: rgb_colors!("t6:wifi:red", "t6:wifi:green", "t6:wifi:blue"),
+        auto: Some(Auto::Wifi),
+        auto_desc: "blue while a wireless link is up",
+    },
+    Device {
+        id: "battery",
+        label: "Battery",
+        leds: &["t6:battery:orange", "t6:battery:red", "t6:battery:green"],
+        // No manual colours: the charge-control worker rewrites the
+        // register every 30 s, so a manual setting could not stick.
+        colors: &[],
+        auto: Some(Auto::ChargeControl),
+        auto_desc: "dark on mains, orange on battery (charge control)",
+    },
+];
+
+pub fn by_id(id: &str) -> Option<&'static Device> {
+    CATALOG.iter().find(|d| d.id == id)
+}
+
+impl Device {
+    pub fn is_bay(&self) -> bool {
+        matches!(self.auto, Some(Auto::BayPresent(_)))
+    }
+
+    pub fn leds_for(&self, color: &str) -> Option<&'static [&'static str]> {
+        self.colors.iter().find(|(n, _)| *n == color).map(|(_, l)| *l)
+    }
+
+    /// Colour the automatic rule wants right now, or `None` to leave the
+    /// LED untouched.
+    pub fn auto_color(&self) -> Option<&'static str> {
+        match self.auto? {
+            Auto::Fixed(c) => Some(c),
+            Auto::BayPresent(n) => Some(if sources::bay_present(n) { "white" } else { "off" }),
+            Auto::Bluetooth => Some(if sources::bluetooth_on() { "blue" } else { "off" }),
+            Auto::Wifi => Some(if sources::wifi_up() { "blue" } else { "off" }),
+            Auto::Breathing => Some("off"),
+            Auto::ChargeControl => None,
+        }
+    }
+}
+
+/// Writes LED brightness values, skipping writes that would not change
+/// anything.
+pub struct LedBank {
+    root: PathBuf,
+    state: HashMap<&'static str, bool>,
+}
+
+impl LedBank {
+    pub fn new() -> Self {
+        LedBank { root: PathBuf::from(LEDS_ROOT), state: HashMap::new() }
+    }
+
+    pub fn available(&self, led: &str) -> bool {
+        self.root.join(led).join("brightness").exists()
+    }
+
+    /// Set a device to a colour (every LED not in the colour goes off).
+    pub fn set(&mut self, dev: &Device, color: &str) -> Result<(), String> {
+        let on = dev.leds_for(color).ok_or_else(|| format!("{}: unknown colour {color:?}", dev.id))?;
+        for led in dev.leds {
+            self.write(led, on.contains(led))?;
+        }
+        Ok(())
+    }
+
+    fn write(&mut self, led: &'static str, on: bool) -> Result<(), String> {
+        if self.state.get(led) == Some(&on) {
+            return Ok(());
+        }
+        let path = self.root.join(led).join("brightness");
+        std::fs::write(&path, if on { "1\n" } else { "0\n" }).map_err(|e| format!("{}: {e}", path.display()))?;
+        self.state.insert(led, on);
+        Ok(())
+    }
+
+    /// Forget what was written so the next pass rewrites everything.
+    pub fn invalidate(&mut self) {
+        self.state.clear();
+    }
+}
+
+/// State sources for the automatic rules. All read from sysfs.
+pub mod sources {
+    use super::*;
+
+    /// T6 NVMe bay -> PCIe root port (same table as t6-fand).
+    const BAY_ROOT_PORTS: [(u8, &str); 6] = [
+        (1, "0000:00:06.1"),
+        (2, "0000:00:06.2"),
+        (3, "0000:00:06.0"),
+        (4, "0000:00:1c.0"),
+        (5, "0000:00:1c.2"),
+        (6, "0000:00:1c.6"),
+    ];
+
+    /// A drive is present when the root port has a PCI child device
+    /// (`0000:BB:DD.F`; the port's own `...:pcieNNN` service entry does
+    /// not count).
+    pub fn bay_present(bay: u8) -> bool {
+        let Some((_, port)) = BAY_ROOT_PORTS.iter().find(|(b, _)| *b == bay) else { return false };
+        let dir = Path::new("/sys/bus/pci/devices").join(port);
+        std::fs::read_dir(dir)
+            .map(|it| {
+                it.flatten().any(|e| {
+                    let n = e.file_name().to_string_lossy().to_string();
+                    n.starts_with("0000:") && !n.contains(":pcie") && e.path().join("vendor").exists()
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    fn read_trim(p: PathBuf) -> Option<String> {
+        std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
+    }
+
+    pub fn bluetooth_on() -> bool {
+        let has_adapter = std::fs::read_dir("/sys/class/bluetooth")
+            .map(|it| it.flatten().any(|e| e.file_name().to_string_lossy().starts_with("hci")))
+            .unwrap_or(false);
+        if !has_adapter {
+            return false;
+        }
+        // Blocked if any bluetooth rfkill switch is soft- or hard-blocked.
+        let blocked = std::fs::read_dir("/sys/class/rfkill")
+            .map(|it| {
+                it.flatten()
+                    .filter(|e| read_trim(e.path().join("type")).as_deref() == Some("bluetooth"))
+                    .any(|e| read_trim(e.path().join("soft")).as_deref() == Some("1") || read_trim(e.path().join("hard")).as_deref() == Some("1"))
+            })
+            .unwrap_or(false);
+        !blocked
+    }
+
+    pub fn wifi_up() -> bool {
+        std::fs::read_dir("/sys/class/net")
+            .map(|it| {
+                it.flatten()
+                    .filter(|e| e.path().join("wireless").is_dir())
+                    .any(|e| read_trim(e.path().join("operstate")).as_deref() == Some("up"))
+            })
+            .unwrap_or(false)
+    }
+}

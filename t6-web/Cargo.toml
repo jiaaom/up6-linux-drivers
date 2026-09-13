@@ -1,0 +1,19 @@
+[package]
+name = "t6-webd"
+version = "0.1.0"
+edition = "2021"
+description = "Web backend for the T6 Control Center (FygoOS app)"
+license = "GPL-2.0"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

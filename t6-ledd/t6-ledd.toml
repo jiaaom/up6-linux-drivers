@@ -1,0 +1,12 @@
+# t6-ledd configuration. Managed by t6-ledd (T6 Control Center);
+# hand edits are kept but reformatted on the next change.
+#
+# bays_enabled  master switch for the six bay LEDs
+# [night]       manual = true forces night mode; schedule = "23:00-07:00"
+# [devices.<id>] mode = "auto" | "manual", color = "<name>" for manual
+#   ids: power, bay1..bay6, rgb, bt, wifi (battery is always automatic)
+
+bays_enabled = true
+
+[night]
+manual = false

@@ -1,0 +1,4 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+install_daemons
+exit 0

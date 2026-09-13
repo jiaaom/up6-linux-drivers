@@ -1,0 +1,80 @@
+# Shared definitions for the t6control lifecycle scripts (sourced, not executed).
+
+WEBD="$TRIM_APPDEST/bin/t6-webd"
+# Only the gateway process (trim_http_cgi, root) connects to the socket.
+SOCKET="$TRIM_APPDEST/app.sock"
+GATEWAY_PREFIX=/app/t6control
+PID_FILE="$TRIM_PKGVAR/t6-webd.pid"
+LOG_FILE="$TRIM_PKGVAR/t6-webd.log"
+
+# The daemons are system services (they must run from early boot, whether
+# or not this app is started), laid out exactly like a plain-Debian install.
+DAEMONS=(t6-fand t6-ledd)
+
+fail() {
+    echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+log() {
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG_FILE"
+}
+
+# Install (or update) the daemons as system services. An existing
+# configuration file is kept; the packaged default is used only on first
+# install.
+install_daemons() {
+    local d
+    [ -d /sys/module/t6_platform ] || fail "The T6 Drivers package is not loaded (t6_platform module missing)."
+    for d in "${DAEMONS[@]}"; do
+        install -m 755 "$TRIM_APPDEST/bin/$d" "/usr/sbin/$d"
+        [ -f "/etc/$d.toml" ] || install -m 644 "$TRIM_APPDEST/$d.toml" "/etc/$d.toml"
+        install -m 644 "$TRIM_APPDEST/$d.service" "/etc/systemd/system/$d.service"
+    done
+    systemctl daemon-reload
+    for d in "${DAEMONS[@]}"; do
+        systemctl enable "$d" >/dev/null 2>&1
+        systemctl restart "$d" || fail "$d failed to start (journalctl -u $d)."
+    done
+}
+
+# Remove the services and binaries. The configuration files hold user
+# tuning, so they stay unless the uninstall wizard asked to remove them
+# (a same-version reinstall from the CLI also passes through here).
+remove_daemons() {
+    local d
+    for d in "${DAEMONS[@]}"; do
+        systemctl disable --now "$d" >/dev/null 2>&1 || true
+        rm -f "/etc/systemd/system/$d.service" "/usr/sbin/$d"
+        case "${wizard_remove_settings:-false}" in
+            true|1|yes|on) rm -f "/etc/$d.toml" ;;
+        esac
+    done
+    systemctl daemon-reload
+}
+
+webd_pid() {
+    local pid
+    [ -r "$PID_FILE" ] || return 1
+    pid=$(tr -d '[:space:]' < "$PID_FILE")
+    [ -n "$pid" ] && [ "$(readlink -f "/proc/$pid/exe" 2>/dev/null)" = "$WEBD" ] && echo "$pid"
+}
+
+start_webd() {
+    webd_pid >/dev/null && return 0
+    log "starting t6-webd"
+    "$WEBD" --socket "$SOCKET" --prefix "$GATEWAY_PREFIX" --state-dir "$TRIM_PKGVAR" >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    sleep 0.5
+    webd_pid >/dev/null || fail "t6-webd exited right after start (see $LOG_FILE)."
+}
+
+stop_webd() {
+    local pid n=0
+    pid=$(webd_pid) || { rm -f "$PID_FILE"; return 0; }
+    log "stopping t6-webd ($pid)"
+    kill -TERM "$pid" 2>/dev/null
+    while kill -0 "$pid" 2>/dev/null && [ $n -lt 10 ]; do sleep 1; n=$((n + 1)); done
+    kill -0 "$pid" 2>/dev/null && kill -KILL "$pid"
+    rm -f "$PID_FILE" "$SOCKET"
+}

@@ -1,0 +1,8 @@
+[common]
+display_name="T6 Control Center"
+desc="Fan curves, LEDs, display brightness, battery charge limits and beeper of the UnifyDrive UP6 / ZSpace T6. Requires T6 Drivers."
+changelog="Fan profile switching, live dashboard with history, fan curve view."
+
+[entry]
+title="T6 Control Center"
+desc="Fans, LEDs and hardware settings"

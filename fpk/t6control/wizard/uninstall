@@ -1,0 +1,17 @@
+[
+  {
+    "stepTitle": "Remove T6 Control Center",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "The fan and LED daemons are removed with the app. The drivers (T6 Drivers) stay installed."
+      },
+      {
+        "type": "switch",
+        "field": "wizard_remove_settings",
+        "label": "Also remove fan curves, LED and charge settings",
+        "initValue": "false"
+      }
+    ]
+  }
+]

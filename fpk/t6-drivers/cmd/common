@@ -1,0 +1,16 @@
+# Shared helpers for the t6-drivers lifecycle scripts (sourced, not executed).
+
+# Report a user-facing error (shown by App Center) and exit.
+fail() {
+    echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+# Run install-dkms.sh from the installed package directory, forwarding its
+# last lines to the App Center log on failure.
+run_installer() {
+    local out
+    if ! out=$("$TRIM_APPDEST/install-dkms.sh" "$@" 2>&1); then
+        fail "T6 drivers: install-dkms.sh $* failed: $(printf '%s\n' "$out" | tail -n 5)"
+    fi
+}

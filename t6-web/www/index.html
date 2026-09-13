@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T6 Control Center</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="fans">Fans</button>
+    <button class="tab" data-tab="leds">LEDs</button>
+    <button class="tab" data-tab="display">Display</button>
+    <button class="tab" data-tab="battery">Battery</button>
+    <button class="tab" data-tab="system">System</button>
+    <span class="spacer"></span>
+    <span class="badge" id="user">…</span>
+  </nav>
+
+  <main>
+    <p class="notice" id="notice" hidden></p>
+
+    <section id="dashboard" class="panel">
+      <div class="row">
+        <h2>Fans</h2>
+        <span class="muted" id="active-profile"></span>
+      </div>
+      <div class="cards" id="zones"></div>
+      <div class="row" style="margin-top:16px"><h2>Battery</h2></div>
+      <div class="cards">
+        <div class="card" id="battery-overview">
+          <div class="title"><span>Battery</span><span class="muted" id="bo-limits"></span></div>
+          <div class="big" id="bo-soc">—</div>
+          <div class="sub" id="bo-status"></div>
+          <div class="bar"><i id="bo-bar"></i></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="leds" class="panel" hidden>
+      <p class="notice" id="leds-notice" hidden></p>
+      <div class="cards wide">
+        <div class="card">
+          <div class="title"><span>Night mode</span><span class="muted" id="night-state"></span></div>
+          <p class="help">Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.</p>
+          <label class="switch"><input type="checkbox" id="night-manual"><i></i><span>Night mode now</span></label>
+          <div class="schedule">
+            <label class="switch"><input type="checkbox" id="night-sched"><i></i><span>Every day from</span></label>
+            <input type="time" id="night-start" value="23:00"> <span class="muted">to</span>
+            <input type="time" id="night-end" value="07:00">
+            <button id="night-apply">Apply</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="title"><span>Bay LEDs</span></div>
+          <p class="help">Master switch for the six drive-bay LEDs. Off overrides the per-bay settings below.</p>
+          <label class="switch"><input type="checkbox" id="bays-enabled"><i></i><span id="bays-label">On</span></label>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px"><h2>Devices</h2><span class="muted" id="leds-note"></span></div>
+      <div class="card">
+        <table class="devices" id="led-devices"></table>
+      </div>
+    </section>
+
+    <section id="system" class="panel" hidden>
+      <div class="cards wide">
+        <div class="card">
+          <div class="title"><span>Beeper</span><span class="muted" id="beep-note"></span></div>
+          <p class="help">The EC beeper patterns. <b>Continuous</b> keeps sounding until stopped.</p>
+          <div class="presets" id="beep-buttons">
+            <button data-pattern="1">Short</button>
+            <button data-pattern="2">Long</button>
+            <button data-pattern="4">Double</button>
+            <button data-pattern="8">Continuous</button>
+            <button data-pattern="0">Stop</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="title"><span>Software</span></div>
+          <ul class="sensors" id="sys-info"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="display" class="panel" hidden>
+      <div class="cards wide">
+        <div class="card">
+          <div class="title"><span>Backlight</span><span class="muted" id="bl-note"></span></div>
+          <p class="help">Front LCD backlight. The level is applied immediately and kept across reboots; switching off remembers the level for the next switch-on.</p>
+          <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label">Off</span></label>
+          <label class="slider"><span>Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
+        </div>
+      </div>
+    </section>
+
+    <section id="battery" class="panel" hidden>
+      <div class="cards wide">
+        <div class="card">
+          <div class="title"><span>Status</span><span class="muted" id="bat-model"></span></div>
+          <div class="big" id="bat-soc">—</div>
+          <div class="sub" id="bat-status"></div>
+          <div class="bar"><i id="bat-bar"></i></div>
+          <ul class="sensors" id="bat-details"></ul>
+        </div>
+        <div class="card">
+          <div class="title"><span>Charge limits</span><span class="muted" id="lim-note"></span></div>
+          <p class="help">Charging starts when the level drops below <b>start</b> and stops at <b>end</b>.
+            A NAS that sits on mains all day lives longer with the pack held around 75–85 %.
+            <b>Full</b> hands control back to the EC, which charges to ~97 % and tops up from 91 %.</p>
+          <div class="presets" id="lim-presets">
+            <button data-start="75" data-end="85">75–85 % · always-on (recommended)</button>
+            <button data-start="50" data-end="70">50–70 % · storage</button>
+            <button data-start="0" data-end="100">Full · EC policy</button>
+            <button data-custom="1">Custom…</button>
+          </div>
+          <div id="lim-custom" hidden>
+            <label class="slider"><span>Start</span><input type="range" id="lim-start" min="0" max="99" step="1"><b id="lim-start-v"></b></label>
+            <label class="slider"><span>End</span><input type="range" id="lim-end" min="1" max="100" step="1"><b id="lim-end-v"></b></label>
+            <div class="actions"><button class="primary" id="lim-apply">Apply</button></div>
+          </div>
+          <div class="muted" id="lim-status" style="margin-top:8px;font-size:12px"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fans" class="panel" hidden>
+      <div class="row">
+        <h2>Profile</h2>
+        <div class="segmented" id="profiles" title="Fan profile"></div>
+        <span class="muted" id="profile-note"></span>
+      </div>
+      <div class="row">
+        <h2>Curves</h2>
+        <span class="muted">from <code id="config-path"></code> — editing comes in a later version</span>
+      </div>
+      <div class="cards wide" id="curves"></div>
+    </section>
+  </main>
+
+  <template id="zone-card">
+    <div class="card zone">
+      <div class="title"><span class="name"></span><span class="muted rpm"></span></div>
+      <div class="big pwm"></div>
+      <canvas class="spark" width="300" height="48"></canvas>
+      <div class="bar"><i></i></div>
+      <ul class="sensors"></ul>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

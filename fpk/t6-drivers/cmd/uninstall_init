@@ -1,0 +1,6 @@
+#!/bin/bash
+# Unload the modules and remove them from DKMS while the sources still exist.
+. "$(dirname "$0")/common"
+
+run_installer --remove
+exit 0

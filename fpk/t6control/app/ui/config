@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "t6control.main": {
+            "title": "${entry.title}",
+            "desc": "${entry.desc}",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "",
+            "gatewayPrefix": "/app/t6control",
+            "gatewaySocket": "app.sock",
+            "url": "/app/t6control",
+            "allUsers": true
+        }
+    }
+}

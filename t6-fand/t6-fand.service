@@ -1,0 +1,22 @@
+[Unit]
+Description=T6 fan policy daemon
+Documentation=file:/usr/share/doc/t6-fand/README.md
+After=systemd-modules-load.service
+ConditionPathExists=/etc/t6-fand.toml
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/t6-fand --config /etc/t6-fand.toml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+# Fans sit at the driver's 50 % default if this service is not running.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RuntimeDirectory=t6-fand
+ReadWritePaths=/sys/class/hwmon /sys/devices
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# Kbuild outputs
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+.*.cmd
+*.order
+*.symvers
+.tmp_versions/
+
+# Rust build output
+target/
+
+# Developer docs
+PROPOSAL.md
+# Internal notes, kept out of the public repo
+docs/
+PROPOSAL.md

@@ -1,6 +1,9 @@
 [Unit]
 Description=T6 indicator daemon (LEDs, night mode, beeper)
 After=systemd-modules-load.service
+# We restore the LCD backlight once per boot; run after systemd-backlight has
+# done its (possibly stale) restore so ours is the final value.
+After=systemd-backlight@backlight:t6_ec_backlight.service
 ConditionPathExists=/etc/t6-ledd.toml
 
 [Service]

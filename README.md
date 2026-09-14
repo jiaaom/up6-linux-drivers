@@ -1,50 +1,84 @@
 # Linux Driver for UnifyDrive UP6
 
-Drivers for UnifyDrive UP6 (also labeled as T6 or PA60).
-Allows you to run generic Linux kernel on it.
+Out-of-tree Linux drivers and userspace tools for the UnifyDrive UP6
+(also labelled ZSpace T6 or PA60), so you can run a generic Linux kernel
+and distribution on it instead of the vendor OS.
 
-This package contains Dynamic Kernel Module Support (DKMS) out-of-tree modules including LED, button, beeper, backlight, fan, and touch screen support.
+Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 
-Tested on x86-64 Debian 12.
+## Components
 
-## Two DKMS packages
+### Kernel modules (DKMS, any Debian)
 
-| package | module | covers |
+| directory | module | covers |
 |---|---|---|
-| [`t6-platform-dkms/`](t6-platform-dkms/) | `t6_platform` | EC: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
+| [`t6-platform-dkms/`](t6-platform-dkms/) | `t6_platform` | EC platform driver: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
 | [`focaltech-ft8722-dkms/`](focaltech-ft8722-dkms/) | `ft8722_ts` | front-panel touchscreen |
 
+### Userspace daemons (Rust, any Debian)
 
-## Optional userspace helpers
-
-| package | module | covers |
+| directory | binary | covers |
 |---|---|---|
-| [`t6-fand/`](t6-fand/) | `t6 fan daemon` | fan policy daemon on top of the hwmon interface: profiles, curves, fail-safe |
+| [`t6-fand/`](t6-fand/) | `t6-fand` | fan policy daemon over the hwmon interface: profiles (silent / balance / performance / custom), temperature curves, smoothing, fail-safe |
+| [`t6-ledd/`](t6-ledd/) | `t6-ledd` | indicator daemon: LED policy, night mode, startup and event beeps, and automatic drive-bay LEDs (white when a drive is present, red blink on a RAID/drive fault) |
 
+### Web daemon (for FygoOS)
 
-## Dependencies
+| directory | binary | covers |
+|---|---|---|
+| [`t6-web/`](t6-web/) | `t6-webd` | web backend and UI for fans, LEDs, display brightness, battery charge limits and the beeper. Runs as a FygoOS/FnOS desktop app behind the system gateway; also usable standalone. |
 
-For DKMS:
+## Prerequisite
+
+Kernel modules (DKMS):
 
 ```bash
 sudo apt install dkms build-essential linux-headers-$(uname -r)
 ```
-For userspace daemon:
 
-`t6-fand` needs a Rust toolchain to build (`cargo`, via [rustup](https://rustup.rs)).
+Daemons and web app: a Rust toolchain (`cargo`, via [rustup](https://rustup.rs)).
 
-## Installation (DKMS)
+## Install For Plain Debian (skip for FygoOS!)
+
+### Kernel modules
 
 ```bash
 sudo ./install-dkms.sh
 ```
 
+Builds and installs both DKMS modules for the running kernel and enables
+`t6_platform` at boot. Re-run after a version bump to upgrade;
+`sudo ./install-dkms.sh --remove` uninstalls.
+
+### Userspace daemons
+
+Each daemon builds with `cargo` and installs a systemd unit; see
+[`t6-fand/README.md`](t6-fand/README.md) and
+[`t6-ledd/README.md`](t6-ledd/README.md).
+
+## Install For FygoOS / fnOS: all-in-one packages
+
+```bash
+./build-fpk.sh
+```
+
+produces two FygoOS packages (.fpk) in `build/`:
+
+| package | contents |
+|---|---|
+| `t6-drivers.fpk` | the two DKMS modules, built and loaded on install |
+| `t6control.fpk` | the `t6-fand` and `t6-ledd` daemons and the web app; depends on `t6-drivers` |
+
+Install them from the App Center's manual-installation entry, or with
+`appcenter-cli install-fpk <file>`.
+
+
 ## Notes
 
 ### Safety for other machines
 
-- **Kernels**: both packages build warning-free against 6.1 (Debian 12), 6.12 (Debian 13) and 6.18 (fnOS).
-- **Hardware gate**: both modules refuse to load unless DMI reports `Insyde` / `MeteorLake` / BIOS version `T6MTLJKJBOXV*`. The global UP6/PA60 ships the same BIOS image, so it is covered. Other boards can be added to its DMI table together with their IRQ line.
+- **Kernels**: everything builds warning-free against 6.1 (Debian 12), 6.12 (Debian 13) and 6.18 (fnOS).
+- **Hardware gate**: both modules refuse to load unless DMI reports `Insyde` / `MeteorLake` / BIOS version `T6MTLJKJBOXV*`. The global UP6 / PA60 ships the same BIOS image, so it is covered. Other boards can be added to the DMI table together with their IRQ line.
 - Both accept `force=1` to bypass the gate for testing an unknown board.
 
 --------

@@ -396,10 +396,13 @@ function renderDisplay(d) {
   if (d.min_on) $("#bl-slider").min = d.min_on;
   if (!state.blDragging) {
     $("#bl-power").checked = d.on;
-    $("#bl-power-label").textContent = d.on ? "On" : "Off";
+    $("#bl-power-label").textContent = d.on ? "On" : "Off until next reboot";
     $("#bl-slider").value = d.on ? Math.max(d.brightness || 0, d.min_on || 10) : d.on_level;
     syncBrightnessLabel();
   }
+  const ob = $("#bl-off-boot");
+  ob.disabled = !editable;
+  if (document.activeElement !== ob) ob.checked = !!d.off_after_boot;
 }
 
 function syncBrightnessLabel() {
@@ -427,12 +430,24 @@ $("#bl-slider").addEventListener("change", () => {
 });
 $("#bl-power").addEventListener("change", async (e) => {
   const on = e.target.checked;
-  $("#bl-power-label").textContent = on ? "On" : "Off";
+  $("#bl-power-label").textContent = on ? "On" : "Off until next reboot";
   $("#bl-slider").disabled = !on;
   try {
     await api("display/power", { method: "PUT", body: { on } });
+    if (on) {
+      // Turning the screen on means you want it — cancel "always off after boot".
+      $("#bl-off-boot").checked = false;
+      await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: false } });
+    }
   } catch (err) {
     notice(`Could not switch the backlight: ${err.message}`, "error");
+  }
+});
+$("#bl-off-boot").addEventListener("change", async (e) => {
+  try {
+    await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: e.target.checked } });
+  } catch (err) {
+    notice(`Could not change the boot setting: ${err.message}`, "error");
   }
 });
 

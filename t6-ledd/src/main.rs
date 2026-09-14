@@ -9,6 +9,7 @@
 mod beeper;
 mod config;
 mod control;
+mod display;
 mod devices;
 mod events;
 mod leds;
@@ -398,9 +399,17 @@ fn main() {
     let boot_marker = run_dir.join("booted");
     let first_this_boot = !boot_marker.exists();
     let _ = std::fs::write(&boot_marker, b"1\n");
-    if first_this_boot && daemon.cfg.beep.startup {
-        if let Err(e) = daemon.beeper.short() {
-            log(&format!("startup beep: {e}"));
+    if first_this_boot {
+        // Restore the built-in display to its persisted boot state (on at the
+        // remembered level, unless the user chose to keep it off at boot).
+        match display::apply_boot() {
+            Ok(v) => log(&format!("display set to {v} at boot")),
+            Err(e) => log(&format!("display boot: {e}")),
+        }
+        if daemon.cfg.beep.startup {
+            if let Err(e) = daemon.beeper.short() {
+                log(&format!("startup beep: {e}"));
+            }
         }
     }
 

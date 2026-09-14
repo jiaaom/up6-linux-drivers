@@ -20,7 +20,6 @@ use std::path::PathBuf;
 use tokio::net::{TcpListener, UnixListener};
 
 const DEFAULT_PREFIX: &str = "/app/t6control";
-const DEFAULT_STATE_DIR: &str = "/var/lib/t6control";
 
 struct Opts {
     prefix: String,
@@ -28,19 +27,18 @@ struct Opts {
     socket_group: Option<String>,
     listen: Option<String>,
     www_dir: Option<PathBuf>,
-    state_dir: PathBuf,
 }
 
 fn usage() -> ! {
     eprintln!(
         "usage: t6-webd (--socket PATH [--socket-group NAME] | --listen ADDR:PORT) \
-         [--prefix /app/t6control] [--www DIR] [--state-dir DIR]"
+         [--prefix /app/t6control] [--www DIR]"
     );
     std::process::exit(2);
 }
 
 fn parse_args() -> Opts {
-    let mut o = Opts { prefix: DEFAULT_PREFIX.into(), socket: None, socket_group: None, listen: None, www_dir: None, state_dir: PathBuf::from(DEFAULT_STATE_DIR) };
+    let mut o = Opts { prefix: DEFAULT_PREFIX.into(), socket: None, socket_group: None, listen: None, www_dir: None };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut value = || args.next().unwrap_or_else(|| usage());
@@ -50,7 +48,6 @@ fn parse_args() -> Opts {
             "--listen" => o.listen = Some(value()),
             "--prefix" => o.prefix = value().trim_end_matches('/').to_string(),
             "--www" => o.www_dir = Some(PathBuf::from(value())),
-            "--state-dir" => o.state_dir = PathBuf::from(value()),
             _ => usage(),
         }
     }
@@ -69,7 +66,7 @@ async fn main() {
     let opts = parse_args();
     // Without the gateway (TCP development mode) nobody sets the identity
     // headers, so every request counts as an administrator.
-    let state = api::AppState::new(opts.www_dir.clone(), &opts.state_dir, opts.listen.is_some());
+    let state = api::AppState::new(opts.www_dir.clone(), opts.listen.is_some());
     let app = api::router(&opts.prefix).with_state(state);
 
     let shutdown = async {

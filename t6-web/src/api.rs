@@ -16,7 +16,7 @@ use axum::routing::get;
 use axum::Router;
 use serde::Deserialize;
 use serde_json::json;
-use std::path::{Path as FsPath, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -36,13 +36,13 @@ struct Inner {
 }
 
 impl AppState {
-    pub fn new(www_dir: Option<PathBuf>, state_dir: &FsPath, trust_all: bool) -> Self {
+    pub fn new(www_dir: Option<PathBuf>, trust_all: bool) -> Self {
         AppState {
             inner: Arc::new(Inner {
                 www: Www::new(www_dir),
                 fand: Fand::new(),
                 battery: Battery::new(),
-                display: Display::new(state_dir),
+                display: Display::new(),
                 ledd: Ledd::new(),
                 trust_all,
             }),
@@ -79,6 +79,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/display"), get(get_display))
         .route(&p("/api/display/brightness"), get(get_display).put(put_brightness))
         .route(&p("/api/display/power"), axum::routing::put(put_display_power))
+        .route(&p("/api/display/off-after-boot"), axum::routing::put(put_display_off_after_boot))
         .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/bays"), axum::routing::put(put_bays))
         .route(&p("/api/leds/bay-fault-blink"), axum::routing::put(put_bay_fault_blink))
@@ -228,6 +229,17 @@ async fn put_display_power(State(s): State<AppState>, headers: HeaderMap, Json(b
     require_admin(&s, &headers)?;
     let v = s.inner.display.set_power(b.on).map_err(bad_request)?;
     Ok(Json(json!({ "ok": true, "on": b.on, "brightness": v })))
+}
+
+#[derive(Deserialize)]
+struct OffAfterBootBody {
+    off_after_boot: bool,
+}
+
+async fn put_display_off_after_boot(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OffAfterBootBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    s.inner.display.set_off_after_boot(b.off_after_boot).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true, "off_after_boot": b.off_after_boot })))
 }
 
 async fn get_leds(State(s): State<AppState>) -> ApiResult {

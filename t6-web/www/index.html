@@ -31,7 +31,7 @@
       <div class="row" style="margin-top:16px"><h2>Battery</h2></div>
       <div class="cards">
         <div class="card" id="battery-overview">
-          <div class="title"><span>Battery</span><span class="muted" id="bo-limits"></span></div>
+          <div class="title"><span>Built-in Battery</span><span class="muted" id="bo-limits"></span></div>
           <div class="big" id="bo-soc">—</div>
           <div class="sub" id="bo-status"></div>
           <div class="bar"><i id="bo-bar"></i></div>
@@ -85,7 +85,7 @@
           <div class="title"><span>Beeper</span><span class="muted" id="beep-note"></span></div>
           <div class="beep-events">
             <label class="switch"><input type="checkbox" data-event="startup"><i></i><span>Beep once on startup</span></label>
-            <label class="switch"><input type="checkbox" data-event="ac_loss"><i></i><span>Beep on AC power loss</span></label>
+            <label class="switch"><input type="checkbox" data-event="ac_loss"><i></i><span>Beep once on AC power loss</span></label>
             <label class="switch"><input type="checkbox" data-event="drive_fault"><i></i><span>Beep on drive fault (RAID degraded)</span></label>
           </div>
           <details class="advanced">
@@ -107,9 +107,14 @@
       <div class="cards wide">
         <div class="card">
           <div class="title"><span>Backlight</span><span class="muted" id="bl-note"></span></div>
-          <p class="help">Front LCD backlight. The level is applied immediately and kept across reboots; switching off remembers the level for the next switch-on.</p>
+          <p class="help">Front LCD backlight. The level is applied immediately and remembered across reboots.</p>
           <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label">Off</span></label>
           <label class="slider"><span>Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
+          <details class="advanced">
+            <summary>Advanced</summary>
+            <label class="switch"><input type="checkbox" id="bl-off-boot"><i></i><span>Always turn off the built-in display after boot</span></label>
+            <p class="help">For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.</p>
+          </details>
         </div>
       </div>
     </section>
@@ -129,9 +134,9 @@
             A NAS that sits on mains all day lives longer with the pack held around 75–85 %.
             <b>Full</b> hands control back to the EC, which charges to ~97 % and tops up from 91 %.</p>
           <div class="presets" id="lim-presets">
-            <button data-start="75" data-end="85">75–85 % · always-on (recommended)</button>
-            <button data-start="50" data-end="70">50–70 % · storage</button>
-            <button data-start="0" data-end="100">Full · EC policy</button>
+            <button data-start="75" data-end="85">75-85 % (recommended)</button>
+            <button data-start="50" data-end="70">50-70 %</button>
+            <button data-start="0" data-end="100">No constraint (default EC policy)</button>
             <button data-custom="1">Custom…</button>
           </div>
           <div id="lim-custom" hidden>

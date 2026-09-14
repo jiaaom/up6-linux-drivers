@@ -44,6 +44,9 @@ remove_daemons() {
             true|1|yes|on) rm -f "/etc/$d.toml" ;;
         esac
     done
+    case "${wizard_remove_settings:-false}" in
+        true|1|yes|on) rm -f /etc/t6-display.conf ;;
+    esac
     systemctl daemon-reload
 }
 
@@ -59,7 +62,7 @@ After=trim_nginx.service
 [Service]
 Type=simple
 Environment=TRIM_APPVER=$TRIM_APPVER
-ExecStart=$TRIM_APPDEST/bin/t6-webd --socket $TRIM_APPDEST/app.sock --prefix /app/t6control --state-dir $TRIM_PKGVAR
+ExecStart=$TRIM_APPDEST/bin/t6-webd --socket $TRIM_APPDEST/app.sock --prefix /app/t6control
 Restart=on-failure
 RestartSec=5
 ProtectHome=yes

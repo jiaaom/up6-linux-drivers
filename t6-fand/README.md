@@ -1,9 +1,8 @@
-# t6-fand 0.1.0
+# t6-fand
 
 Userspace fan policy daemon, in Rust with no runtime
 dependencies. It drives the `t6_platform` hwmon PWM channels from
-temperature curves and works on any board whose fans and sensors follow the
-standard hwmon layout.
+temperature curves.
 
 ## Behaviour
 
@@ -41,11 +40,3 @@ sudo install -m 644 t6-fand.toml /etc/t6-fand.toml
 sudo install -m 644 t6-fand.service /etc/systemd/system/t6-fand.service
 sudo systemctl daemon-reload && sudo systemctl enable --now t6-fand
 ```
-
-## Measured on the T6 (2026-09-13, `balance`)
-
-Idle: CPU 49 °C → 8 % / 474 rpm; bays ~40 °C → 8 % / ~850 rpm (they stop
-below 38 °C, or 42 °C on `silent`). A 4-thread load pins the die at 100 °C
-within 3 s; the fan ramps 8 → 14 → 23 → 30 → 51 → 80 → 100 % over ~20 s
-and returns 100 → 76 → 53 → 9 → 8 % over ~90 s after the load ends. The
-curves in `t6-fand.toml` are a starting point, not a tuned result.

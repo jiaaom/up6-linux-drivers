@@ -74,6 +74,11 @@ impl Daemon {
     }
 
     fn apply(&mut self) {
+        // Push the tray speed to the driver first; colour writes below then
+        // pick it up. Non-fatal if the attribute is missing.
+        if let Err(e) = devices::set_tray_speed(&self.cfg.tray_speed) {
+            log(&format!("tray speed: {e}"));
+        }
         let (night, _) = self.night_active();
         let mut effective = Vec::with_capacity(CATALOG.len());
         for dev in CATALOG {
@@ -115,6 +120,7 @@ impl Daemon {
         let status = serde_json::json!({
             "night": { "active": night, "reason": reason, "manual": self.cfg.night.manual, "schedule": self.cfg.night.schedule },
             "bays_enabled": self.cfg.bays_enabled,
+            "tray_speed": self.cfg.tray_speed,
             "config_error": self.config_error,
             "devices": devices,
         });
@@ -150,6 +156,15 @@ impl Daemon {
             }
             ["bays", on @ ("on" | "off")] => {
                 self.cfg.bays_enabled = *on == "on";
+                self.save()?;
+                self.apply();
+                Ok("ok".into())
+            }
+            ["tray-speed", speed] => {
+                if !config::TRAY_SPEEDS.contains(speed) {
+                    return Err(format!("tray-speed must be one of {:?}", config::TRAY_SPEEDS));
+                }
+                self.cfg.tray_speed = speed.to_string();
                 self.save()?;
                 self.apply();
                 Ok("ok".into())

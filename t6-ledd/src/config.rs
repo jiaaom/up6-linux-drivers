@@ -17,6 +17,9 @@ pub struct Config {
     /// Master switch for the six bay LEDs.
     #[serde(default = "yes")]
     pub bays_enabled: bool,
+    /// Tray light breathing speed: "slow" | "normal" | "fast".
+    #[serde(default = "default_tray_speed")]
+    pub tray_speed: String,
     #[serde(default)]
     pub night: Night,
     /// Per-device setting, keyed by device id (see `devices::CATALOG`).
@@ -57,9 +60,15 @@ fn yes() -> bool {
     true
 }
 
+fn default_tray_speed() -> String {
+    "normal".into()
+}
+
+pub const TRAY_SPEEDS: [&str; 3] = ["slow", "normal", "fast"];
+
 impl Default for Config {
     fn default() -> Self {
-        Config { bays_enabled: true, night: Night::default(), devices: BTreeMap::new() }
+        Config { bays_enabled: true, tray_speed: default_tray_speed(), night: Night::default(), devices: BTreeMap::new() }
     }
 }
 
@@ -80,6 +89,9 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if !TRAY_SPEEDS.contains(&self.tray_speed.as_str()) {
+            return Err(format!("tray_speed must be one of {TRAY_SPEEDS:?}"));
+        }
         if let Some(s) = &self.night.schedule {
             Window::parse(s)?;
         }

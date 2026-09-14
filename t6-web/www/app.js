@@ -347,13 +347,18 @@ $("#bl-power").addEventListener("change", async (e) => {
 
 // ---- LEDs -----------------------------------------------------------------
 
+// The tray light is an effect controller: single colour breathes, two
+// cycle, all three is a rainbow. Friendlier names for its dropdown.
+const RGB_LABEL = { off: "off", red: "red", green: "green", blue: "blue",
+  yellow: "red + green (cycle)", cyan: "green + blue (cycle)",
+  magenta: "red + blue (cycle)", white: "rainbow" };
+
 const LED_SWATCH = {
   off: "#e5e7eb", white: "#f8fafc", red: "#ef4444", green: "#22c55e", blue: "#3b82f6",
   yellow: "#eab308", cyan: "#06b6d4", magenta: "#d946ef", orange: "#f97316",
 };
 
-function swatch(color, breathing) {
-  if (breathing) return `<i class="dot breathing"></i>`;
+function swatch(color) {
   return `<i class="dot" style="background:${LED_SWATCH[color] || "#e5e7eb"}"></i>`;
 }
 
@@ -398,21 +403,27 @@ function renderLeds(l) {
         <td class="name">${d.label}</td>
         <td class="eff"></td>
         <td>${d.colors.length
-          ? `<select>${d.auto ? `<option value="auto">Automatic – ${d.auto_desc}</option>` : ""}${d.colors.map((c) => `<option value="${c}">${c === "off" && d.id === "rgb" ? "off (breathing)" : c}</option>`).join("")}</select>`
-          : `<span class="muted">Automatic – ${d.auto_desc}</span>`}</td>
+          ? `<select class="led-color">${d.auto ? `<option value="auto">Automatic – ${d.auto_desc}</option>` : ""}${d.colors.map((c) => `<option value="${c}">${d.id === "rgb" ? RGB_LABEL[c] || c : c}</option>`).join("")}</select>`
+          : `<span class="muted">Automatic – ${d.auto_desc}</span>`}${d.id === "rgb"
+          ? ` <select class="tray-speed" title="Breathing speed"><option value="slow">slow</option><option value="normal">normal</option><option value="fast">fast</option></select>`
+          : ""}</td>
       </tr>`).join("");
   }
   for (const d of l.devices) {
     const row = table.querySelector(`tr[data-id="${d.id}"]`);
     const forced = n.active || (d.bay && !l.bays_enabled);
-    const eff = d.effective === "auto" ? "automatic" : d.effective;
-    const breathing = d.id === "rgb" && d.effective === "off";
-    $(".eff", row).innerHTML = `${swatch(d.effective, breathing)}${breathing ? "breathing" : eff}${forced ? " · forced off" : ""}${d.available ? "" : " · not available"}`;
-    const sel = $("select", row);
+    const eff = d.effective === "auto" ? "automatic" : (d.id === "rgb" ? (RGB_LABEL[d.effective] || d.effective) : d.effective);
+    $(".eff", row).innerHTML = `${swatch(d.effective)}${eff}${forced ? " · forced off" : ""}${d.available ? "" : " · not available"}`;
+    const sel = $(".led-color", row);
     if (sel) {
       const want = d.mode === "auto" ? "auto" : d.color;
       if (document.activeElement !== sel && sel.value !== want) sel.value = want;
       sel.disabled = !editable;
+    }
+    const spd = $(".tray-speed", row);
+    if (spd) {
+      if (document.activeElement !== spd && l.tray_speed) spd.value = l.tray_speed;
+      spd.disabled = !editable;
     }
   }
 }
@@ -422,7 +433,11 @@ $("#led-devices").addEventListener("change", async (e) => {
   if (!sel) return;
   const id = sel.closest("tr").dataset.id;
   try {
-    await api(`leds/${id}`, { method: "PUT", body: { value: sel.value } });
+    if (sel.classList.contains("tray-speed")) {
+      await api("leds/tray-speed", { method: "PUT", body: { speed: sel.value } });
+    } else {
+      await api(`leds/${id}`, { method: "PUT", body: { value: sel.value } });
+    }
     notice("");
   } catch (err) {
     notice(`Could not set ${id}: ${err.message}`, "error");

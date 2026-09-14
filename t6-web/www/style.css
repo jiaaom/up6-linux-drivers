@@ -21,21 +21,26 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
 /* top bar */
 .tabs {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 1;
 }
+.tab-list {
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.tab-list::-webkit-scrollbar { display: none; }
 .tab {
   border: 0; background: transparent; padding: 6px 12px; border-radius: 6px;
-  color: var(--muted); font: inherit; cursor: pointer;
+  color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
 }
 .tab:hover:not(:disabled) { color: var(--text); }
 .tab.active { background: var(--bg); color: var(--text); font-weight: 600; }
 .tab:disabled { opacity: .45; cursor: default; }
-.spacer { flex: 1; }
 .badge {
   font-size: 12px; color: var(--muted); border: 1px solid var(--border);
-  border-radius: 999px; padding: 2px 10px;
+  border-radius: 999px; padding: 2px 10px; flex: 0 0 auto;
+  max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .badge.admin { color: var(--accent); border-color: var(--accent); }
 
@@ -123,3 +128,24 @@ button:disabled { opacity: .5; cursor: default; }
 .schedule input[type=time] { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
 .schedule button { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 .schedule button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+/* ---- phone width -------------------------------------------------------- */
+@media (max-width: 640px) {
+  :root { font-size: 13px; }
+  .tabs { padding: 6px 10px; gap: 6px; }
+  .tab { padding: 6px 10px; }
+  main { padding: 12px; }
+  /* one column everywhere */
+  .cards, .cards.wide { grid-template-columns: 1fr; }
+  /* LED rows: label on its own line, controls wrap below */
+  .devices, .devices tbody, .devices tr, .devices td { display: block; }
+  .devices tr { border-top: 1px solid var(--border); padding: 10px 0; }
+  .devices tr:first-child { border-top: 0; }
+  .devices td { padding: 2px 0; border: 0; width: auto; }
+  .devices td.name { font-weight: 600; }
+  .devices td:last-child { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .devices select { flex: 1 1 45%; min-width: 130px; }
+  /* forms stack a little tighter */
+  .slider { grid-template-columns: 44px 1fr 40px; gap: 8px; }
+  .schedule { gap: 6px; }
+}

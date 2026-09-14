@@ -81,6 +81,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/bays"), axum::routing::put(put_bays))
         .route(&p("/api/leds/night"), axum::routing::put(put_night))
+        .route(&p("/api/leds/tray-speed"), axum::routing::put(put_tray_speed))
         .route(&p("/api/leds/{device}"), axum::routing::put(put_led))
         .route(&p("/api/beep"), axum::routing::post(post_beep))
         .route(&p("/api/system"), get(get_system))
@@ -317,4 +318,15 @@ async fn get_system(State(s): State<AppState>) -> Json<serde_json::Value> {
             "t6-ledd": s.inner.ledd.status().is_some(),
         },
     }))
+}
+
+#[derive(Deserialize)]
+struct TraySpeedBody {
+    speed: String,
+}
+
+async fn put_tray_speed(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<TraySpeedBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    s.inner.ledd.command(&format!("tray-speed {}", Ledd::word(&b.speed).map_err(bad_request)?)).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
 }

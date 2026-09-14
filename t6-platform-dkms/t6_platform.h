@@ -23,6 +23,10 @@ struct t6_platform {
 	struct notifier_block charge_psy_nb;
 	unsigned int charge_start;
 	unsigned int charge_end;
+
+	/* Tray RGB (0xa2) breathing-speed nibble applied with every colour:
+	 * 0x00 normal, 0x30 slow, 0xc0 fast (t6_leds.c). */
+	u8 tray_speed;
 };
 
 #define T6_EC_CTRL_REG 0x59

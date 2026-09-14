@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 const LEDS_ROOT: &str = "/sys/class/leds";
+const TRAY_SPEED_ATTR: &str = "/sys/devices/platform/t6-platform/tray_speed";
 
 /// Automatic behaviour of a device.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,8 +18,6 @@ pub enum Auto {
     Bluetooth,
     /// Blue while a wireless interface is up.
     Wifi,
-    /// All colours off: the EC breathes the LED on its own.
-    Breathing,
     /// Driven by the driver's charge control / the EC; never written here.
     ChargeControl,
 }
@@ -82,11 +81,12 @@ pub const CATALOG: &[Device] = &[
         id: "rgb",
         label: "Tray light",
         leds: &["t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"],
-        // "off" here is the EC's breathing pattern: the register has no
-        // host-controlled dark state that we know of.
+        // Effect light: a single colour breathes, two cycle between them,
+        // all three is a rainbow, and "off" is a real host-controlled dark
+        // state (enable bit, no colour). Default off.
         colors: rgb_colors!("t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"),
-        auto: Some(Auto::Breathing),
-        auto_desc: "breathing (EC pattern)",
+        auto: Some(Auto::Fixed("off")),
+        auto_desc: "off",
     },
     Device {
         id: "bt",
@@ -120,6 +120,12 @@ pub fn by_id(id: &str) -> Option<&'static Device> {
     CATALOG.iter().find(|d| d.id == id)
 }
 
+/// Write the tray breathing speed ("slow"|"normal"|"fast") to the driver.
+pub fn set_tray_speed(speed: &str) -> Result<(), String> {
+    std::fs::write(TRAY_SPEED_ATTR, format!("{speed}\n"))
+        .map_err(|e| format!("{TRAY_SPEED_ATTR}: {e}"))
+}
+
 impl Device {
     pub fn is_bay(&self) -> bool {
         matches!(self.auto, Some(Auto::BayPresent(_)))
@@ -137,7 +143,6 @@ impl Device {
             Auto::BayPresent(n) => Some(if sources::bay_present(n) { "white" } else { "off" }),
             Auto::Bluetooth => Some(if sources::bluetooth_on() { "blue" } else { "off" }),
             Auto::Wifi => Some(if sources::wifi_up() { "blue" } else { "off" }),
-            Auto::Breathing => Some("off"),
             Auto::ChargeControl => None,
         }
     }
@@ -160,10 +165,22 @@ impl LedBank {
     }
 
     /// Set a device to a colour (every LED not in the colour goes off).
+    ///
+    /// The "off" LEDs are written before the "on" LEDs. The EC LEDs of one
+    /// device (power button, each bay) share a single register in full-byte
+    /// mode, so a colour's off-write zeroes the whole byte; doing the offs
+    /// first means the final write is the colour we want, not a stray zero.
     pub fn set(&mut self, dev: &Device, color: &str) -> Result<(), String> {
         let on = dev.leds_for(color).ok_or_else(|| format!("{}: unknown colour {color:?}", dev.id))?;
         for led in dev.leds {
-            self.write(led, on.contains(led))?;
+            if !on.contains(led) {
+                self.write(led, false)?;
+            }
+        }
+        for led in dev.leds {
+            if on.contains(led) {
+                self.write(led, true)?;
+            }
         }
         Ok(())
     }

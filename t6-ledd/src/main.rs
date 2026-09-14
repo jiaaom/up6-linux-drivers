@@ -16,9 +16,11 @@ mod schedule;
 
 use beeper::{Beeper, Pattern};
 use config::{Config, DeviceSetting, Mode};
+use std::collections::BTreeSet;
+use std::time::Instant;
 use events::EventWatcher;
-use devices::{Auto, Device, CATALOG};
-use leds::LedBank;
+use devices::{sources, Auto, Device, CATALOG};
+use leds::{Effect, LedBank};
 use schedule::Window;
 use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
 use signal_hook::flag;
@@ -29,7 +31,8 @@ use std::time::Duration;
 
 const DEFAULT_CONFIG: &str = "/etc/t6-ledd.toml";
 const RUN_DIR: &str = "/run/t6-ledd";
-const TICK: Duration = Duration::from_secs(2);
+const RENDER_TICK: Duration = Duration::from_millis(100);
+const POLICY_EVERY: Duration = Duration::from_secs(2);
 
 fn log(msg: &str) {
     println!("{msg}");
@@ -40,8 +43,12 @@ struct Daemon {
     config_path: PathBuf,
     run_dir: PathBuf,
     bank: LedBank,
-    /// Effective colour applied per device id (for status).
-    effective: Vec<(&'static str, String)>,
+    /// Per-device effect chosen by the policy pass; the render loop draws it.
+    plan: Vec<(&'static Device, Effect)>,
+    /// Bays with a faulted drive (status + fault-blink policy).
+    faults: BTreeSet<u8>,
+    /// Daemon start, for animation phase.
+    start: Instant,
     /// Why the configuration file could not be used (defaults are active).
     config_error: Option<String>,
     beeper: Beeper,
@@ -55,7 +62,9 @@ impl Daemon {
             config_path,
             run_dir,
             bank: LedBank::new(),
-            effective: Vec::new(),
+            plan: Vec::new(),
+            faults: BTreeSet::new(),
+            start: Instant::now(),
             config_error,
             beeper: Beeper::new(),
             events: EventWatcher::default(),
@@ -74,41 +83,63 @@ impl Daemon {
         (false, "")
     }
 
-    /// Colour a device should show now, or `None` to leave it alone.
-    fn desired(&self, dev: &Device, night: bool) -> Option<String> {
-        if dev.auto == Some(Auto::ChargeControl) {
-            return None; // the driver's charge control owns it
-        }
-        if night || (dev.is_bay() && !self.cfg.bays_enabled) {
-            return Some("off".into());
-        }
-        let s = self.cfg.setting(dev.id);
-        match s.mode {
-            Mode::Manual => s.color,
-            Mode::Auto => dev.auto_color().map(str::to_string),
-        }
-    }
-
-    fn apply(&mut self) {
-        // Push the tray speed to the driver first; colour writes below then
-        // pick it up. Non-fatal if the attribute is missing.
+    /// Policy pass: choose an effect for every device. Reads sensors and the
+    /// config; runs every couple of seconds, not every frame.
+    fn evaluate(&mut self) {
+        // Push the tray speed to the driver; colour writes then pick it up.
         if let Err(e) = leds::set_tray_speed(&self.cfg.tray_speed) {
             log(&format!("tray speed: {e}"));
         }
         let (night, _) = self.night_active();
-        let mut effective = Vec::with_capacity(CATALOG.len());
+        self.faults = if self.cfg.bay_fault_blink { sources::drive_faults() } else { BTreeSet::new() };
+
+        let mut plan = Vec::with_capacity(CATALOG.len());
         for dev in CATALOG {
-            match self.desired(dev, night) {
-                Some(color) => {
-                    if let Err(e) = self.bank.set(dev, &color) {
-                        log(&format!("{}: {e}", dev.id));
-                    }
-                    effective.push((dev.id, color));
+            if dev.auto == Some(Auto::ChargeControl) {
+                continue; // the driver's charge control owns the battery LED
+            }
+            let effect = if let Some(bay) = dev.bay_number() {
+                // Bays are automatic: red blink on fault (wins over everything),
+                // otherwise white while a drive is present, else off.
+                if self.faults.contains(&bay) {
+                    Effect::Blink { color: "red".into(), period_ms: 500 }
+                } else if night || !self.cfg.bays_enabled || !sources::bay_present(bay) {
+                    Effect::off()
+                } else {
+                    Effect::Solid("white".into())
                 }
-                None => effective.push((dev.id, "auto".into())),
+            } else if night {
+                Effect::off()
+            } else {
+                let s = self.cfg.setting(dev.id);
+                let color = match s.mode {
+                    Mode::Manual => s.color.unwrap_or_else(|| "off".into()),
+                    Mode::Auto => dev.auto_color().unwrap_or("off").to_string(),
+                };
+                Effect::Solid(color)
+            };
+            plan.push((dev, effect));
+        }
+        self.plan = plan;
+    }
+
+    /// Draw one frame. The LED bank skips unchanged writes, so steady LEDs
+    /// cost nothing here and only a blink actually toggles the hardware.
+    fn render(&mut self) {
+        let now = self.start.elapsed();
+        let plan = self.plan.clone();
+        for (dev, effect) in &plan {
+            let color = effect.frame_color(now);
+            if let Err(e) = self.bank.set(dev, color) {
+                log(&format!("{}: {e}", dev.id));
             }
         }
-        self.effective = effective;
+    }
+
+    /// Recompute policy, draw, and republish status — used after a change.
+    fn refresh_now(&mut self) {
+        self.evaluate();
+        self.render();
         self.write_status();
     }
 
@@ -118,17 +149,23 @@ impl Daemon {
             .iter()
             .map(|d| {
                 let s = self.cfg.setting(d.id);
-                let eff = self.effective.iter().find(|(id, _)| *id == d.id).map(|(_, c)| c.as_str());
+                let effective = self
+                    .plan
+                    .iter()
+                    .find(|(dev, _)| dev.id == d.id)
+                    .map(|(_, e)| e.describe())
+                    .unwrap_or_else(|| "auto".into());
                 serde_json::json!({
                     "id": d.id,
                     "label": d.label,
                     "mode": s.mode,
                     "color": s.color,
-                    "effective": eff,
+                    "effective": effective,
                     "colors": d.colors.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
                     "auto": d.auto.is_some(),
                     "auto_desc": d.auto_desc,
                     "bay": d.is_bay(),
+                    "bay_number": d.bay_number(),
                     "available": d.leds.iter().all(|l| self.bank.available(l)),
                 })
             })
@@ -136,6 +173,9 @@ impl Daemon {
         let status = serde_json::json!({
             "night": { "active": night, "reason": reason, "manual": self.cfg.night.manual, "schedule": self.cfg.night.schedule },
             "bays_enabled": self.cfg.bays_enabled,
+            "bay_fault_blink": self.cfg.bay_fault_blink,
+            "faults": self.faults.iter().copied().collect::<Vec<u8>>(),
+            "bays_present": (1u8..=6).filter(|n| sources::bay_present(*n)).collect::<Vec<u8>>(),
             "tray_speed": self.cfg.tray_speed,
             "beep": {
                 "startup": self.cfg.beep.startup,
@@ -172,13 +212,19 @@ impl Daemon {
                 setting.validate_for(dev)?;
                 self.cfg.devices.insert(id.to_string(), setting);
                 self.save()?;
-                self.apply();
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["bays", on @ ("on" | "off")] => {
                 self.cfg.bays_enabled = *on == "on";
                 self.save()?;
-                self.apply();
+                self.refresh_now();
+                Ok("ok".into())
+            }
+            ["bay-fault-blink", on @ ("on" | "off")] => {
+                self.cfg.bay_fault_blink = *on == "on";
+                self.save()?;
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["beep-on", event, on @ ("on" | "off")] => {
@@ -195,13 +241,13 @@ impl Daemon {
                 }
                 self.cfg.tray_speed = speed.to_string();
                 self.save()?;
-                self.apply();
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["night", on @ ("on" | "off")] => {
                 self.cfg.night.manual = *on == "on";
                 self.save()?;
-                self.apply();
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["schedule", spec] => {
@@ -212,7 +258,7 @@ impl Daemon {
                     Some(spec.to_string())
                 };
                 self.save()?;
-                self.apply();
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["beep", pattern] => {
@@ -234,7 +280,7 @@ impl Daemon {
                 self.cfg = c;
                 self.config_error = None;
                 self.bank.invalidate();
-                self.apply();
+                self.refresh_now();
                 log("configuration reloaded");
             }
             Err(e) => {
@@ -339,8 +385,11 @@ fn main() {
     flag::register(SIGHUP, Arc::clone(&hup)).expect("signal handler");
 
     let mut daemon = Daemon::new(cfg, config_path, run_dir.clone(), config_error);
-    daemon.apply();
+    daemon.evaluate();
+    daemon.render();
+    daemon.write_status();
     log("t6-ledd started");
+    let mut last_policy = Instant::now();
 
     // Short beep once per boot, like the stock firmware. The marker lives in
     // the runtime dir (tmpfs, cleared on reboot but kept across service
@@ -359,7 +408,7 @@ fn main() {
         if hup.swap(false, Ordering::Relaxed) {
             daemon.reload();
         }
-        match requests.recv_timeout(TICK) {
+        match requests.recv_timeout(RENDER_TICK) {
             Ok(req) => {
                 let reply = match daemon.command(&req.line) {
                     Ok(r) => r,
@@ -368,8 +417,13 @@ fn main() {
                 let _ = req.reply.send(reply);
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                daemon.apply();
-                daemon.check_events();
+                daemon.render();
+                if last_policy.elapsed() >= POLICY_EVERY {
+                    daemon.evaluate();
+                    daemon.check_events();
+                    daemon.write_status();
+                    last_policy = Instant::now();
+                }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }

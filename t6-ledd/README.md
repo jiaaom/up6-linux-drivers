@@ -1,4 +1,4 @@
-# t6-ledd 0.1.0
+# t6-ledd 0.2.0
 
 Indicator daemon for the T6: the single owner of the `t6:*` LEDs and the
 beeper. Rust, no runtime dependencies.

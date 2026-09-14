@@ -73,6 +73,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/whoami"), get(whoami))
         .route(&p("/api/fan/profile"), get(get_profile).put(put_profile))
         .route(&p("/api/fan/config"), get(get_config))
+        .route(&p("/api/fan/curve"), axum::routing::put(put_curve))
         .route(&p("/api/battery"), get(get_battery))
         .route(&p("/api/battery/thresholds"), get(get_thresholds).put(put_thresholds))
         .route(&p("/api/display"), get(get_display))
@@ -80,6 +81,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/display/power"), axum::routing::put(put_display_power))
         .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/bays"), axum::routing::put(put_bays))
+        .route(&p("/api/leds/bay-fault-blink"), axum::routing::put(put_bay_fault_blink))
         .route(&p("/api/leds/night"), axum::routing::put(put_night))
         .route(&p("/api/leds/tray-speed"), axum::routing::put(put_tray_speed))
         .route(&p("/api/leds/{device}"), axum::routing::put(put_led))
@@ -256,6 +258,12 @@ async fn put_bays(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<O
     Ok(Json(json!({ "ok": true })))
 }
 
+async fn put_bay_fault_blink(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OnBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    s.inner.ledd.command(if b.on { "bay-fault-blink on" } else { "bay-fault-blink off" }).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
 #[derive(Deserialize)]
 struct NightBody {
     /// Manual night mode on/off.
@@ -342,5 +350,25 @@ async fn put_beep_event(State(s): State<AppState>, headers: HeaderMap, Json(b): 
     require_admin(&s, &headers)?;
     let cmd = format!("beep-on {} {}", Ledd::word(&b.event).map_err(bad_request)?, if b.enabled { "on" } else { "off" });
     s.inner.ledd.command(&cmd).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// The only profile the editor may change; the three built-ins are presets.
+const EDITABLE_PROFILE: &str = "custom";
+
+#[derive(Deserialize)]
+struct CurveBody {
+    zone: String,
+    profile: String,
+    /// `[[temp_c, pwm_percent], ...]`, ascending temps.
+    points: Vec<[f64; 2]>,
+}
+
+async fn put_curve(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<CurveBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    if b.profile != EDITABLE_PROFILE {
+        return Err(bad_request(format!("only the {EDITABLE_PROFILE:?} profile is editable")));
+    }
+    s.inner.fand.set_curve(&b.zone, &b.profile, &b.points).map_err(bad_request)?;
     Ok(Json(json!({ "ok": true })))
 }

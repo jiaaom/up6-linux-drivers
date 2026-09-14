@@ -16,6 +16,7 @@
   color: var(--text);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); min-height: 100vh; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
@@ -82,8 +83,14 @@ main { padding: 16px; max-width: 1100px; margin: 0 auto; }
 .sensors { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12px; }
 .sensors li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; color: var(--muted); }
 .sensors li b { color: var(--text); font-weight: 500; white-space: nowrap; }
+.sw-name { display: flex; flex-direction: column; }
+.sw-name b { font-weight: 500; }
+.sw-name small { color: var(--muted); font-size: 11px; }
 .sensors li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card .curve { display: block; width: 100%; height: 180px; margin-top: 8px; }
+.card .curve { display: block; width: 100%; height: 180px; margin-top: 8px; touch-action: none; cursor: crosshair; }
+.curve-bar { display: flex; align-items: center; gap: 10px; }
+.row .spacer { flex: 1; }
+.curve-readout { font-variant-numeric: tabular-nums; }
 .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .params { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
@@ -150,3 +157,16 @@ button:disabled { opacity: .5; cursor: default; }
   .slider { grid-template-columns: 44px 1fr 40px; gap: 8px; }
   .schedule { gap: 6px; }
 }
+
+/* collapsible advanced section */
+details.advanced { margin-top: 14px; border-top: 1px solid var(--border); }
+details.advanced > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 2px 4px; font-size: 13px; font-weight: 600; color: var(--muted);
+}
+details.advanced > summary:hover { color: var(--text); }
+details.advanced > summary::-webkit-details-marker { display: none; }
+details.advanced > summary::before { content: "\25B8"; font-size: 11px; transition: transform .15s; }
+details.advanced[open] > summary::before { transform: rotate(90deg); }
+details.advanced > *:not(summary) { margin-top: 10px; }

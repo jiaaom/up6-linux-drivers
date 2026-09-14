@@ -14,7 +14,7 @@
       <button class="tab" data-tab="leds">LEDs</button>
       <button class="tab" data-tab="display">Display</button>
       <button class="tab" data-tab="battery">Battery</button>
-      <button class="tab" data-tab="system">System</button>
+      <button class="tab" data-tab="beeper">Beeper</button>
     </div>
     <span class="badge" id="user">…</span>
   </nav>
@@ -37,6 +37,12 @@
           <div class="bar"><i id="bo-bar"></i></div>
         </div>
       </div>
+      <div class="row" style="margin-top:16px"><h2>Software</h2></div>
+      <div class="cards">
+        <div class="card">
+          <ul class="sensors" id="sys-info"></ul>
+        </div>
+      </div>
     </section>
 
     <section id="leds" class="panel" hidden>
@@ -50,42 +56,49 @@
             <label class="switch"><input type="checkbox" id="night-sched"><i></i><span>Every day from</span></label>
             <input type="time" id="night-start" value="23:00"> <span class="muted">to</span>
             <input type="time" id="night-end" value="07:00">
-            <button id="night-apply">Apply</button>
+          </div>
+          <div class="actions" id="night-actions" hidden>
+            <button id="night-revert">Revert</button>
+            <button class="primary" id="night-apply">Apply</button>
           </div>
         </div>
         <div class="card">
-          <div class="title"><span>Bay LEDs</span></div>
-          <p class="help">Master switch for the six drive-bay LEDs. Off overrides the per-bay settings below.</p>
-          <label class="switch"><input type="checkbox" id="bays-enabled"><i></i><span id="bays-label">On</span></label>
+          <div class="title"><span>Bay LEDs</span><span class="muted" id="bay-summary"></span></div>
+          <p class="help">Bays light white when a drive is present. A drive reported faulty blinks red.</p>
+          <label class="switch"><input type="checkbox" id="bays-enabled"><i></i><span>Show drives (white)</span></label>
+          <label class="switch"><input type="checkbox" id="bay-fault-blink"><i></i><span>Blink red on drive fault</span></label>
+          <p class="notice error" id="bay-fault-warn" hidden></p>
         </div>
       </div>
-      <div class="row" style="margin-top:16px"><h2>Devices</h2><span class="muted" id="leds-note"></span></div>
-      <div class="card">
-        <table class="devices" id="led-devices"></table>
-      </div>
+      <details class="advanced">
+        <summary>Advanced &mdash; per-LED control</summary>
+        <div class="row"><span class="muted" id="leds-note"></span></div>
+        <div class="card">
+          <table class="devices" id="led-devices"></table>
+        </div>
+      </details>
     </section>
 
-    <section id="system" class="panel" hidden>
+    <section id="beeper" class="panel" hidden>
       <div class="cards wide">
         <div class="card">
           <div class="title"><span>Beeper</span><span class="muted" id="beep-note"></span></div>
-          <p class="help">The EC beeper patterns. <b>Continuous</b> keeps sounding until stopped.</p>
-          <div class="presets" id="beep-buttons">
-            <button data-pattern="1">Short</button>
-            <button data-pattern="2">Long</button>
-            <button data-pattern="4">Double</button>
-            <button data-pattern="8">Continuous</button>
-            <button data-pattern="0">Stop</button>
-          </div>
           <div class="beep-events">
             <label class="switch"><input type="checkbox" data-event="startup"><i></i><span>Beep once on startup</span></label>
             <label class="switch"><input type="checkbox" data-event="ac_loss"><i></i><span>Beep on AC power loss</span></label>
             <label class="switch"><input type="checkbox" data-event="drive_fault"><i></i><span>Beep on drive fault (RAID degraded)</span></label>
           </div>
-        </div>
-        <div class="card">
-          <div class="title"><span>Software</span></div>
-          <ul class="sensors" id="sys-info"></ul>
+          <details class="advanced">
+            <summary>Advanced &mdash; test patterns</summary>
+            <p class="help">Play an EC beeper pattern now. <b>Continuous</b> keeps sounding until stopped.</p>
+            <div class="presets" id="beep-buttons">
+              <button data-pattern="1">Short</button>
+              <button data-pattern="2">Long</button>
+              <button data-pattern="4">Double</button>
+              <button data-pattern="8">Continuous</button>
+              <button data-pattern="0">Stop</button>
+            </div>
+          </details>
         </div>
       </div>
     </section>
@@ -124,9 +137,12 @@
           <div id="lim-custom" hidden>
             <label class="slider"><span>Start</span><input type="range" id="lim-start" min="0" max="99" step="1"><b id="lim-start-v"></b></label>
             <label class="slider"><span>End</span><input type="range" id="lim-end" min="1" max="100" step="1"><b id="lim-end-v"></b></label>
-            <div class="actions"><button class="primary" id="lim-apply">Apply</button></div>
           </div>
-          <div class="muted" id="lim-status" style="margin-top:8px;font-size:12px"></div>
+          <div class="actions" id="lim-actions" hidden>
+            <button id="lim-revert">Revert</button>
+            <button class="primary" id="lim-apply">Apply</button>
+            <span class="muted" id="lim-status"></span>
+          </div>
         </div>
       </div>
     </section>
@@ -139,7 +155,13 @@
       </div>
       <div class="row">
         <h2>Curves</h2>
-        <span class="muted">from <code id="config-path"></code> — editing comes in a later version</span>
+        <span class="muted">from <code id="config-path"></code></span>
+        <span class="spacer"></span>
+        <div class="curve-bar" id="curve-bar" hidden>
+          <span class="muted" id="curve-hint">Drag the purple dots to edit</span>
+          <button id="curve-revert">Revert</button>
+          <button class="primary" id="curve-apply">Apply</button>
+        </div>
       </div>
       <div class="cards wide" id="curves"></div>
     </section>

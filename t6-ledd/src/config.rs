@@ -14,9 +14,13 @@ const HEADER: &str = "# t6-ledd configuration. Managed by t6-ledd (T6 Control Ce
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// Master switch for the six bay LEDs.
+    /// Master switch for the six bay LEDs (white when a drive is present).
     #[serde(default = "yes")]
     pub bays_enabled: bool,
+    /// Blink a bay red when its drive is reported faulty (overrides the
+    /// master switch and night mode).
+    #[serde(default = "yes")]
+    pub bay_fault_blink: bool,
     /// Tray light breathing speed: "slow" | "normal" | "fast".
     #[serde(default = "default_tray_speed")]
     pub tray_speed: String,
@@ -107,6 +111,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             bays_enabled: true,
+            bay_fault_blink: true,
             tray_speed: default_tray_speed(),
             beep: BeepConfig::default(),
             night: Night::default(),

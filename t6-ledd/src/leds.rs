@@ -68,3 +68,65 @@ impl LedBank {
         self.state.clear();
     }
 }
+
+// --- effects -------------------------------------------------------------
+
+use std::time::Duration;
+
+/// What a device should display. The policy layer picks an effect; the
+/// render loop turns it into the colour to show this frame.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Effect {
+    /// A steady colour (an LED-bank colour name, e.g. "white", "off").
+    Solid(String),
+    /// Alternate `color` and off every half `period_ms` (drive fault, ...).
+    Blink { color: String, period_ms: u64 },
+}
+
+impl Effect {
+    pub fn off() -> Self {
+        Effect::Solid("off".into())
+    }
+
+    /// Colour to show `elapsed` into the daemon's run.
+    pub fn frame_color(&self, elapsed: Duration) -> &str {
+        match self {
+            Effect::Solid(c) => c,
+            Effect::Blink { color, period_ms } => {
+                let period = (*period_ms).max(1) as u128;
+                if (elapsed.as_millis() / period) % 2 == 0 { color } else { "off" }
+            }
+        }
+    }
+
+    /// Short human description for status.json.
+    pub fn describe(&self) -> String {
+        match self {
+            Effect::Solid(c) => c.clone(),
+            Effect::Blink { color, .. } => format!("blink {color}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blink_alternates_each_half_period() {
+        let b = Effect::Blink { color: "red".into(), period_ms: 500 };
+        assert_eq!(b.frame_color(Duration::from_millis(0)), "red");
+        assert_eq!(b.frame_color(Duration::from_millis(499)), "red");
+        assert_eq!(b.frame_color(Duration::from_millis(500)), "off");
+        assert_eq!(b.frame_color(Duration::from_millis(999)), "off");
+        assert_eq!(b.frame_color(Duration::from_millis(1000)), "red");
+    }
+
+    #[test]
+    fn solid_is_constant() {
+        let s = Effect::Solid("white".into());
+        assert_eq!(s.frame_color(Duration::from_millis(0)), "white");
+        assert_eq!(s.frame_color(Duration::from_millis(9999)), "white");
+        assert_eq!(s.describe(), "white");
+    }
+}

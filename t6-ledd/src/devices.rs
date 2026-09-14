@@ -122,6 +122,14 @@ impl Device {
         matches!(self.auto, Some(Auto::BayPresent(_)))
     }
 
+    /// Physical bay number (1-6) for a bay device.
+    pub fn bay_number(&self) -> Option<u8> {
+        match self.auto {
+            Some(Auto::BayPresent(n)) => Some(n),
+            _ => None,
+        }
+    }
+
     pub fn leds_for(&self, color: &str) -> Option<&'static [&'static str]> {
         self.colors.iter().find(|(n, _)| *n == color).map(|(_, l)| *l)
     }
@@ -210,10 +218,75 @@ pub mod sources {
             .map(|e| read_trim(e.path().join("online")).as_deref() == Some("1"))
     }
 
+    /// Bays (1-6) whose drive an md array reports faulty. Reads the standard
+    /// mdraid member state (`md/dev-*/state`) and maps the failed block
+    /// device back to a bay through its PCIe root port. Covers every array
+    /// type, redundant or linear.
+    pub fn drive_faults() -> std::collections::BTreeSet<u8> {
+        let mut faults = std::collections::BTreeSet::new();
+        // Debug hook: T6_LEDD_FAKE_FAULT="2,5" forces those bays to blink,
+        // so the fault animation can be tested without failing a real drive.
+        if let Ok(v) = std::env::var("T6_LEDD_FAKE_FAULT") {
+            for n in v.split(',').filter_map(|x| x.trim().parse::<u8>().ok()) {
+                if (1..=6).contains(&n) {
+                    faults.insert(n);
+                }
+            }
+        }
+        let blocks = match std::fs::read_dir("/sys/block") {
+            Ok(d) => d,
+            Err(_) => return faults,
+        };
+        for e in blocks.flatten() {
+            if !e.file_name().to_string_lossy().starts_with("md") {
+                continue;
+            }
+            let members = match std::fs::read_dir(e.path().join("md")) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            for m in members.flatten() {
+                let name = m.file_name().to_string_lossy().to_string();
+                let Some(dev) = name.strip_prefix("dev-") else { continue };
+                let state = read_trim(m.path().join("state")).unwrap_or_default();
+                if state.contains("faulty") || state.contains("failed") {
+                    if let Some(bay) = bay_of_block(dev) {
+                        faults.insert(bay);
+                    }
+                }
+            }
+        }
+        faults
+    }
+
+    /// Which bay a block device sits in, via its PCIe root port.
+    fn bay_of_block(dev: &str) -> Option<u8> {
+        let disk = whole_disk(dev);
+        let real = std::fs::canonicalize(format!("/sys/block/{disk}/device")).ok()?;
+        let path = real.to_string_lossy();
+        BAY_ROOT_PORTS.iter().find(|(_, port)| path.contains(port)).map(|(bay, _)| *bay)
+    }
+
+    /// Reduce a partition name to its whole disk (`nvme1n1p3` -> `nvme1n1`).
+    fn whole_disk(dev: &str) -> String {
+        if let Some(pos) = dev.rfind('p') {
+            let (head, tail) = (&dev[..pos], &dev[pos + 1..]);
+            if !tail.is_empty()
+                && tail.chars().all(|c| c.is_ascii_digit())
+                && head.chars().last().is_some_and(|c| c.is_ascii_digit())
+            {
+                return head.to_string();
+            }
+        }
+        let trimmed = dev.trim_end_matches(|c: char| c.is_ascii_digit());
+        if trimmed != dev && trimmed.starts_with("sd") {
+            return trimmed.to_string();
+        }
+        dev.to_string()
+    }
+
     /// True if any md RAID array is degraded (a member drive failed or
-    /// dropped). fnOS builds on standard mdraid, so this needs no tools and
-    /// works on any Linux. Linear/single-drive arrays have no `degraded`
-    /// file and are ignored here (their failure shows as a missing device).
+    /// dropped). Kept for the drive-fault event beep.
     pub fn array_degraded() -> bool {
         std::fs::read_dir("/sys/block")
             .map(|it| {

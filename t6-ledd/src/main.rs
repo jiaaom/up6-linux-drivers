@@ -6,13 +6,19 @@
 //! them. Settings live in `/etc/t6-ledd.toml`, changed only through the
 //! control socket so the file has one writer.
 
+mod beeper;
 mod config;
 mod control;
 mod devices;
+mod events;
+mod leds;
 mod schedule;
 
+use beeper::{Beeper, Pattern};
 use config::{Config, DeviceSetting, Mode};
-use devices::{Auto, Device, LedBank, CATALOG};
+use events::EventWatcher;
+use devices::{Auto, Device, CATALOG};
+use leds::LedBank;
 use schedule::Window;
 use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
 use signal_hook::flag;
@@ -23,7 +29,6 @@ use std::time::Duration;
 
 const DEFAULT_CONFIG: &str = "/etc/t6-ledd.toml";
 const RUN_DIR: &str = "/run/t6-ledd";
-const BEEP_ATTR: &str = "/sys/devices/platform/t6-platform/beep";
 const TICK: Duration = Duration::from_secs(2);
 
 fn log(msg: &str) {
@@ -39,11 +44,22 @@ struct Daemon {
     effective: Vec<(&'static str, String)>,
     /// Why the configuration file could not be used (defaults are active).
     config_error: Option<String>,
+    beeper: Beeper,
+    events: EventWatcher,
 }
 
 impl Daemon {
     fn new(cfg: Config, config_path: PathBuf, run_dir: PathBuf, config_error: Option<String>) -> Self {
-        Daemon { cfg, config_path, run_dir, bank: LedBank::new(), effective: Vec::new(), config_error }
+        Daemon {
+            cfg,
+            config_path,
+            run_dir,
+            bank: LedBank::new(),
+            effective: Vec::new(),
+            config_error,
+            beeper: Beeper::new(),
+            events: EventWatcher::default(),
+        }
     }
 
     fn night_active(&self) -> (bool, &'static str) {
@@ -76,7 +92,7 @@ impl Daemon {
     fn apply(&mut self) {
         // Push the tray speed to the driver first; colour writes below then
         // pick it up. Non-fatal if the attribute is missing.
-        if let Err(e) = devices::set_tray_speed(&self.cfg.tray_speed) {
+        if let Err(e) = leds::set_tray_speed(&self.cfg.tray_speed) {
             log(&format!("tray speed: {e}"));
         }
         let (night, _) = self.night_active();
@@ -121,6 +137,11 @@ impl Daemon {
             "night": { "active": night, "reason": reason, "manual": self.cfg.night.manual, "schedule": self.cfg.night.schedule },
             "bays_enabled": self.cfg.bays_enabled,
             "tray_speed": self.cfg.tray_speed,
+            "beep": {
+                "startup": self.cfg.beep.startup,
+                "ac_loss": self.cfg.beep.ac_loss,
+                "drive_fault": self.cfg.beep.drive_fault,
+            },
             "config_error": self.config_error,
             "devices": devices,
         });
@@ -160,6 +181,14 @@ impl Daemon {
                 self.apply();
                 Ok("ok".into())
             }
+            ["beep-on", event, on @ ("on" | "off")] => {
+                if !self.cfg.beep.set(event, *on == "on") {
+                    return Err(format!("unknown beep event {event:?} (startup/ac_loss/drive_fault)"));
+                }
+                self.save()?;
+                self.write_status();
+                Ok("ok".into())
+            }
             ["tray-speed", speed] => {
                 if !config::TRAY_SPEEDS.contains(speed) {
                     return Err(format!("tray-speed must be one of {:?}", config::TRAY_SPEEDS));
@@ -187,8 +216,7 @@ impl Daemon {
                 Ok("ok".into())
             }
             ["beep", pattern] => {
-                let p: u8 = pattern.parse().map_err(|_| "beep pattern must be 0..=255".to_string())?;
-                std::fs::write(BEEP_ATTR, format!("{p}\n")).map_err(|e| format!("beeper: {e}"))?;
+                self.beeper.play(Pattern::parse(pattern)?)?;
                 Ok("ok".into())
             }
             ["reload"] => {
@@ -217,6 +245,16 @@ impl Daemon {
         }
     }
 
+    /// Sample the event watcher and sound any triggered beeps.
+    fn check_events(&mut self) {
+        for ev in self.events.poll(&self.cfg.beep) {
+            log(&format!("event beep: {}", ev.reason));
+            if let Err(e) = self.beeper.play(ev.pattern) {
+                log(&format!("event beep failed: {e}"));
+            }
+        }
+    }
+
     /// Leave the LEDs in their automatic state and silence the beeper.
     fn park(&mut self) {
         for dev in CATALOG {
@@ -224,7 +262,7 @@ impl Daemon {
                 let _ = self.bank.set(dev, c);
             }
         }
-        let _ = std::fs::write(BEEP_ATTR, "0\n");
+        let _ = self.beeper.silence();
     }
 }
 
@@ -304,6 +342,19 @@ fn main() {
     daemon.apply();
     log("t6-ledd started");
 
+    // Short beep once per boot, like the stock firmware. The marker lives in
+    // the runtime dir (tmpfs, cleared on reboot but kept across service
+    // restarts via RuntimeDirectoryPreserve), so upgrades and reloads are
+    // silent.
+    let boot_marker = run_dir.join("booted");
+    let first_this_boot = !boot_marker.exists();
+    let _ = std::fs::write(&boot_marker, b"1\n");
+    if first_this_boot && daemon.cfg.beep.startup {
+        if let Err(e) = daemon.beeper.short() {
+            log(&format!("startup beep: {e}"));
+        }
+    }
+
     while !term.load(Ordering::Relaxed) {
         if hup.swap(false, Ordering::Relaxed) {
             daemon.reload();
@@ -316,7 +367,10 @@ fn main() {
                 };
                 let _ = req.reply.send(reply);
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => daemon.apply(),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                daemon.apply();
+                daemon.check_events();
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }

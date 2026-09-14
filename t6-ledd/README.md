@@ -21,6 +21,9 @@ beeper. Rust, no runtime dependencies.
   `schedule 23:00-07:00`, `schedule off`, `beep 1`, `reload`, `status`.
   Settings changed this way are saved to `/etc/t6-ledd.toml`, the only
   writer of which is the daemon. Live state: `/run/t6-ledd/status.json`.
+- A short beep sounds once per boot (`startup_beep`, default on), matching
+  the stock firmware; upgrades and reloads are silent (a `/run` marker,
+  cleared only on reboot). Control command: `startup-beep on|off`.
 - On exit the LEDs are left in their automatic state and the beeper is
   silenced.
 

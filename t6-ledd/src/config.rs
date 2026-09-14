@@ -20,6 +20,9 @@ pub struct Config {
     /// Tray light breathing speed: "slow" | "normal" | "fast".
     #[serde(default = "default_tray_speed")]
     pub tray_speed: String,
+    /// Event beeps (see [`BeepConfig`]).
+    #[serde(default)]
+    pub beep: BeepConfig,
     #[serde(default)]
     pub night: Night,
     /// Per-device setting, keyed by device id (see `devices::CATALOG`).
@@ -66,9 +69,49 @@ fn default_tray_speed() -> String {
 
 pub const TRAY_SPEEDS: [&str; 3] = ["slow", "normal", "fast"];
 
+/// Which events make a sound. All default on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BeepConfig {
+    /// Short beep once per boot (like the stock firmware).
+    #[serde(default = "yes")]
+    pub startup: bool,
+    /// Two beeps when AC power is unplugged (running on battery).
+    #[serde(default = "yes")]
+    pub ac_loss: bool,
+    /// A long beep when a RAID array becomes degraded (drive failed).
+    #[serde(default = "yes")]
+    pub drive_fault: bool,
+}
+
+impl Default for BeepConfig {
+    fn default() -> Self {
+        BeepConfig { startup: true, ac_loss: true, drive_fault: true }
+    }
+}
+
+impl BeepConfig {
+    /// Set one event by name; returns false for an unknown name.
+    pub fn set(&mut self, event: &str, on: bool) -> bool {
+        match event {
+            "startup" => self.startup = on,
+            "ac_loss" => self.ac_loss = on,
+            "drive_fault" => self.drive_fault = on,
+            _ => return false,
+        }
+        true
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
-        Config { bays_enabled: true, tray_speed: default_tray_speed(), night: Night::default(), devices: BTreeMap::new() }
+        Config {
+            bays_enabled: true,
+            tray_speed: default_tray_speed(),
+            beep: BeepConfig::default(),
+            night: Night::default(),
+            devices: BTreeMap::new(),
+        }
     }
 }
 

@@ -114,6 +114,7 @@ button:disabled { opacity: .5; cursor: default; }
 .switch input:checked + i { background: var(--accent); }
 .switch input:checked + i::after { left: 19px; }
 .switch input:disabled + i { opacity: .5; }
+.beep-events { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 
 /* LED devices table */
 .devices { width: 100%; border-collapse: collapse; font-size: 13px; }

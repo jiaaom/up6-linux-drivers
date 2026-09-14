@@ -84,6 +84,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/leds/tray-speed"), axum::routing::put(put_tray_speed))
         .route(&p("/api/leds/{device}"), axum::routing::put(put_led))
         .route(&p("/api/beep"), axum::routing::post(post_beep))
+        .route(&p("/api/beep/event"), axum::routing::put(put_beep_event))
         .route(&p("/api/system"), get(get_system))
 }
 
@@ -328,5 +329,18 @@ struct TraySpeedBody {
 async fn put_tray_speed(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<TraySpeedBody>) -> ApiResult {
     require_admin(&s, &headers)?;
     s.inner.ledd.command(&format!("tray-speed {}", Ledd::word(&b.speed).map_err(bad_request)?)).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct BeepEventBody {
+    event: String,
+    enabled: bool,
+}
+
+async fn put_beep_event(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<BeepEventBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    let cmd = format!("beep-on {} {}", Ledd::word(&b.event).map_err(bad_request)?, if b.enabled { "on" } else { "off" });
+    s.inner.ledd.command(&cmd).map_err(bad_request)?;
     Ok(Json(json!({ "ok": true })))
 }

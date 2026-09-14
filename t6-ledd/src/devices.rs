@@ -1,11 +1,8 @@
 //! The indicator devices of the T6 and how each maps onto the `t6:*` LED
 //! class devices, plus the automatic rules.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-const LEDS_ROOT: &str = "/sys/class/leds";
-const TRAY_SPEED_ATTR: &str = "/sys/devices/platform/t6-platform/tray_speed";
 
 /// Automatic behaviour of a device.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,12 +117,6 @@ pub fn by_id(id: &str) -> Option<&'static Device> {
     CATALOG.iter().find(|d| d.id == id)
 }
 
-/// Write the tray breathing speed ("slow"|"normal"|"fast") to the driver.
-pub fn set_tray_speed(speed: &str) -> Result<(), String> {
-    std::fs::write(TRAY_SPEED_ATTR, format!("{speed}\n"))
-        .map_err(|e| format!("{TRAY_SPEED_ATTR}: {e}"))
-}
-
 impl Device {
     pub fn is_bay(&self) -> bool {
         matches!(self.auto, Some(Auto::BayPresent(_)))
@@ -145,59 +136,6 @@ impl Device {
             Auto::Wifi => Some(if sources::wifi_up() { "blue" } else { "off" }),
             Auto::ChargeControl => None,
         }
-    }
-}
-
-/// Writes LED brightness values, skipping writes that would not change
-/// anything.
-pub struct LedBank {
-    root: PathBuf,
-    state: HashMap<&'static str, bool>,
-}
-
-impl LedBank {
-    pub fn new() -> Self {
-        LedBank { root: PathBuf::from(LEDS_ROOT), state: HashMap::new() }
-    }
-
-    pub fn available(&self, led: &str) -> bool {
-        self.root.join(led).join("brightness").exists()
-    }
-
-    /// Set a device to a colour (every LED not in the colour goes off).
-    ///
-    /// The "off" LEDs are written before the "on" LEDs. The EC LEDs of one
-    /// device (power button, each bay) share a single register in full-byte
-    /// mode, so a colour's off-write zeroes the whole byte; doing the offs
-    /// first means the final write is the colour we want, not a stray zero.
-    pub fn set(&mut self, dev: &Device, color: &str) -> Result<(), String> {
-        let on = dev.leds_for(color).ok_or_else(|| format!("{}: unknown colour {color:?}", dev.id))?;
-        for led in dev.leds {
-            if !on.contains(led) {
-                self.write(led, false)?;
-            }
-        }
-        for led in dev.leds {
-            if on.contains(led) {
-                self.write(led, true)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn write(&mut self, led: &'static str, on: bool) -> Result<(), String> {
-        if self.state.get(led) == Some(&on) {
-            return Ok(());
-        }
-        let path = self.root.join(led).join("brightness");
-        std::fs::write(&path, if on { "1\n" } else { "0\n" }).map_err(|e| format!("{}: {e}", path.display()))?;
-        self.state.insert(led, on);
-        Ok(())
-    }
-
-    /// Forget what was written so the next pass rewrites everything.
-    pub fn invalidate(&mut self) {
-        self.state.clear();
     }
 }
 
@@ -259,6 +197,29 @@ pub mod sources {
                 it.flatten()
                     .filter(|e| e.path().join("wireless").is_dir())
                     .any(|e| read_trim(e.path().join("operstate")).as_deref() == Some("up"))
+            })
+            .unwrap_or(false)
+    }
+
+    /// AC adapter connected. `None` if no adapter is exposed.
+    pub fn ac_online() -> Option<bool> {
+        std::fs::read_dir("/sys/class/power_supply")
+            .ok()?
+            .flatten()
+            .find(|e| read_trim(e.path().join("type")).as_deref() == Some("Mains"))
+            .map(|e| read_trim(e.path().join("online")).as_deref() == Some("1"))
+    }
+
+    /// True if any md RAID array is degraded (a member drive failed or
+    /// dropped). fnOS builds on standard mdraid, so this needs no tools and
+    /// works on any Linux. Linear/single-drive arrays have no `degraded`
+    /// file and are ignored here (their failure shows as a missing device).
+    pub fn array_degraded() -> bool {
+        std::fs::read_dir("/sys/block")
+            .map(|it| {
+                it.flatten()
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("md"))
+                    .any(|e| read_trim(e.path().join("md/degraded")).as_deref().is_some_and(|v| v != "0"))
             })
             .unwrap_or(false)
     }

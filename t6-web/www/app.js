@@ -162,6 +162,11 @@ async function refresh() {
     renderLeds(s.leds);
     document.querySelectorAll("#beep-buttons button").forEach((b) => (b.disabled = !state.admin || !s.leds));
     $("#beep-note").textContent = !state.admin ? "administrator required" : "";
+    document.querySelectorAll(".beep-events input").forEach((cb) => {
+      cb.disabled = !state.admin || !s.leds;
+      const beep = s.leds && s.leds.beep;
+      if (beep && document.activeElement !== cb) cb.checked = !!beep[cb.dataset.event];
+    });
     if (s.fan.running && $("#notice").textContent.startsWith("t6-fand is not running")) notice("");
   } catch (e) {
     notice(`Backend unreachable: ${e.message}`, "error");
@@ -471,6 +476,12 @@ $("#beep-buttons").addEventListener("click", async (e) => {
   if (!b || b.disabled) return;
   try { await api("beep", { method: "POST", body: { pattern: +b.dataset.pattern } }); }
   catch (err) { notice(`Beeper: ${err.message}`, "error"); }
+});
+document.querySelector(".beep-events").addEventListener("change", async (e) => {
+  const cb = e.target.closest("input[data-event]");
+  if (!cb) return;
+  try { await api("beep/event", { method: "PUT", body: { event: cb.dataset.event, enabled: cb.checked } }); }
+  catch (err) { notice(`Beep setting: ${err.message}`, "error"); }
 });
 
 async function loadSystem() {

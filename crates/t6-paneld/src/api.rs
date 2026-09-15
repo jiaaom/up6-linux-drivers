@@ -54,6 +54,10 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/network/wifi/disconnect"), post(post_wifi_disconnect))
         .route(&p("/api/network/wifi/forget"), post(post_wifi_forget))
         .route(&p("/api/network/wifi/radio"), put(put_wifi_radio))
+        // Ethernet (wired) IPv4 config — DHCP/static + DNS on the OVS/wired
+        // connection. Not login-gated (same physical-access model as Wi-Fi).
+        .route(&p("/api/network/ethernet"), get(get_ethernet))
+        .route(&p("/api/network/ethernet"), post(post_ethernet))
         .route(&p("/"), get(index))
         .route(&p("/{file}"), get(static_file));
     if !prefix.is_empty() {
@@ -248,6 +252,35 @@ struct WifiRadioReq {
 async fn put_wifi_radio(Json(req): Json<WifiRadioReq>) -> Response {
     match t6_hw_rs::network::set_radio(req.on) {
         Ok(()) => Json(serde_json::json!({ "on": req.on })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+// ---- Ethernet (wired) config ---------------------------------------------
+
+async fn get_ethernet() -> Response {
+    Json(t6_hw_rs::network::eth_config()).into_response()
+}
+
+#[derive(Deserialize)]
+struct EthReq {
+    /// "auto" (DHCP) or "manual" (static).
+    method: String,
+    /// Static address as CIDR (e.g. "10.0.0.5/24"); required when manual.
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    gateway: Option<String>,
+    /// DNS servers; a non-empty list overrides DHCP-leased ones too.
+    #[serde(default)]
+    dns: Vec<String>,
+}
+
+async fn post_ethernet(Json(req): Json<EthReq>) -> Response {
+    let addr = req.address.as_deref().filter(|s| !s.is_empty());
+    let gw = req.gateway.as_deref().filter(|s| !s.is_empty());
+    match t6_hw_rs::network::eth_set(&req.method, addr, gw, &req.dns) {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
 }

@@ -172,6 +172,16 @@
     background:oklch(0.13 0.03 252 / .96);opacity:0;pointer-events:none;transition:opacity .26s}
   #wifipass.on{opacity:1;pointer-events:auto}
 
+  /* Ethernet IPv4 editor: centered overlay (keyboard-safe), like #wifipass */
+  #ethedit{position:absolute;inset:0;z-index:82;display:flex;align-items:center;justify-content:center;
+    background:oklch(0.13 0.03 252 / .96);opacity:0;pointer-events:none;transition:opacity .26s}
+  #ethedit.on{opacity:1;pointer-events:auto}
+  .seg{display:flex;gap:10px;background:oklch(1 0 0 / .06);border-radius:24px;padding:8px}
+  .seg-opt{flex:1;height:96px;display:flex;align-items:center;justify-content:center;border-radius:18px;
+    font-size:32px;color:oklch(0.97 0.006 252 / .6);transition:background .15s,color .15s}
+  .seg-opt.on{background:var(--amber);color:oklch(0.2 0.04 62);font-weight:600}
+  #ethManual{display:flex;flex-direction:column;gap:22px}
+
   /* Wi-Fi network list (inside the detail sheet) */
   .wifi-list{margin-top:6px;max-height:1180px;overflow-y:auto;scrollbar-width:none}
   .wifi-empty{padding:40px 4px;font-size:32px;color:oklch(0.97 0.006 252 / .5);text-align:center}

@@ -351,7 +351,7 @@ function refresh(d){
   var nw=d.network||{};
   var et=document.querySelector('[data-tile="eth"]');
   if(et){var e=nw.ethernet||{};et.className='tile '+(e.connected?'on':'off');
-    var es=et.querySelector('.eth-sub');if(es)es.textContent=e.connected?fmtSpeed(e.speed_mbps):'Disconnected';}
+    var es=et.querySelector('.eth-sub');if(es)es.textContent=e.connected?(e.ip||'Connected'):'Disconnected';}
   var wt=document.querySelector('[data-tile="wifi"]');
   if(wt){var w=nw.wifi||{},wc=w.connected&&w.ssid;wt.className='tile '+(wc?'on':'off');
     var ws=wt.querySelector('.wifi-sub');if(ws)ws.textContent=wc?w.ssid:'Off';}
@@ -478,10 +478,61 @@ function showDetail(title,rows){
   document.getElementById('scrim').classList.add('show');
   document.getElementById('detail').classList.add('show');
 }
-function closeDetail(){hideWifiPass();document.getElementById('detail').classList.remove('show');document.getElementById('scrim').classList.remove('show');}
-// Ethernet stays read-only: the wired IP lives on an OVS bridge the NAS OS owns.
-function showEthDetail(){var e=(LAST&&LAST.network&&LAST.network.ethernet)||{};
-  showDetail('Ethernet',[['Status',e.connected?'Connected':'Disconnected'],['Link speed',fmtSpeed(e.speed_mbps)],['IP address',e.ip],['Router',e.gateway],['DNS',(e.dns||[]).join(', ')],['Configuration','Managed by the NAS OS']]);}
+function closeDetail(){hideWifiPass();hideEthEdit();document.getElementById('detail').classList.remove('show');document.getElementById('scrim').classList.remove('show');}
+function showEthDetail(){
+  var e=(LAST&&LAST.network&&LAST.network.ethernet)||{};
+  document.getElementById('detailTitle').textContent='Ethernet';
+  var rows=[['Status',e.connected?'Connected':'Disconnected'],['Link speed',fmtSpeed(e.speed_mbps)],['IP address',e.ip],['Router',e.gateway],['DNS',(e.dns||[]).join(', ')]];
+  document.getElementById('detailBody').innerHTML=
+    rows.map(function(r){return '<div class="drow"><div class="k">'+r[0]+'</div><div class="v">'+esc(r[1]||'—')+'</div></div>';}).join('')+
+    '<div class="login-btn" id="ethEditBtn" style="margin-top:24px">Configure IPv4…</div>';
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('detail').classList.add('show');
+  document.getElementById('ethEditBtn').addEventListener('click',ethEdit);
+}
+/* Ethernet IPv4 editor (drives NetworkManager on the wired/OVS connection) */
+function ethSetMode(m){
+  document.querySelectorAll('#ethMode .seg-opt').forEach(function(o){o.classList.toggle('on',o.dataset.m===m);});
+  document.getElementById('ethMode').dataset.m=m;
+  document.getElementById('ethManual').hidden=(m!=='manual');
+}
+function ethEdit(){
+  fetch('api/network/ethernet',{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
+    ethSetMode(c.method==='manual'?'manual':'auto');
+    var a=(c.address||'').split('/');
+    document.getElementById('ethAddr').value=a[0]||'';
+    document.getElementById('ethPrefix').value=a[1]||'24';
+    document.getElementById('ethGw').value=c.gateway||'';
+    document.getElementById('ethDns').value=(c.dns||[]).join(', ');
+    document.getElementById('ethErr').hidden=true;
+    document.getElementById('ethedit').classList.add('on');
+  }).catch(function(){toast('Could not read Ethernet config');});
+}
+function hideEthEdit(){document.getElementById('ethedit').classList.remove('on');}
+(function(){
+  var ov=document.getElementById('ethedit'); if(!ov)return;
+  document.querySelectorAll('#ethMode .seg-opt').forEach(function(o){o.addEventListener('click',function(){ethSetMode(o.dataset.m);});});
+  document.getElementById('ethCancel').addEventListener('click',function(){hideEthEdit();});
+  document.getElementById('ethApply').addEventListener('click',function(){
+    var m=document.getElementById('ethMode').dataset.m||'auto';
+    var err=document.getElementById('ethErr');
+    var dns=document.getElementById('ethDns').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var body={method:m,dns:dns};
+    if(m==='manual'){
+      var ip=document.getElementById('ethAddr').value.trim();
+      var pfx=(document.getElementById('ethPrefix').value.trim()||'24');
+      if(!ip){err.textContent='Enter an IP address.';err.hidden=false;return;}
+      if(!/^\d{1,2}$/.test(pfx)||+pfx>32){err.textContent='Subnet prefix must be 0–32.';err.hidden=false;return;}
+      body.address=ip+'/'+pfx;
+      body.gateway=document.getElementById('ethGw').value.trim();
+    }
+    err.hidden=true; toast('Applying…');
+    fetch('api/network/ethernet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
+      .then(function(){toast('Ethernet updated');hideEthEdit();closeDetail();setTimeout(function(){poll();},1500);})
+      .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});
+  });
+})();
 
 /* ---------- Wi-Fi config sheet (drives NetworkManager via t6-paneld) ---------- */
 var wifiAps=[], wifiPassSsid=null;
@@ -522,11 +573,21 @@ function wifiScan(){
   }).catch(function(e){var list=document.getElementById('wifiList');if(list)list.innerHTML='<div class="wifi-empty">'+esc(e.message||'Scan failed')+'</div>';});
 }
 function wifiTap(ap){if(!ap)return;if(ap.in_use){wifiManage(ap);return;}if(ap.saved||!ap.security){wifiDoConnect(ap.ssid,null);return;}wifiPass(ap);}
+function maskFromPrefix(p){if(p==null||p<0||p>32)return null;var m=[0,0,0,0];for(var i=0;i<p;i++)m[Math.floor(i/8)]|=128>>(i%8);return m.join('.');}
+function drow(k,v){return v?'<div class="drow"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>':'';}
 function wifiManage(ap){
   var w=(LAST&&LAST.network&&LAST.network.wifi)||{};
+  var det=drow('Status','Connected')+
+    drow('Signal',w.signal!=null?w.signal+'%':null)+
+    drow('Security',w.security||ap.security)+
+    drow('IPv4',w.ip)+
+    drow('Subnet mask',maskFromPrefix(w.prefix))+
+    drow('Router',w.gateway)+
+    drow('DNS',(w.dns||[]).join(', '))+
+    drow('IPv6',w.ipv6);
   document.getElementById('detailBody').innerHTML='<div class="wifi-manage"><div class="wifi-ap-name big">'+esc(ap.ssid)+'</div>'+
-    '<div class="wifi-ap-sub">Connected'+(w.ip?' · '+esc(w.ip):'')+(w.signal!=null?' · '+w.signal+'%':'')+'</div>'+
-    '<div class="login-btn" id="wifiDisc">Disconnect</div>'+
+    det+
+    '<div class="login-btn" id="wifiDisc" style="margin-top:24px">Disconnect</div>'+
     (ap.saved?'<div class="login-cancel danger" id="wifiForget">Forget this network</div>':'')+
     '<div class="login-cancel" id="wifiBack">Back</div></div>';
   document.getElementById('wifiDisc').addEventListener('click',function(){wifiNetAct('disconnect',null,'Disconnected');});

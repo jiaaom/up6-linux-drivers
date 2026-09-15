@@ -106,6 +106,24 @@
         <div class="login-cancel" id="wpCancel">Cancel</div>
       </div>
     </div>
+    <div id="ethedit">
+      <div class="login-card">
+        <div class="login-title">Ethernet IPv4</div>
+        <div class="seg" id="ethMode">
+          <div class="seg-opt" data-m="auto">Automatic (DHCP)</div>
+          <div class="seg-opt" data-m="manual">Manual</div>
+        </div>
+        <div id="ethManual" hidden>
+          <input id="ethAddr" class="login-input" type="text" inputmode="decimal" placeholder="IP address (e.g. 10.0.0.50)" autocapitalize="none" spellcheck="false">
+          <input id="ethPrefix" class="login-input" type="text" inputmode="numeric" placeholder="Subnet prefix (e.g. 24)" autocapitalize="none" spellcheck="false">
+          <input id="ethGw" class="login-input" type="text" inputmode="decimal" placeholder="Gateway (e.g. 10.0.0.1)" autocapitalize="none" spellcheck="false">
+        </div>
+        <input id="ethDns" class="login-input" type="text" inputmode="decimal" placeholder="DNS, comma-separated (optional)" autocapitalize="none" spellcheck="false">
+        <div id="ethErr" class="login-err" hidden></div>
+        <div class="login-btn" id="ethApply">Apply</div>
+        <div class="login-cancel" id="ethCancel">Cancel</div>
+      </div>
+    </div>
     <div id="osk"></div>
   </div>
 </div>

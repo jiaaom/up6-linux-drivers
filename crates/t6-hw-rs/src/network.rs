@@ -32,6 +32,12 @@ pub struct Wifi {
     pub signal: Option<u32>,
     pub security: Option<String>,
     pub ip: Option<String>,
+    /// IPv4 prefix length (e.g. 24) → the UI renders a dotted subnet mask.
+    pub prefix: Option<u32>,
+    pub gateway: Option<String>,
+    pub dns: Vec<String>,
+    /// First non-link-local IPv6 address (with prefix), if any.
+    pub ipv6: Option<String>,
 }
 
 #[derive(Serialize, Default)]
@@ -152,6 +158,19 @@ pub fn info() -> Network {
         if let Some((_, _, src)) = default_route(true) {
             n.wifi.ip = src;
         }
+        // Runtime IP details from the device (IP4.ADDRESS is "ip/prefix").
+        if let Some(a) = nmcli_field(&wl, "IP4.ADDRESS").into_iter().next() {
+            let mut parts = a.splitn(2, '/');
+            if let Some(ip) = parts.next() {
+                n.wifi.ip = Some(ip.to_string());
+            }
+            n.wifi.prefix = parts.next().and_then(|p| p.parse().ok());
+        }
+        n.wifi.gateway = nmcli_field(&wl, "IP4.GATEWAY").into_iter().next();
+        n.wifi.dns = nmcli_field(&wl, "IP4.DNS");
+        // Prefer a global IPv6 over the link-local (fe80::) one.
+        let v6 = nmcli_field(&wl, "IP6.ADDRESS");
+        n.wifi.ipv6 = v6.iter().find(|a| !a.to_lowercase().starts_with("fe80")).or_else(|| v6.first()).cloned();
         n.wifi.iface = Some(wl);
         if let Some(out) = run("nmcli", &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi"]) {
             for line in out.lines() {
@@ -301,6 +320,93 @@ pub fn forget(ssid: &str) -> Result<(), String> {
 /// Turn the Wi-Fi radio on or off.
 pub fn set_radio(on: bool) -> Result<(), String> {
     nmcli_ok(&["radio", "wifi", if on { "on" } else { "off" }]).map(|_| ())
+}
+
+// ---- Ethernet config (writes go through NetworkManager) ------------------
+//
+// The wired IP usually lives on an OVS-bridge interface (fnOS setup), not the
+// physical NIC, so the editable target is whichever NM connection is active on
+// the device that carries the non-Wi-Fi default route. We set DHCP vs static +
+// DNS on that connection. fnOS's network_service reconciles the OVS iface's IP
+// *method* (forces disabled->auto, mac-mismatch->manual) but does not fight a
+// well-formed auto/manual config, so these changes stick.
+
+#[derive(Serialize, Default)]
+pub struct EthConfig {
+    /// NM connection name to edit (e.g. "enp103s0-ovs"), or None if not found.
+    pub conn: Option<String>,
+    /// Device that connection is on (e.g. "enp103s0-ovs").
+    pub iface: Option<String>,
+    /// "auto" (DHCP) or "manual" (static).
+    pub method: String,
+    /// First static address as CIDR (e.g. "10.0.0.5/24"), when manual.
+    pub address: Option<String>,
+    pub gateway: Option<String>,
+    pub dns: Vec<String>,
+}
+
+/// The NM connection + device that carry the wired (non-Wi-Fi) default route.
+fn wired_conn() -> Option<(String, String)> {
+    let (_, dev, _) = default_route(false)?;
+    let dev = dev?;
+    let conn = run("nmcli", &["-t", "-f", "GENERAL.CONNECTION", "device", "show", &dev])?
+        .lines()
+        .next()
+        .and_then(|l| split_terse(l).get(1).cloned())
+        .filter(|s| !s.is_empty())?;
+    Some((conn, dev))
+}
+
+/// One terse `connection show` field value (first line), e.g. `ipv4.method`.
+fn conn_field(conn: &str, field: &str) -> Option<String> {
+    let out = run("nmcli", &["-t", "-f", field, "connection", "show", conn])?;
+    split_terse(out.lines().next()?).get(1).filter(|s| !s.is_empty()).cloned()
+}
+
+/// Read the editable Ethernet (wired) IPv4 config.
+pub fn eth_config() -> EthConfig {
+    let mut c = EthConfig { method: "auto".into(), ..Default::default() };
+    let Some((conn, dev)) = wired_conn() else { return c };
+    c.method = conn_field(&conn, "ipv4.method").unwrap_or_else(|| "auto".into());
+    // ipv4.addresses is comma-separated CIDRs; keep the first for the editor.
+    c.address = conn_field(&conn, "ipv4.addresses").and_then(|s| s.split(',').next().map(|x| x.trim().to_string())).filter(|s| !s.is_empty());
+    c.gateway = conn_field(&conn, "ipv4.gateway");
+    c.dns = conn_field(&conn, "ipv4.dns").map(|s| s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default();
+    c.conn = Some(conn);
+    c.iface = Some(dev);
+    c
+}
+
+/// Set the wired IPv4 config. `method` is "auto" (DHCP) or "manual" (static).
+/// For manual, `address` (CIDR "a.b.c.d/n") is required; `gateway` optional.
+/// `dns` (may be empty) applies in both modes — with DHCP a non-empty list
+/// overrides the leased servers.
+pub fn eth_set(method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
+    let (conn, _) = wired_conn().ok_or("no wired connection found")?;
+    let dns_joined = dns.join(",");
+    let mut args: Vec<String> = vec!["connection".into(), "modify".into(), conn.clone()];
+    let mut set = |k: &str, v: &str| { args.push(k.into()); args.push(v.into()); };
+    match method {
+        "auto" => {
+            set("ipv4.method", "auto");
+            set("ipv4.addresses", "");
+            set("ipv4.gateway", "");
+            set("ipv4.dns", &dns_joined);
+            set("ipv4.ignore-auto-dns", if dns.is_empty() { "no" } else { "yes" });
+        }
+        "manual" => {
+            let addr = address.filter(|s| !s.is_empty()).ok_or("static mode needs an IP address (CIDR)")?;
+            set("ipv4.method", "manual");
+            set("ipv4.addresses", addr);
+            set("ipv4.gateway", gateway.unwrap_or(""));
+            set("ipv4.dns", &dns_joined);
+        }
+        other => return Err(format!("invalid method {other:?} (want auto|manual)")),
+    }
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    nmcli_ok(&argv)?;
+    // Re-activate so the change takes effect now.
+    nmcli_ok(&["connection", "up", &conn]).map(|_| ())
 }
 
 #[cfg(test)]

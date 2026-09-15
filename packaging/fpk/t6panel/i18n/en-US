@@ -1,0 +1,8 @@
+[common]
+display_name="T6 Front Panel"
+desc="Front touch-screen app for the UnifyDrive UP6 / ZSpace T6: dashboard, screen and network info, device settings. Requires T6 Control Center."
+changelog="Initial release: live dashboard, screen/LED/network info, device settings."
+
+[entry]
+title="T6 Front Panel"
+desc="Front-panel touch app"

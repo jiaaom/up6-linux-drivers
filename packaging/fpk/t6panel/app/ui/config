@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "t6panel.main": {
+            "title": "${entry.title}",
+            "desc": "${entry.desc}",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "",
+            "gatewayPrefix": "/app/t6panel",
+            "gatewaySocket": "app.sock",
+            "url": "/app/t6panel",
+            "allUsers": true
+        }
+    }
+}

@@ -21,20 +21,32 @@ mod www;
 use std::path::PathBuf;
 use tokio::net::{TcpListener, UnixListener};
 
+const DEFAULT_PREFIX: &str = "/app/t6panel";
+
 struct Opts {
     listen: Option<String>,
     gateway_socket: Option<PathBuf>,
     socket_group: Option<String>,
     www_dir: Option<PathBuf>,
+    prefix: String,
 }
 
 fn usage() -> ! {
-    eprintln!("usage: t6-paneld (--listen ADDR:PORT | --gateway-socket PATH [--socket-group NAME])... [--www DIR]");
+    eprintln!(
+        "usage: t6-paneld (--listen ADDR:PORT | --gateway-socket PATH [--socket-group NAME])... \
+         [--prefix /app/t6panel] [--www DIR]"
+    );
     std::process::exit(2);
 }
 
 fn parse_args() -> Opts {
-    let mut o = Opts { listen: None, gateway_socket: None, socket_group: None, www_dir: None };
+    let mut o = Opts {
+        listen: None,
+        gateway_socket: None,
+        socket_group: None,
+        www_dir: None,
+        prefix: DEFAULT_PREFIX.into(),
+    };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut value = || args.next().unwrap_or_else(|| usage());
@@ -42,6 +54,7 @@ fn parse_args() -> Opts {
             "--listen" => o.listen = Some(value()),
             "--gateway-socket" => o.gateway_socket = Some(PathBuf::from(value())),
             "--socket-group" => o.socket_group = Some(value()),
+            "--prefix" => o.prefix = value().trim_end_matches('/').to_string(),
             "--www" => o.www_dir = Some(PathBuf::from(value())),
             _ => usage(),
         }
@@ -55,21 +68,22 @@ fn parse_args() -> Opts {
 #[tokio::main]
 async fn main() {
     let opts = parse_args();
-    let app = api::router(www::Www::new(opts.www_dir));
 
-    // Local TCP surface (no-login shell).
+    // Local TCP surface (no-login shell): bare routes, so the kiosk loads it at
+    // localhost and its relative fetches hit `/api/...`.
     if let Some(addr) = &opts.listen {
+        let app = api::router(www::Www::new(opts.www_dir.clone()), "");
         let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {
             eprintln!("cannot bind {addr}: {e}");
             std::process::exit(1);
         });
         println!("t6-paneld listening on http://{addr}/ (local, no-login)");
-        let app = app.clone();
         tokio::spawn(async move { axum::serve(listener, app).await });
     }
 
-    // Gateway unix socket (authenticated surface behind the FygoOS gateway).
+    // Gateway unix socket (authenticated surface): routes under the gatewayPrefix.
     if let Some(path) = &opts.gateway_socket {
+        let app = api::router(www::Www::new(opts.www_dir.clone()), &opts.prefix);
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).unwrap_or_else(|e| {
             eprintln!("cannot bind {}: {e}", path.display());
@@ -79,8 +93,7 @@ async fn main() {
             eprintln!("cannot set permissions on {}: {e}", path.display());
             std::process::exit(1);
         }
-        println!("t6-paneld listening on {} (gateway)", path.display());
-        let app = app.clone();
+        println!("t6-paneld listening on {} (gateway, prefix {})", path.display(), opts.prefix);
         tokio::spawn(async move { axum::serve(listener, app).await });
     }
 

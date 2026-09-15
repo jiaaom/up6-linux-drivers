@@ -1,0 +1,64 @@
+# Shared definitions for the t6panel lifecycle scripts (sourced, not executed).
+#
+# The panel backend runs as a systemd unit. It serves two surfaces from one
+# process: the FygoOS gateway socket (authenticated, /app/t6panel) and a local
+# no-login TCP shell for the on-device Chromium kiosk. The fan/LED daemons it
+# reads belong to T6 Control Center (a hard dependency), so we do not touch them.
+
+PANELD_UNIT=t6-paneld
+PANELD_UNIT_FILE=/etc/systemd/system/$PANELD_UNIT.service
+# Local no-login shell the on-device kiosk loads (http://127.0.0.1:9600/).
+PANEL_LOCAL_ADDR=127.0.0.1:9600
+
+fail() {
+    echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+# Generate the unit from the package paths and enable it. Runs as root: the
+# panel writes the backlight, /etc/t6-display.conf and /var/lib/t6-paneld, and
+# drives the LED daemon's control socket.
+install_paneld() {
+    cat > "$PANELD_UNIT_FILE" <<UNIT
+[Unit]
+Description=T6 front-panel backend
+After=t6-fand.service t6-ledd.service
+# The gateway forwards /app/t6panel to the socket; start once nginx is up.
+After=trim_nginx.service
+
+[Service]
+Type=simple
+Environment=TRIM_APPVER=$TRIM_APPVER
+ExecStart=$TRIM_APPDEST/bin/t6-paneld --gateway-socket $TRIM_APPDEST/app.sock --prefix /app/t6panel --listen $PANEL_LOCAL_ADDR --www $TRIM_APPDEST/www
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable "$PANELD_UNIT" >/dev/null 2>&1
+}
+
+remove_paneld() {
+    systemctl disable --now "$PANELD_UNIT" >/dev/null 2>&1 || true
+    rm -f "$PANELD_UNIT_FILE" "$TRIM_APPDEST/app.sock"
+    case "${wizard_remove_settings:-false}" in
+        true|1|yes|on) rm -rf /var/lib/t6-paneld ;;
+    esac
+    systemctl daemon-reload
+}
+
+start_paneld() {
+    [ -f "$PANELD_UNIT_FILE" ] || install_paneld
+    systemctl restart "$PANELD_UNIT" || fail "t6-paneld failed to start (journalctl -u t6-paneld)."
+}
+
+stop_paneld() {
+    systemctl stop "$PANELD_UNIT" 2>/dev/null || true
+}
+
+paneld_running() {
+    systemctl is-active --quiet "$PANELD_UNIT"
+}

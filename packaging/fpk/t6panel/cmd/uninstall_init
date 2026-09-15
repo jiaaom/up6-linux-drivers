@@ -1,0 +1,4 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+remove_paneld
+exit 0

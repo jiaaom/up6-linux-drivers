@@ -3,8 +3,8 @@
 use axum::{
     extract::{Path, State},
     http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, put},
+    response::{IntoResponse, Redirect, Response},
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -19,25 +19,37 @@ pub struct AppState {
     www: Arc<crate::www::Www>,
 }
 
-pub fn router(www: crate::www::Www) -> Router {
+/// Build the router with every route under `prefix`.
+///
+/// The local TCP shell uses an empty prefix (bare `/`, `/api/...`). The gateway
+/// surface uses the app's gatewayPrefix (e.g. `/app/t6panel`): FygoOS forwards
+/// the *unstripped* path, so routes must live under it, and `prefix` (no
+/// trailing slash) redirects to `prefix/` so the page's relative asset/API
+/// URLs resolve against the right base.
+pub fn router(www: crate::www::Www, prefix: &str) -> Router {
     let state = AppState { www: Arc::new(www) };
-    Router::new()
-        .route("/api/panel", get(get_panel))
-        .route("/api/session", get(get_session))
+    let p = |s: &str| format!("{prefix}{s}");
+    let mut r = Router::new()
+        .route(&p("/api/panel"), get(get_panel))
+        .route(&p("/api/session"), get(get_session))
         // Screen brightness. Allowed without a login (like a phone's
         // lock-screen brightness); admin-gated writes live on the gateway side.
-        .route("/api/display/brightness", put(put_brightness))
-        .route("/api/display/power", put(put_power))
-        .route("/api/settings/screen-timeout", put(put_screen_timeout))
-        .route("/api/settings/dashboard", put(put_dashboard))
-        .route("/api/settings/language", put(put_language))
-        .route("/api/hwinfo", get(get_hwinfo))
-        .route("/api/leds/night", put(put_led_night))
-        .route("/api/power/shutdown", axum::routing::post(post_shutdown))
-        .route("/api/power/restart", axum::routing::post(post_restart))
-        .route("/", get(index))
-        .route("/{file}", get(static_file))
-        .with_state(state)
+        .route(&p("/api/display/brightness"), put(put_brightness))
+        .route(&p("/api/display/power"), put(put_power))
+        .route(&p("/api/settings/screen-timeout"), put(put_screen_timeout))
+        .route(&p("/api/settings/dashboard"), put(put_dashboard))
+        .route(&p("/api/settings/language"), put(put_language))
+        .route(&p("/api/hwinfo"), get(get_hwinfo))
+        .route(&p("/api/leds/night"), put(put_led_night))
+        .route(&p("/api/power/shutdown"), post(post_shutdown))
+        .route(&p("/api/power/restart"), post(post_restart))
+        .route(&p("/"), get(index))
+        .route(&p("/{file}"), get(static_file));
+    if !prefix.is_empty() {
+        let slash = format!("{prefix}/");
+        r = r.route(prefix, get(move || async move { Redirect::permanent(&slash) }));
+    }
+    r.with_state(state)
 }
 
 /// The signed-in user as a JSON value (null when logged out / no gateway).

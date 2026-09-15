@@ -1,0 +1,10 @@
+#!/bin/bash
+# Runtime control of the panel backend (a systemd unit; see cmd/common).
+. "$(dirname "$0")/common"
+
+case "$1" in
+    start) start_paneld ;;
+    stop) stop_paneld ;;
+    status) paneld_running && exit 0 || exit 3 ;;
+    *) exit 1 ;;
+esac

@@ -1,0 +1,17 @@
+[
+  {
+    "stepTitle": "Remove T6 Front Panel",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "The fan and LED daemons and the drivers stay installed (they belong to T6 Control Center / T6 Drivers)."
+      },
+      {
+        "type": "switch",
+        "field": "wizard_remove_settings",
+        "label": "Also remove panel settings (dashboard layout, brightness, timeout)",
+        "initValue": "false"
+      }
+    ]
+  }
+]

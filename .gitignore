@@ -17,6 +17,7 @@ PROPOSAL.md
 # Internal notes, kept out of the public repo
 docs/
 PROPOSAL.md
+panel/design/dev-notes.md
 
 # FPK build output
 build/

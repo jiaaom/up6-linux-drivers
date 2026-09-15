@@ -55,6 +55,16 @@ payload_t6control() {
        "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" "$app/"
 }
 
+payload_t6panel() {
+    local app=$1/app
+    mkdir -p "$app/bin" "$app/www"
+    log "building t6-paneld (release)"
+    (cd "$CRATES" && cargo build --release --quiet -p t6-paneld)
+    cp "$CRATES/target/release/t6-paneld" "$app/bin/"
+    # The panel UI (served by t6-paneld from $TRIM_APPDEST/www).
+    cp "$REPO/panel/www/"* "$app/www/"
+}
+
 build_package() {
     local name=$1 dir
     [ -d "$SCRIPT_DIR/fpk/$name" ] || die "unknown package: $name"
@@ -68,7 +78,7 @@ build_package() {
 main() {
     command -v fygopack >/dev/null || die "fygopack not found (https://developer.fygonas.com/docs/cli/fygopack/)"
     local names=("$@")
-    [ ${#names[@]} -gt 0 ] || names=(t6-drivers t6control)
+    [ ${#names[@]} -gt 0 ] || names=(t6-drivers t6control t6panel)
     mkdir -p "$BUILD_DIR"
     for n in "${names[@]}"; do
         build_package "$n"

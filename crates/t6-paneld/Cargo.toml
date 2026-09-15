@@ -1,0 +1,13 @@
+[package]
+name = "t6-paneld"
+version = "0.1.0"
+edition = "2021"
+description = "Front-panel backend for the T6 touch desktop app"
+license = "GPL-2.0"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+t6-hw-rs = { path = "../t6-hw-rs" }

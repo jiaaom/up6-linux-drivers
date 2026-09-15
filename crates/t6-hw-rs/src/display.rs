@@ -25,10 +25,44 @@ pub struct Display {
     conf: PathBuf,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Settings {
     on_level: u32,
     off_after_boot: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { on_level: DEFAULT_ON, off_after_boot: false }
+    }
+}
+
+/// Parse the tiny `key=value` settings file (unknown keys and malformed lines
+/// ignored, so a partly written or future-extended file still yields a sane
+/// result). `on_level` is clamped to the UI's on-range.
+fn parse_settings(text: &str) -> Settings {
+    let mut s = Settings::default();
+    for line in text.lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        match k.trim() {
+            "on_level" => {
+                if let Ok(n) = v.trim().parse::<u32>() {
+                    s.on_level = n.clamp(MIN_ON, 100);
+                }
+            }
+            "off_after_boot" => s.off_after_boot = matches!(v.trim(), "true" | "1" | "yes"),
+            _ => {}
+        }
+    }
+    s
+}
+
+fn format_settings(s: Settings) -> String {
+    format!(
+        "# T6 built-in display settings, managed by T6 Control Center.\n\
+         on_level={}\noff_after_boot={}\n",
+        s.on_level, s.off_after_boot
+    )
 }
 
 #[derive(Debug, Serialize)]
@@ -58,30 +92,11 @@ impl Display {
     }
 
     fn settings(&self) -> Settings {
-        let mut s = Settings { on_level: DEFAULT_ON, off_after_boot: false };
-        if let Ok(text) = std::fs::read_to_string(&self.conf) {
-            for line in text.lines() {
-                let Some((k, v)) = line.split_once('=') else { continue };
-                match k.trim() {
-                    "on_level" => {
-                        if let Ok(n) = v.trim().parse::<u32>() {
-                            s.on_level = n.clamp(MIN_ON, 100);
-                        }
-                    }
-                    "off_after_boot" => s.off_after_boot = matches!(v.trim(), "true" | "1" | "yes"),
-                    _ => {}
-                }
-            }
-        }
-        s
+        std::fs::read_to_string(&self.conf).map(|t| parse_settings(&t)).unwrap_or_default()
     }
 
     fn save(&self, s: Settings) -> Result<(), String> {
-        let text = format!(
-            "# T6 built-in display settings, managed by T6 Control Center.\n\
-             on_level={}\noff_after_boot={}\n",
-            s.on_level, s.off_after_boot
-        );
+        let text = format_settings(s);
         let tmp = self.conf.with_extension("conf.tmp");
         std::fs::write(&tmp, text)
             .and_then(|_| std::fs::rename(&tmp, &self.conf))
@@ -133,5 +148,34 @@ impl Display {
         let mut s = self.settings();
         s.off_after_boot = off;
         self.save(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_when_empty_or_unknown() {
+        assert_eq!(parse_settings(""), Settings::default());
+        assert_eq!(parse_settings("# just a comment\nfuture_key=1\n"), Settings::default());
+    }
+
+    #[test]
+    fn parses_and_clamps() {
+        assert_eq!(parse_settings("on_level=55\noff_after_boot=true\n"), Settings { on_level: 55, off_after_boot: true });
+        // below MIN_ON and above 100 are clamped
+        assert_eq!(parse_settings("on_level=3\n").on_level, MIN_ON);
+        assert_eq!(parse_settings("on_level=200\n").on_level, 100);
+        // off_after_boot accepts several truthy spellings; anything else is false
+        assert!(parse_settings("off_after_boot=1\n").off_after_boot);
+        assert!(parse_settings("off_after_boot=yes\n").off_after_boot);
+        assert!(!parse_settings("off_after_boot=no\n").off_after_boot);
+    }
+
+    #[test]
+    fn format_then_parse_roundtrips() {
+        let s = Settings { on_level: 42, off_after_boot: true };
+        assert_eq!(parse_settings(&format_settings(s)), s);
     }
 }

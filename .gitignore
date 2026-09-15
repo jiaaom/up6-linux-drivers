@@ -20,3 +20,7 @@ PROPOSAL.md
 
 # FPK build output
 build/
+
+# proprietary stock-firmware assets (reference only, do not distribute)
+panel/design/stock-assets/
+panel/design/*.zip

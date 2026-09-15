@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0d1420">
+<title>T6 Panel — feel prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <div id="device">
+    <div class="bloomA"></div><div class="bloomB"></div><div class="vign"></div>
+
+    <!-- HOME -->
+    <div class="screen" id="home">
+      <div class="head">
+        <div class="statusbar"><span id="clock">22:48</span>
+          <div class="sb-icons">
+            <div style="width:52px;height:34px;border:4px solid currentColor;border-radius:8px;position:relative"><div style="position:absolute;left:13px;right:13px;top:-13px;height:13px;border-left:4px solid currentColor;border-right:4px solid currentColor"></div></div>
+            <div style="display:flex;align-items:flex-end;gap:6px;height:38px"><div style="width:9px;height:14px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:23px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:31px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:38px;border-radius:4px;background:currentColor;opacity:.3"></div></div>
+            <div style="display:flex;align-items:center;gap:4px"><div style="width:66px;height:34px;border:4px solid currentColor;border-radius:10px;padding:4px;box-sizing:border-box"><div class="bat-fill" style="width:72%;height:100%;border-radius:4px;background:currentColor"></div></div><div style="width:7px;height:14px;border-radius:0 4px 4px 0;background:currentColor"></div></div>
+          </div>
+        </div>
+        <div class="hero">
+          <div style="min-width:0">
+            <div class="kick"><i></i><span id="statusText">All systems normal</span></div>
+            <div class="hostname">nas.local</div>
+            <div class="sub signin" id="acct"><span class="acctdot" hidden></span><span id="acctText">Sign in</span></div>
+          </div>
+          <div class="hbtns"><div class="pill icon" id="sleepBtn"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="pill" id="webuiBtn">Web UI ↗</div><div class="pill" id="editbtn">Edit</div></div>
+        </div>
+        <div class="hair"></div>
+      </div>
+      <div class="scroll" id="homeScroll"></div>
+    </div>
+
+    <!-- EDIT -->
+    <div class="screen" id="edit">
+      <div class="vign2"></div>
+      <div class="head">
+        <div class="statusbar"><span class="clock2">22:53</span>
+          <div class="sb-icons">
+            <div style="width:52px;height:34px;border:4px solid currentColor;border-radius:8px;position:relative"><div style="position:absolute;left:13px;right:13px;top:-13px;height:13px;border-left:4px solid currentColor;border-right:4px solid currentColor"></div></div>
+            <div style="display:flex;align-items:flex-end;gap:6px;height:38px"><div style="width:9px;height:14px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:23px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:31px;border-radius:4px;background:currentColor"></div><div style="width:9px;height:38px;border-radius:4px;background:currentColor;opacity:.3"></div></div>
+            <div style="display:flex;align-items:center;gap:4px"><div style="width:66px;height:34px;border:4px solid currentColor;border-radius:10px;padding:4px;box-sizing:border-box"><div class="bat-fill" style="width:72%;height:100%;border-radius:4px;background:currentColor"></div></div><div style="width:7px;height:14px;border-radius:0 4px 4px 0;background:currentColor"></div></div>
+          </div>
+        </div>
+        <div class="hero">
+          <div style="min-width:0">
+            <div class="kick"><i></i>Editing dashboard</div>
+            <div class="hostname">nas.local</div>
+            <div class="sub">Drag to reorder · toggle to hide</div>
+          </div>
+          <div class="hbtns"><div class="pill solid" id="donebtn">Done</div></div>
+        </div>
+        <div class="hair"></div>
+      </div>
+      <div class="scroll" id="editScroll"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" id="settings">
+      <div class="vign2"></div>
+      <div class="head">
+        <div class="statusbar"><span class="clock3">22:48</span><div class="sb-icons" style="opacity:.5;font-size:28px">Settings</div></div>
+        <div class="hero">
+          <div style="min-width:0"><div class="hostname" style="font-size:76px">Settings</div></div>
+          <div class="hbtns"><div class="pill solid" id="settingsDone">Done</div></div>
+        </div>
+        <div class="hair"></div>
+      </div>
+      <div class="scroll" id="settingsScroll"></div>
+    </div>
+
+    <div id="scrim"></div>
+    <div id="sheet">
+      <div class="grabber"></div>
+      <div class="sheet-h"><div class="cancel" id="sheetCancel">Cancel</div><div class="title">Join “Dormitory”</div><div class="cancel" style="opacity:0">Cancel</div></div>
+      <div class="field"><span id="pw" class="ph">Password</span></div>
+      <div class="subnote">WPA2 · remembered for automatic re-join</div>
+      <div class="kbd" id="kbd"></div>
+      <div class="joinbtn" id="joinbtn">Join</div>
+    </div>
+    <div id="detail">
+      <div class="grabber"></div>
+      <div class="sheet-h"><div class="cancel" id="detailClose">Done</div><div class="title" id="detailTitle"></div><div class="cancel" style="opacity:0">Done</div></div>
+      <div id="detailBody"></div>
+      <div class="joinbtn" id="detailWeb" style="background:oklch(1 0 0 / .08);color:var(--ink)">Manage in Web UI ↗</div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div id="sleep"><div class="wake">Double-tap to wake</div></div>
+    <div id="confirm"><div class="cdlg"><div class="ctitle"></div><div class="cmsg"></div><div class="cbtns"><div class="cbtn cancel">Cancel</div><div class="cbtn ok">OK</div></div></div></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

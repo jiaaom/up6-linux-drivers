@@ -1,0 +1,13 @@
+# Workspace over the T6 userspace crates. Shared target/ and lockfile; build or
+# test everything with `cargo build` / `cargo test` from this directory.
+[workspace]
+resolver = "2"
+members = ["t6-hw-rs", "t6-fand", "t6-ledd", "t6-webd", "t6-paneld"]
+
+# Release profile applies to every member (profiles are ignored in members
+# once a workspace root defines them).
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

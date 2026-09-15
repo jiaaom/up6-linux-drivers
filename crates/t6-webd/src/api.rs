@@ -3,8 +3,8 @@
 //! Reads are open to any NAS user the gateway let through; writes require
 //! the administrator flag from the gateway headers.
 
-use crate::battery::{Battery, Thresholds};
-use crate::display::Display;
+use t6_hw_rs::battery::{Battery, Thresholds};
+use t6_hw_rs::display::Display;
 use crate::fand::Fand;
 use crate::gateway::User;
 use crate::ledd::Ledd;

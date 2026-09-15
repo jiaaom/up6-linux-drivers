@@ -9,8 +9,6 @@
 //! `/run/t6-fand`, `/sys/class/leds`, `/sys/class/backlight`, ...
 
 mod api;
-mod battery;
-mod display;
 mod fand;
 mod gateway;
 mod ledd;

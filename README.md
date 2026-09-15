@@ -12,21 +12,21 @@ Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 
 | directory | module | covers |
 |---|---|---|
-| [`t6-platform-dkms/`](t6-platform-dkms/) | `t6_platform` | EC platform driver: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
-| [`focaltech-ft8722-dkms/`](focaltech-ft8722-dkms/) | `ft8722_ts` | front-panel touchscreen |
+| [`kernel/t6-platform-dkms/`](kernel/t6-platform-dkms/) | `t6_platform` | EC platform driver: fans and temperatures (hwmon), LCD backlight, all LEDs (EC + GPIO), beeper, front-panel keys, battery telemetry and charge thresholds |
+| [`kernel/focaltech-ft8722-dkms/`](kernel/focaltech-ft8722-dkms/) | `ft8722_ts` | front-panel touchscreen |
 
 ### Userspace daemons (Rust, any Debian)
 
 | directory | binary | covers |
 |---|---|---|
-| [`t6-fand/`](t6-fand/) | `t6-fand` | fan policy daemon over the hwmon interface: profiles (silent / balance / performance / custom), temperature curves, smoothing, fail-safe |
-| [`t6-ledd/`](t6-ledd/) | `t6-ledd` | indicator daemon: LED policy, night mode, startup and event beeps, and automatic drive-bay LEDs (white when a drive is present, red blink on a RAID/drive fault) |
+| [`crates/t6-fand/`](crates/t6-fand/) | `t6-fand` | fan policy daemon over the hwmon interface: profiles (silent / balance / performance / custom), temperature curves, smoothing, fail-safe |
+| [`crates/t6-ledd/`](crates/t6-ledd/) | `t6-ledd` | indicator daemon: LED policy, night mode, startup and event beeps, and automatic drive-bay LEDs (white when a drive is present, red blink on a RAID/drive fault) |
 
 ### Web daemon (for FygoOS)
 
 | directory | binary | covers |
 |---|---|---|
-| [`t6-web/`](t6-web/) | `t6-webd` | web backend and UI for fans, LEDs, display brightness, battery charge limits and the beeper. Runs as a FygoOS/FnOS desktop app behind the system gateway; also usable standalone. |
+| [`crates/t6-webd/`](crates/t6-webd/) | `t6-webd` | web backend and UI for fans, LEDs, display brightness, battery charge limits and the beeper. Runs as a FygoOS/FnOS desktop app behind the system gateway; also usable standalone. |
 
 ## Prerequisite
 
@@ -43,23 +43,23 @@ Daemons and web app: a Rust toolchain (`cargo`, via [rustup](https://rustup.rs))
 ### Kernel modules
 
 ```bash
-sudo ./install-dkms.sh
+sudo ./packaging/install-dkms.sh
 ```
 
 Builds and installs both DKMS modules for the running kernel and enables
 `t6_platform` at boot. Re-run after a version bump to upgrade;
-`sudo ./install-dkms.sh --remove` uninstalls.
+`sudo ./packaging/install-dkms.sh --remove` uninstalls.
 
 ### Userspace daemons
 
 Each daemon builds with `cargo` and installs a systemd unit; see
-[`t6-fand/README.md`](t6-fand/README.md) and
-[`t6-ledd/README.md`](t6-ledd/README.md).
+[`crates/t6-fand/README.md`](crates/t6-fand/README.md) and
+[`crates/t6-ledd/README.md`](crates/t6-ledd/README.md).
 
 ## Install For FygoOS / fnOS: all-in-one packages
 
 ```bash
-./build-fpk.sh
+./packaging/build-fpk.sh
 ```
 
 produces two FygoOS packages (.fpk) in `build/`:

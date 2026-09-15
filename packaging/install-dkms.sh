@@ -13,6 +13,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
+# Package dirs are siblings of this script inside the .fpk payload, but live
+# under ../kernel/ in the source tree.
+if [ -d "$SCRIPT_DIR/${PACKAGES[0]}" ]; then PKG_ROOT=$SCRIPT_DIR; else PKG_ROOT=$SCRIPT_DIR/../kernel; fi
 MODULES_LOAD_CONF=/etc/modules-load.d/t6-platform.conf
 
 LOG=$(mktemp -t install-dkms.XXXXXX)
@@ -113,9 +116,9 @@ do_install() {
     local load=$1 dir names=()
     check_prerequisites
     for dir in "${PACKAGES[@]}"; do
-        [ -f "$SCRIPT_DIR/$dir/dkms.conf" ] || die "missing $SCRIPT_DIR/$dir/dkms.conf"
-        install_package "$SCRIPT_DIR/$dir"
-        names+=("$(conf_value "$SCRIPT_DIR/$dir" PACKAGE_NAME)")
+        [ -f "$PKG_ROOT/$dir/dkms.conf" ] || die "missing $PKG_ROOT/$dir/dkms.conf"
+        install_package "$PKG_ROOT/$dir"
+        names+=("$(conf_value "$PKG_ROOT/$dir" PACKAGE_NAME)")
     done
     install_boot_config
     if [ "$load" = yes ]; then
@@ -132,7 +135,7 @@ do_remove() {
         unload_module "$m"
     done
     for dir in "${PACKAGES[@]}"; do
-        name=$(conf_value "$SCRIPT_DIR/$dir" PACKAGE_NAME)
+        name=$(conf_value "$PKG_ROOT/$dir" PACKAGE_NAME)
         [ -n "$name" ] && remove_package "$name"
     done
     rm -f "$MODULES_LOAD_CONF"

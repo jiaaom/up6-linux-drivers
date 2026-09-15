@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}
+a{color:#2a78d6}a:hover{color:#1b5aa8}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+@keyframes drA{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-9%,7%,0) scale(1.18)}100%{transform:translate3d(0,0,0) scale(1)}}
+@keyframes drB{0%{transform:translate3d(0,0,0) scale(1.1)}50%{transform:translate3d(11%,-9%,0) scale(1)}100%{transform:translate3d(0,0,0) scale(1.1)}}
+</style></helmet>
+
+<section class="dv-turn" id="t6">
+<div class="dv-thd"><a class="dv-tid" href="#t6">6</a><span class="dv-tname">Wi-Fi — the sub-page behind the Wi-Fi tile, same Slate Navy language as the dashboard</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="6a"><div class="dv-olabel"><a class="dv-oid" href="#6a">6a</a>Network list — fixed header with the master switch, sections scroll</div>
+<div class="dv-card" style="width:1080px;border-radius:56px;border:14px solid #121212">
+<div style="position:relative;width:1080px;height:2160px;overflow:hidden;background:oklch(0.15 0.035 252);font-family:'IBM Plex Sans',system-ui,sans-serif;color:oklch(0.97 0.006 252)">
+  <div style="position:absolute;left:-25%;top:-12%;width:120%;height:62%;pointer-events:none;background:radial-gradient(closest-side,oklch(0.5 0.07 252 / .85),transparent 70%);animation:drA 52s ease-in-out infinite;animation-play-state:{{ playState }}"></div>
+  <div style="position:absolute;left:-20%;bottom:-14%;width:130%;height:56%;pointer-events:none;background:radial-gradient(closest-side,oklch(0.58 0.09 62 / .26),transparent 70%);animation:drB 74s ease-in-out infinite;animation-play-state:{{ playState }}"></div>
+  <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,oklch(0.15 0.035 252 / .5),oklch(0.14 0.035 252 / .88))"></div>
+
+  <div style="position:relative;height:100%;display:flex;flex-direction:column">
+    <div style="flex:none;padding:0 56px">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:112px;font-size:34px;font-weight:500">
+        <span>22:48</span>
+        <div style="display:flex;align-items:center;gap:26px;opacity:.85">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><rect x="6" y="12" width="36" height="22" rx="3"></rect><path d="M13 12v7M19 12v7M25 12v7M31 12v7"></path><path d="M19 34v5h10v-5"></path></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><path d="M6 19a25 25 0 0 1 36 0"></path><path d="M12.5 26.5a16 16 0 0 1 23 0"></path><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px"><rect x="5" y="17" width="32" height="14" rx="4"></rect><path d="M41 21v6"></path><rect x="9" y="21" width="16" height="6" rx="2" fill="currentColor" stroke="none"></rect></svg>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:24px;padding:16px 0 26px">
+        <div style="width:96px;height:96px;border-radius:48px;background:oklch(1 0 0 / .07);border:1px solid oklch(1 0 0 / .14);display:flex;align-items:center;justify-content:center;flex:none">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" style="width:38px;height:38px;opacity:.8"><path d="M28 12L16 24l12 12"></path></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:74px;line-height:1;font-weight:500;letter-spacing:-.025em">Wi-Fi</div>
+          <div style="font-size:35px;color:oklch(0.97 0.006 252 / .55);margin-top:8px">Connected · 2.4 GHz · −52 dBm</div>
+        </div>
+        <div style="width:132px;height:72px;border-radius:36px;background:oklch(0.74 0.12 62);display:flex;align-items:center;justify-content:flex-end;padding:6px;box-sizing:border-box;flex:none"><div style="width:60px;height:60px;border-radius:30px;background:oklch(0.2 0.04 62)"></div></div>
+      </div>
+      <div style="height:1px;background:oklch(1 0 0 / .1)"></div>
+    </div>
+
+    <div style="position:relative;flex:1;min-height:0;overflow:hidden;padding:26px 56px 0">
+      <div style="position:absolute;right:22px;top:30px;height:52%;width:8px;border-radius:4px;background:oklch(1 0 0 / .22)"></div>
+
+      <div style="background:oklch(0.74 0.12 62 / .16);border:1px solid oklch(0.74 0.12 62 / .5);border-radius:36px;padding:30px 34px">
+        <div style="display:flex;align-items:center;gap:24px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="oklch(0.82 0.11 62)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" style="width:54px;height:54px;flex:none"><path d="M6 19a25 25 0 0 1 36 0"></path><path d="M12.5 26.5a16 16 0 0 1 23 0"></path><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="oklch(0.82 0.11 62)" stroke="none"></circle></svg>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:38px;font-weight:500">Dormitory</div>
+            <div style="font-size:34px;color:oklch(0.97 0.006 252 / .6);margin-top:4px">192.168.1.42 · DHCP</div>
+          </div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:.45;flex:none"><path d="M18 12l12 12-12 12"></path></svg>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:24px">
+          <div style="flex:1;background:oklch(1 0 0 / .07);border-radius:20px;padding:16px 20px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Security</div><div style="font-size:34px;font-weight:500;margin-top:2px">WPA2</div></div>
+          <div style="flex:1;background:oklch(1 0 0 / .07);border-radius:20px;padding:16px 20px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Router</div><div style="font-size:34px;font-weight:500;margin-top:2px">192.168.1.1</div></div>
+          <div style="flex:1;background:oklch(1 0 0 / .07);border-radius:20px;padding:16px 20px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Channel</div><div style="font-size:34px;font-weight:500;margin-top:2px">6</div></div>
+        </div>
+      </div>
+
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:33px;letter-spacing:.14em;text-transform:uppercase;color:oklch(0.97 0.006 252 / .45);margin:34px 0 14px">Known networks</div>
+      <div style="background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:36px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:50px;height:50px;opacity:.75;flex:none"><path d="M12.5 26.5a16 16 0 0 1 23 0"></path><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <div style="flex:1;font-size:35px;font-weight:500">Dormitory-5G</div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.5;flex:none"><rect x="10" y="21" width="28" height="20" rx="4"></rect><path d="M17 21v-6a7 7 0 0 1 14 0v6"></path></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.4;flex:none"><path d="M18 12l12 12-12 12"></path></svg>
+        </div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:50px;height:50px;opacity:.75;flex:none"><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <div style="flex:1;font-size:35px;font-weight:500">Studio</div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.5;flex:none"><rect x="10" y="21" width="28" height="20" rx="4"></rect><path d="M17 21v-6a7 7 0 0 1 14 0v6"></path></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.4;flex:none"><path d="M18 12l12 12-12 12"></path></svg>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;margin:34px 0 14px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:33px;letter-spacing:.14em;text-transform:uppercase;color:oklch(0.97 0.006 252 / .45)">Other networks</div>
+        <div style="width:26px;height:26px;border-radius:13px;border:4px solid oklch(0.97 0.006 252 / .3);border-top-color:oklch(0.78 0.11 62)"></div>
+      </div>
+      <div style="background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:36px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:50px;height:50px;opacity:.75;flex:none"><path d="M12.5 26.5a16 16 0 0 1 23 0"></path><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <div style="flex:1;font-size:35px;font-weight:500">Neighbour-2.4</div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.5;flex:none"><rect x="10" y="21" width="28" height="20" rx="4"></rect><path d="M17 21v-6a7 7 0 0 1 14 0v6"></path></svg>
+        </div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:50px;height:50px;opacity:.75;flex:none"><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <div style="flex:1;font-size:35px;font-weight:500">Café-Guest</div>
+        </div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <div style="width:40px;flex:none"></div>
+          <div style="flex:1;font-size:35px;font-weight:500;color:oklch(0.82 0.11 62)">Other…</div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="oklch(0.82 0.11 62)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;flex:none"><path d="M18 12l12 12-12 12"></path></svg>
+        </div>
+      </div>
+
+      <div style="font-size:34px;line-height:1.45;color:oklch(0.97 0.006 252 / .45);margin-top:26px">Known networks are joined automatically. Wi-Fi is disabled while the hotspot is on.</div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="6b"><div class="dv-olabel"><a class="dv-oid" href="#6b">6b</a>Password sheet with the on-screen keyboard</div>
+<div class="dv-card" style="width:1080px;border-radius:56px;border:14px solid #121212">
+<div style="position:relative;width:1080px;height:2160px;overflow:hidden;background:oklch(0.15 0.035 252);font-family:'IBM Plex Sans',system-ui,sans-serif;color:oklch(0.97 0.006 252)">
+  <div style="position:absolute;left:-25%;top:-12%;width:120%;height:62%;pointer-events:none;background:radial-gradient(closest-side,oklch(0.5 0.07 252 / .6),transparent 70%);animation:drA 52s ease-in-out infinite;animation-play-state:{{ playState }}"></div>
+  <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,oklch(0.15 0.035 252 / .72),oklch(0.13 0.035 252 / .94))"></div>
+
+  <div style="position:relative;height:100%;display:flex;flex-direction:column">
+    <div style="flex:none;padding:0 56px;opacity:.5">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:112px;font-size:34px;font-weight:500">
+        <span>22:49</span>
+        <div style="display:flex;align-items:center;gap:26px">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><rect x="6" y="12" width="36" height="22" rx="3"></rect><path d="M13 12v7M19 12v7M25 12v7M31 12v7"></path><path d="M19 34v5h10v-5"></path></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px"><rect x="5" y="17" width="32" height="14" rx="4"></rect><path d="M41 21v6"></path><rect x="9" y="21" width="16" height="6" rx="2" fill="currentColor" stroke="none"></rect></svg>
+        </div>
+      </div>
+      <div style="font-size:74px;line-height:1;font-weight:500;letter-spacing:-.025em;padding:16px 0 26px">Wi-Fi</div>
+    </div>
+
+    <div style="flex:1;min-height:0"></div>
+
+    <div style="flex:none;background:oklch(0.2 0.038 252);border-top:1px solid oklch(1 0 0 / .12);border-radius:44px 44px 0 0;padding:34px 44px 0;box-shadow:0 -30px 80px oklch(0 0 0 / .45)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:20px">
+        <div style="font-size:35px;font-weight:500;color:oklch(0.97 0.006 252 / .6)">Cancel</div>
+        <div style="font-size:36px;font-weight:500">Join “Neighbour-2.4”</div>
+        <div style="font-size:35px;font-weight:600;color:oklch(0.82 0.11 62)">Join</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:20px;margin-top:28px;background:oklch(1 0 0 / .07);border:1px solid oklch(0.74 0.12 62 / .55);border-radius:26px;padding:26px 28px">
+        <div style="flex:1;font-size:40px;letter-spacing:.22em">••••••••</div>
+        <div style="width:4px;height:44px;background:oklch(0.82 0.11 62)"></div>
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.55;flex:none"><path d="M6 24s7-11 18-11 18 11 18 11-7 11-18 11S6 24 6 24z"></path><circle cx="24" cy="24" r="4.5"></circle></svg>
+      </div>
+      <div style="font-size:34px;color:oklch(0.97 0.006 252 / .45);margin-top:16px">WPA2 · remembered for automatic re-join</div>
+
+      <div style="margin-top:30px;padding-bottom:22px">
+        <div style="display:flex;gap:10px">
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">q</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">w</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">e</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">r</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">t</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">y</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">u</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">i</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">o</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">p</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;padding:0 52px">
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">a</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">s</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">d</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">f</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">g</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">h</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">j</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">k</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">l</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <div style="width:140px;height:112px;border-radius:18px;background:oklch(1 0 0 / .16);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><path d="M24 8v28"></path><path d="M12 20L24 8l12 12"></path></svg></div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">z</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">x</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">c</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">v</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">b</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">n</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:500">m</div>
+          <div style="width:140px;height:112px;border-radius:18px;background:oklch(1 0 0 / .16);display:flex;align-items:center;justify-content:center;flex:none"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" style="width:38px;height:38px"><path d="M42 14H18L6 24l12 10h24a2 2 0 0 0 2-2V16a2 2 0 0 0-2-2z"></path><path d="M26 19l10 10M36 19L26 29"></path></svg></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <div style="width:170px;height:112px;border-radius:18px;background:oklch(1 0 0 / .16);display:flex;align-items:center;justify-content:center;font-size:35px;font-weight:500;flex:none">123</div>
+          <div style="flex:1;height:112px;border-radius:18px;background:oklch(1 0 0 / .1)"></div>
+          <div style="width:170px;height:112px;border-radius:18px;background:oklch(0.74 0.12 62);color:oklch(0.2 0.04 62);display:flex;align-items:center;justify-content:center;font-size:35px;font-weight:600;flex:none">Join</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="6c"><div class="dv-olabel"><a class="dv-oid" href="#6c">6c</a>Network detail — the ⓘ behind a known network, with forget and static IP</div>
+<div class="dv-card" style="width:1080px;border-radius:56px;border:14px solid #121212">
+<div style="position:relative;width:1080px;height:2160px;overflow:hidden;background:oklch(0.15 0.035 252);font-family:'IBM Plex Sans',system-ui,sans-serif;color:oklch(0.97 0.006 252)">
+  <div style="position:absolute;left:-25%;top:-12%;width:120%;height:62%;pointer-events:none;background:radial-gradient(closest-side,oklch(0.5 0.07 252 / .85),transparent 70%);animation:drA 52s ease-in-out infinite;animation-play-state:{{ playState }}"></div>
+  <div style="position:absolute;left:-20%;bottom:-14%;width:130%;height:56%;pointer-events:none;background:radial-gradient(closest-side,oklch(0.58 0.09 62 / .26),transparent 70%);animation:drB 74s ease-in-out infinite;animation-play-state:{{ playState }}"></div>
+  <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,oklch(0.15 0.035 252 / .5),oklch(0.14 0.035 252 / .88))"></div>
+
+  <div style="position:relative;height:100%;display:flex;flex-direction:column">
+    <div style="flex:none;padding:0 56px">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:112px;font-size:34px;font-weight:500">
+        <span>22:52</span>
+        <div style="display:flex;align-items:center;gap:26px;opacity:.85">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><rect x="6" y="12" width="36" height="22" rx="3"></rect><path d="M13 12v7M19 12v7M25 12v7M31 12v7"></path><path d="M19 34v5h10v-5"></path></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px"><path d="M6 19a25 25 0 0 1 36 0"></path><path d="M12.5 26.5a16 16 0 0 1 23 0"></path><path d="M18.5 33.5a7.5 7.5 0 0 1 11 0"></path><circle cx="24" cy="39.5" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px"><rect x="5" y="17" width="32" height="14" rx="4"></rect><path d="M41 21v6"></path><rect x="9" y="21" width="16" height="6" rx="2" fill="currentColor" stroke="none"></rect></svg>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:24px;padding:16px 0 26px">
+        <div style="width:96px;height:96px;border-radius:48px;background:oklch(1 0 0 / .07);border:1px solid oklch(1 0 0 / .14);display:flex;align-items:center;justify-content:center;flex:none">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" style="width:38px;height:38px;opacity:.8"><path d="M28 12L16 24l12 12"></path></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:66px;line-height:1.18;font-weight:500;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Dormitory</div>
+          <div style="font-size:35px;color:oklch(0.82 0.11 62);margin-top:8px">Connected</div>
+        </div>
+      </div>
+      <div style="height:1px;background:oklch(1 0 0 / .1)"></div>
+    </div>
+
+    <div style="position:relative;flex:1;min-height:0;overflow:hidden;padding:26px 56px 0">
+      <div style="background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:36px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <div style="flex:1;font-size:35px;font-weight:500">Auto-join</div>
+          <div style="width:112px;height:60px;border-radius:30px;background:oklch(0.74 0.12 62);display:flex;align-items:center;justify-content:flex-end;padding:5px;box-sizing:border-box;flex:none"><div style="width:50px;height:50px;border-radius:25px;background:oklch(0.2 0.04 62)"></div></div>
+        </div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:28px 32px">
+          <div style="flex:1"><div style="font-size:35px;font-weight:500">Private Wi-Fi address</div><div style="font-size:34px;color:oklch(0.97 0.006 252 / .5);margin-top:4px">Off — NAS keeps a stable MAC</div></div>
+          <div style="width:112px;height:60px;border-radius:30px;background:oklch(1 0 0 / .12);display:flex;align-items:center;padding:5px;box-sizing:border-box;flex:none"><div style="width:50px;height:50px;border-radius:25px;background:oklch(1 0 0 / .3)"></div></div>
+        </div>
+      </div>
+
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:33px;letter-spacing:.14em;text-transform:uppercase;color:oklch(0.97 0.006 252 / .45);margin:34px 0 14px">IPv4</div>
+      <div style="background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:36px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:22px;padding:26px 32px">
+          <div style="flex:1;font-size:33px;color:oklch(0.97 0.006 252 / .6)">Configure</div>
+          <div style="font-size:33px;font-weight:500">Automatic</div>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:46px;height:46px;opacity:.4;flex:none"><path d="M18 12l12 12-12 12"></path></svg>
+        </div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:26px 32px"><div style="flex:1;font-size:33px;color:oklch(0.97 0.006 252 / .6)">IP address</div><div style="font-family:'IBM Plex Mono',monospace;font-size:33px">192.168.1.42</div></div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:26px 32px"><div style="flex:1;font-size:33px;color:oklch(0.97 0.006 252 / .6)">Subnet mask</div><div style="font-family:'IBM Plex Mono',monospace;font-size:33px">255.255.255.0</div></div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:26px 32px"><div style="flex:1;font-size:33px;color:oklch(0.97 0.006 252 / .6)">Router</div><div style="font-family:'IBM Plex Mono',monospace;font-size:33px">192.168.1.1</div></div>
+        <div style="height:1px;background:oklch(1 0 0 / .08);margin-left:32px"></div>
+        <div style="display:flex;align-items:center;gap:22px;padding:26px 32px"><div style="flex:1;font-size:33px;color:oklch(0.97 0.006 252 / .6)">DNS</div><div style="font-family:'IBM Plex Mono',monospace;font-size:33px">192.168.1.1</div></div>
+      </div>
+
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:33px;letter-spacing:.14em;text-transform:uppercase;color:oklch(0.97 0.006 252 / .45);margin:34px 0 14px">Signal</div>
+      <div style="display:flex;gap:16px">
+        <div style="flex:1;background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:28px;padding:24px 28px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Strength</div><div style="font-size:44px;font-weight:500;margin-top:4px">−52 dBm</div></div>
+        <div style="flex:1;background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:28px;padding:24px 28px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Band</div><div style="font-size:44px;font-weight:500;margin-top:4px">2.4 GHz</div></div>
+        <div style="flex:1;background:oklch(0.22 0.038 252 / .92);border:1px solid oklch(1 0 0 / .08);border-radius:28px;padding:24px 28px"><div style="font-size:33px;color:oklch(0.97 0.006 252 / .5)">Link</div><div style="font-size:44px;font-weight:500;margin-top:4px">217 Mb</div></div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:center;height:132px;margin-top:26px;border-radius:34px;border:1px solid oklch(0.6 0.19 25 / .5);background:oklch(0.6 0.19 25 / .12);font-size:35px;font-weight:500;color:oklch(0.8 0.16 25)">Forget this network</div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: "add the hotspot page next" · "show <a class="dv-oid" href="#6a">6a</a> with Wi-Fi switched off" · "make <a class="dv-oid" href="#6c">6c</a>'s static-IP editing state"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;motion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { playState: (this.props.motion ?? true) ? "running" : "paused" };
+  }
+}
+</script>
+</body>
+</html>

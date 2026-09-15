@@ -434,12 +434,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
+name = "t6-hw-rs"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "t6-webd"
 version = "0.1.0"
 dependencies = [
  "axum",
  "serde",
  "serde_json",
+ "t6-hw-rs",
  "tokio",
  "toml",
 ]

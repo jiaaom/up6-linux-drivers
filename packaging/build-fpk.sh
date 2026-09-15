@@ -10,8 +10,11 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-BUILD_DIR=$SCRIPT_DIR/build
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)   # packaging/
+REPO=$(dirname "$SCRIPT_DIR")
+CRATES=$REPO/crates
+KERNEL=$REPO/kernel
+BUILD_DIR=$REPO/build
 STAGE_DIR=$BUILD_DIR/fpk
 DKMS_PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
 
@@ -32,8 +35,8 @@ payload_t6_drivers() {
     local app=$1/app dir
     for dir in "${DKMS_PACKAGES[@]}"; do
         mkdir -p "$app/$dir"
-        cp "$SCRIPT_DIR/$dir"/{Makefile,dkms.conf,*.c,README.md} "$app/$dir/"
-        cp "$SCRIPT_DIR/$dir"/*.h "$app/$dir/" 2>/dev/null || true
+        cp "$KERNEL/$dir"/{Makefile,dkms.conf,*.c,README.md} "$app/$dir/"
+        cp "$KERNEL/$dir"/*.h "$app/$dir/" 2>/dev/null || true
     done
     cp "$SCRIPT_DIR/install-dkms.sh" "$app/"
 }
@@ -41,15 +44,15 @@ payload_t6_drivers() {
 payload_t6control() {
     local app=$1/app crate
     mkdir -p "$app/bin"
-    for crate in t6-fand t6-ledd t6-web; do
+    for crate in t6-fand t6-ledd t6-webd; do
         log "building $crate (release)"
-        (cd "$SCRIPT_DIR/$crate" && cargo build --release --quiet)
+        (cd "$CRATES" && cargo build --release --quiet -p "$crate")
     done
-    cp "$SCRIPT_DIR/t6-fand/target/release/t6-fand" "$SCRIPT_DIR/t6-ledd/target/release/t6-ledd" \
-       "$SCRIPT_DIR/t6-web/target/release/t6-webd" "$app/bin/"
+    cp "$CRATES/target/release/t6-fand" "$CRATES/target/release/t6-ledd" \
+       "$CRATES/target/release/t6-webd" "$app/bin/"
     # Daemon defaults and units, installed system-wide by cmd/install_callback.
-    cp "$SCRIPT_DIR/t6-fand/t6-fand.toml" "$SCRIPT_DIR/t6-fand/t6-fand.service" \
-       "$SCRIPT_DIR/t6-ledd/t6-ledd.toml" "$SCRIPT_DIR/t6-ledd/t6-ledd.service" "$app/"
+    cp "$CRATES/t6-fand/t6-fand.toml" "$CRATES/t6-fand/t6-fand.service" \
+       "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" "$app/"
 }
 
 build_package() {

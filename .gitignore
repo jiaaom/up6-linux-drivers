@@ -25,3 +25,7 @@ build/
 # proprietary stock-firmware assets (reference only, do not distribute)
 panel/design/stock-assets/
 panel/design/*.zip
+panel/app/node_modules/
+
+# Claude Design drafts
+panel/design/design-review/

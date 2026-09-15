@@ -10,6 +10,19 @@ function tick(){var d=new Date(),t=String(d.getHours()).padStart(2,'0')+':'+Stri
   document.querySelectorAll('#clock,.clock2,.clock3').forEach(function(e){e.textContent=t;});}
 tick();setInterval(tick,10000);
 var LAST=null; // most recent /api/panel payload
+// In the Electron shell, identity comes from the main process (which holds the
+// fnOS session), not from t6-paneld. In a plain browser FNOS is null and we
+// fall back to the /api/panel session field.
+var FNOS=(typeof window!=='undefined'&&window.fnos)?window.fnos:null, fnosUser=null;
+function setAccount(session){
+  var s=FNOS?fnosUser:(session||null);
+  var acct=document.getElementById('acct'),at=document.getElementById('acctText'),dot=acct&&acct.querySelector('.acctdot');
+  if(!acct)return;
+  if(s&&s.username){acct.classList.remove('signin');at.textContent='Signed in as '+s.username;if(dot)dot.hidden=false;}
+  else{acct.classList.add('signin');at.textContent='Sign in';if(dot)dot.hidden=true;}
+}
+function refreshFnos(){ if(FNOS&&FNOS.session){FNOS.session().then(function(u){fnosUser=u;setAccount();}).catch(function(){}); } }
+window.refreshFnos=refreshFnos;
 
 /* ---------- model ---------- */
 var META={
@@ -282,12 +295,6 @@ function initSlider(initial){
   addEventListener('mousemove',move);addEventListener('mouseup',up);
 })();
 
-/* ---------- wifi sheet ---------- */
-var scrim=document.getElementById('scrim'),sheet=document.getElementById('sheet');
-function openSheet(){scrim.classList.add('show');sheet.style.transition='';sheet.classList.add('show');}
-function closeSheet(){scrim.classList.remove('show');sheet.style.transition='transform .3s cubic-bezier(.22,1,.36,1)';sheet.style.transform='';sheet.classList.remove('show');}
-scrim.addEventListener('click',closeSheet);
-document.getElementById('sheetCancel').addEventListener('click',closeSheet);
 function bindTiles(){
   homeScroll.querySelectorAll('[data-tile="eth"]').forEach(function(t){t.addEventListener('click',showEthDetail);});
   homeScroll.querySelectorAll('[data-tile="wifi"]').forEach(function(t){t.addEventListener('click',showWifiDetail);});
@@ -296,30 +303,6 @@ function bindTiles(){
     if(lab&&lab.textContent==='Settings')t.addEventListener('click',openSettings);
   });
 }
-(function(){
-  var startY=0,dragging=false,cur=0;
-  function down(e){var y=(e.touches?e.touches[0].clientY:e.clientY);
-    if(y>sheet.getBoundingClientRect().top+140)return;dragging=true;startY=y;cur=0;sheet.style.transition='none';}
-  function move(e){if(!dragging)return;var y=(e.touches?e.touches[0].clientY:e.clientY);
-    cur=Math.max(0,y-startY);sheet.style.transform='translateY('+cur+'px)';e.preventDefault();}
-  function up(){if(!dragging)return;dragging=false;
-    if(cur>160){closeSheet();}else{sheet.style.transition='transform .3s cubic-bezier(.22,1,.36,1)';sheet.style.transform='translateY(0)';}}
-  sheet.addEventListener('touchstart',down,{passive:true});
-  sheet.addEventListener('touchmove',move,{passive:false});
-  sheet.addEventListener('touchend',up);
-  sheet.addEventListener('mousedown',down);addEventListener('mousemove',move);addEventListener('mouseup',up);
-})();
-var rows=['qwertyuiop','asdfghjkl','zxcvbnm'],kbd=document.getElementById('kbd'),pwlen=0,pwEl=document.getElementById('pw');
-function drawPw(){if(pwlen===0){pwEl.className='ph';pwEl.textContent='Password';}else{pwEl.className='';pwEl.textContent='•'.repeat(pwlen);}}
-rows.forEach(function(r,i){var rd=document.createElement('div');rd.className='krow';
-  if(i===2){var sh=document.createElement('div');sh.className='key';sh.textContent='⇧';rd.appendChild(sh);}
-  r.split('').forEach(function(ch){var k=document.createElement('div');k.className='key';k.textContent=ch;k.addEventListener('click',function(){pwlen++;drawPw();});rd.appendChild(k);});
-  if(i===2){var bk=document.createElement('div');bk.className='key';bk.textContent='⌫';bk.addEventListener('click',function(){if(pwlen>0)pwlen--;drawPw();});rd.appendChild(bk);}
-  kbd.appendChild(rd);});
-var last=document.createElement('div');last.className='krow';
-[['123',1],['space',3],['↵',1]].forEach(function(p){var k=document.createElement('div');k.className='key wide';k.textContent=p[0];k.style.flex=p[1];last.appendChild(k);});
-kbd.appendChild(last);
-document.getElementById('joinbtn').addEventListener('click',function(){closeSheet();toast('Joining “Dormitory”…');pwlen=0;drawPw();});
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove('show');},1900);}
 
 /* ---------- live data from t6-paneld (/api/panel) ---------- */
@@ -346,9 +329,7 @@ function refresh(d){
   LAST=d;
   if(!idleArmed){idleArmed=true;armIdle();} // start the idle timer once data exists
   if(!layoutApplied&&d.dashboard){layoutApplied=true;applyLayout(d.dashboard);} // restore saved widget layout
-  var acct=document.getElementById('acct'),at=document.getElementById('acctText'),dot=acct&&acct.querySelector('.acctdot');
-  if(acct){ if(d.session&&d.session.username){acct.classList.remove('signin');at.textContent='Signed in as '+d.session.username;if(dot)dot.hidden=false;}
-            else{acct.classList.add('signin');at.textContent='Sign in';if(dot)dot.hidden=true;} }
+  setAccount(d.session);
   if(d.host&&d.host.name)setText('#home .hostname',d.host.name);
   if(d.status&&d.status.text)setText('#statusText',d.status.text);
   var sys=d.system||{};
@@ -389,8 +370,105 @@ function refresh(d){
 }
 function poll(){fetch('api/panel',{cache:'no-store'}).then(function(r){return r.json();}).then(refresh).catch(function(){});}
 document.getElementById('acct').addEventListener('click',function(){
-  if(document.getElementById('acct').classList.contains('signin'))toast('Sign in — fnOS login coming next');
+  var signedOut=document.getElementById('acct').classList.contains('signin');
+  if(FNOS){
+    // Electron: our own login screen / logout via the held fnOS session.
+    if(signedOut){showLogin();}
+    else{showConfirm('Sign out?','You will need to sign in again for files and settings.','Sign out',false,function(){
+      FNOS.logout().then(function(){fnosUser=null;setAccount();});
+    });}
+  }else{
+    // Plain-browser dev fallback.
+    var host=location.protocol+'//'+location.hostname;
+    if(signedOut){location.href=host+'/signin?redirect_uri='+encodeURIComponent(host+'/app/t6panel/');}
+    else{var port=(LAST&&LAST.session&&LAST.session.shell_port)||9600;
+      showConfirm('Sign out?','Return to the status screen.','Sign out',false,function(){location.href=location.protocol+'//'+location.hostname+':'+port+'/';});}
+  }
 });
+
+/* ---------- login screen (Electron) ---------- */
+var loginEl=document.getElementById('login');
+function showLogin(){
+  document.getElementById('loginErr').hidden=true;
+  document.getElementById('loginUser').value='';document.getElementById('loginPass').value='';
+  loginEl.classList.add('on');
+  setTimeout(function(){document.getElementById('loginUser').focus();},120);
+}
+function hideLogin(){loginEl.classList.remove('on');}
+function submitLogin(){
+  var u=document.getElementById('loginUser').value.trim(),p=document.getElementById('loginPass').value;
+  var err=document.getElementById('loginErr'),btn=document.getElementById('loginSubmit');
+  if(!u||!p){err.textContent='Enter your username and password.';err.hidden=false;return;}
+  err.hidden=true;btn.classList.add('busy');btn.textContent='Signing in…';
+  FNOS.login(u,p).then(function(res){
+    btn.classList.remove('busy');btn.textContent='Sign in';
+    if(res&&res.ok){hideLogin();fnosUser=res.user;setAccount();}
+    else{err.textContent=(res&&res.error)||'Sign in failed.';err.hidden=false;}
+  }).catch(function(){btn.classList.remove('busy');btn.textContent='Sign in';err.textContent='Sign in failed.';err.hidden=false;});
+}
+document.getElementById('loginCancel').addEventListener('click',hideLogin);
+document.getElementById('loginSubmit').addEventListener('click',submitLogin);
+document.getElementById('loginPass').addEventListener('keydown',function(e){if(e.key==='Enter')submitLogin();});
+document.getElementById('loginUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('loginPass').focus();});
+
+/* ---------- global on-screen keyboard (auto-shows on any input focus) ---------- */
+(function(){
+  var LAYERS={
+    abc:[['q','w','e','r','t','y','u','i','o','p'],
+         ['a','s','d','f','g','h','j','k','l'],
+         ['shift','z','x','c','v','b','n','m','back'],
+         ['num','space','return','hide']],
+    num:[['1','2','3','4','5','6','7','8','9','0'],
+         ['-','/',':',';','(',')','$','&','@'],
+         ['.',',','?','!',"'",'back'],
+         ['abc','space','return','hide']]
+  };
+  var LABEL={shift:'⇧',back:'⌫',num:'123',abc:'ABC',space:'space',return:'return',hide:'⌄'};
+  var osk=document.getElementById('osk'),target=null,layer='abc',shift=false;
+  function isText(el){return el&&el.tagName==='INPUT'&&/^(text|password|search|email|number|tel|url|)$/.test(el.type);}
+  function render(){
+    osk.innerHTML='';
+    LAYERS[layer].forEach(function(row){
+      var r=document.createElement('div');r.className='osk-row';
+      row.forEach(function(k){
+        var key=document.createElement('div');key.dataset.k=k;
+        if(LABEL.hasOwnProperty(k)){
+          key.className='osk-key act'+(k==='space'?' space':(' wide'));
+          if(k==='shift'&&shift)key.classList.add('shift','on');
+          key.textContent=LABEL[k];
+        }else{key.className='osk-key';key.textContent=(shift&&layer==='abc')?k.toUpperCase():k;}
+        key.addEventListener('pointerdown',function(e){e.preventDefault();}); // keep the field focused
+        key.addEventListener('click',function(){press(k);});
+        r.appendChild(key);
+      });
+      osk.appendChild(r);
+    });
+  }
+  function insert(c){if(!target)return;var s=target.selectionStart,e=target.selectionEnd;
+    if(s==null){target.value+=c;}else{target.value=target.value.slice(0,s)+c+target.value.slice(e);var n=s+c.length;target.selectionStart=target.selectionEnd=n;}
+    target.dispatchEvent(new Event('input',{bubbles:true}));}
+  function del(){if(!target)return;var s=target.selectionStart,e=target.selectionEnd;
+    if(s==null){target.value=target.value.slice(0,-1);}
+    else if(s!==e){target.value=target.value.slice(0,s)+target.value.slice(e);target.selectionStart=target.selectionEnd=s;}
+    else if(s>0){target.value=target.value.slice(0,s-1)+target.value.slice(e);target.selectionStart=target.selectionEnd=s-1;}
+    target.dispatchEvent(new Event('input',{bubbles:true}));}
+  function press(k){
+    switch(k){
+      case 'shift':shift=!shift;render();return;
+      case 'back':del();return;
+      case 'num':layer='num';shift=false;render();return;
+      case 'abc':layer='abc';render();return;
+      case 'space':insert(' ');return;
+      case 'hide':hide();if(target)target.blur();return;
+      case 'return':if(target)target.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return;
+      default:insert((shift&&layer==='abc')?k.toUpperCase():k);if(shift){shift=false;render();}
+    }
+  }
+  function show(){if(!osk.classList.contains('on')){layer='abc';shift=false;render();osk.classList.add('on');}}
+  function hide(){osk.classList.remove('on');}
+  document.addEventListener('focusin',function(e){if(isText(e.target)){target=e.target;show();}});
+  document.addEventListener('focusout',function(){setTimeout(function(){if(!isText(document.activeElement))hide();},60);});
+})();
 
 /* ---------- Ethernet / Wi-Fi info detail sheet (read-only; config in Web UI) ---------- */
 function showDetail(title,rows){
@@ -413,13 +491,10 @@ function showHwInfo(){
     showDetail('Device',rows);
   }).catch(function(){toast('Could not read hardware info');});
 }
-// Open the fnOS Web UI (port 80 on the same host) — the config fallback.
-function openWebUI(){location.href='http://'+location.hostname+'/';}
-var webuiBtn=document.getElementById('webuiBtn');if(webuiBtn)webuiBtn.addEventListener('click',openWebUI);
 document.getElementById('detailClose').addEventListener('click',closeDetail);
 document.getElementById('scrim').addEventListener('click',closeDetail);
-document.getElementById('detailWeb').addEventListener('click',function(){closeDetail();openWebUI();});
 
 confirmEl=document.getElementById('confirm');
 renderHome();
 poll();setInterval(poll,2000);
+refreshFnos(); // pick up an existing Electron/fnOS session for the account chip

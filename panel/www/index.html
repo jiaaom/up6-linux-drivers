@@ -31,7 +31,7 @@
             <div class="hostname">nas.local</div>
             <div class="sub signin" id="acct"><span class="acctdot" hidden></span><span id="acctText">Sign in</span></div>
           </div>
-          <div class="hbtns"><div class="pill icon" id="sleepBtn"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="pill" id="webuiBtn">Web UI ↗</div><div class="pill" id="editbtn">Edit</div></div>
+          <div class="hbtns"><div class="pill icon" id="sleepBtn"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="pill" id="editbtn">Edit</div></div>
         </div>
         <div class="hair"></div>
       </div>
@@ -77,23 +77,26 @@
     </div>
 
     <div id="scrim"></div>
-    <div id="sheet">
-      <div class="grabber"></div>
-      <div class="sheet-h"><div class="cancel" id="sheetCancel">Cancel</div><div class="title">Join “Dormitory”</div><div class="cancel" style="opacity:0">Cancel</div></div>
-      <div class="field"><span id="pw" class="ph">Password</span></div>
-      <div class="subnote">WPA2 · remembered for automatic re-join</div>
-      <div class="kbd" id="kbd"></div>
-      <div class="joinbtn" id="joinbtn">Join</div>
-    </div>
     <div id="detail">
       <div class="grabber"></div>
       <div class="sheet-h"><div class="cancel" id="detailClose">Done</div><div class="title" id="detailTitle"></div><div class="cancel" style="opacity:0">Done</div></div>
       <div id="detailBody"></div>
-      <div class="joinbtn" id="detailWeb" style="background:oklch(1 0 0 / .08);color:var(--ink)">Manage in Web UI ↗</div>
     </div>
     <div class="toast" id="toast"></div>
     <div id="sleep"><div class="wake">Double-tap to wake</div></div>
     <div id="confirm"><div class="cdlg"><div class="ctitle"></div><div class="cmsg"></div><div class="cbtns"><div class="cbtn cancel">Cancel</div><div class="cbtn ok">OK</div></div></div></div>
+    <div id="login">
+      <div class="login-card">
+        <div class="login-title">Sign in</div>
+        <div class="login-sub">Log in with your fnOS account to see your files and settings.</div>
+        <input id="loginUser" class="login-input" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <input id="loginPass" class="login-input" type="password" placeholder="Password" autocomplete="current-password">
+        <div id="loginErr" class="login-err" hidden></div>
+        <div class="login-btn" id="loginSubmit">Sign in</div>
+        <div class="login-cancel" id="loginCancel">Cancel</div>
+      </div>
+    </div>
+    <div id="osk"></div>
   </div>
 </div>
 

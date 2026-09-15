@@ -68,11 +68,14 @@ fn parse_args() -> Opts {
 #[tokio::main]
 async fn main() {
     let opts = parse_args();
+    // Port of the local shell, reported to the gateway surface so "sign out"
+    // knows where to return.
+    let shell_port = opts.listen.as_deref().and_then(|a| a.rsplit(':').next()).and_then(|p| p.parse::<u16>().ok());
 
     // Local TCP surface (no-login shell): bare routes, so the kiosk loads it at
     // localhost and its relative fetches hit `/api/...`.
     if let Some(addr) = &opts.listen {
-        let app = api::router(www::Www::new(opts.www_dir.clone()), "");
+        let app = api::router(www::Www::new(opts.www_dir.clone()), "", None);
         let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {
             eprintln!("cannot bind {addr}: {e}");
             std::process::exit(1);
@@ -83,7 +86,7 @@ async fn main() {
 
     // Gateway unix socket (authenticated surface): routes under the gatewayPrefix.
     if let Some(path) = &opts.gateway_socket {
-        let app = api::router(www::Www::new(opts.www_dir.clone()), &opts.prefix);
+        let app = api::router(www::Www::new(opts.www_dir.clone()), &opts.prefix, shell_port);
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).unwrap_or_else(|e| {
             eprintln!("cannot bind {}: {e}", path.display());

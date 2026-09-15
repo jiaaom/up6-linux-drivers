@@ -1,0 +1,14 @@
+{
+  "name": "t6-panel",
+  "version": "0.1.0",
+  "description": "T6 front-panel kiosk (Electron shell over the t6-paneld UI)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "mac": "NAS_HOST=100.75.97.46 WINDOWED=1 electron ."
+  },
+  "license": "GPL-2.0",
+  "dependencies": {
+    "electron": "^44.3.0"
+  }
+}

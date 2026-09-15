@@ -17,6 +17,9 @@ use crate::gateway::User;
 #[derive(Clone)]
 pub struct AppState {
     www: Arc<crate::www::Www>,
+    /// TCP port of the local no-login shell, so the authenticated (gateway)
+    /// surface knows where "sign out" returns to. `None` on the shell itself.
+    shell_port: Option<u16>,
 }
 
 /// Build the router with every route under `prefix`.
@@ -26,8 +29,8 @@ pub struct AppState {
 /// the *unstripped* path, so routes must live under it, and `prefix` (no
 /// trailing slash) redirects to `prefix/` so the page's relative asset/API
 /// URLs resolve against the right base.
-pub fn router(www: crate::www::Www, prefix: &str) -> Router {
-    let state = AppState { www: Arc::new(www) };
+pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Router {
+    let state = AppState { www: Arc::new(www), shell_port };
     let p = |s: &str| format!("{prefix}{s}");
     let mut r = Router::new()
         .route(&p("/api/panel"), get(get_panel))
@@ -55,22 +58,24 @@ pub fn router(www: crate::www::Www, prefix: &str) -> Router {
 /// The signed-in user as a JSON value (null when logged out / no gateway).
 /// Only the gateway surface carries `X-Trim-*` headers, so the local TCP
 /// shell always resolves to null here.
-fn session_value(headers: &HeaderMap) -> Value {
+fn session_value(headers: &HeaderMap, shell_port: Option<u16>) -> Value {
     let u = User::from_headers(headers);
     match &u.username {
-        Some(name) => serde_json::json!({ "username": name, "uid": u.uid, "is_admin": u.is_admin }),
+        Some(name) => serde_json::json!({
+            "username": name, "uid": u.uid, "is_admin": u.is_admin, "shell_port": shell_port,
+        }),
         None => Value::Null,
     }
 }
 
-async fn get_panel(headers: HeaderMap) -> Json<Value> {
+async fn get_panel(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
     let mut v = crate::panel::build();
-    v["session"] = session_value(&headers);
+    v["session"] = session_value(&headers, s.shell_port);
     Json(v)
 }
 
-async fn get_session(headers: HeaderMap) -> Json<Value> {
-    Json(session_value(&headers))
+async fn get_session(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
+    Json(session_value(&headers, s.shell_port))
 }
 
 #[derive(Deserialize)]

@@ -167,6 +167,28 @@
   .login-btn:active{transform:scale(.97)}
   .login-btn.busy{opacity:.6;pointer-events:none}
   .login-cancel{height:96px;display:flex;align-items:center;justify-content:center;font-size:34px;color:oklch(0.97 0.006 252 / .6)}
+  /* Wi-Fi password entry: centered overlay so the keyboard doesn't cover it */
+  #wifipass{position:absolute;inset:0;z-index:82;display:flex;align-items:center;justify-content:center;
+    background:oklch(0.13 0.03 252 / .96);opacity:0;pointer-events:none;transition:opacity .26s}
+  #wifipass.on{opacity:1;pointer-events:auto}
+
+  /* Wi-Fi network list (inside the detail sheet) */
+  .wifi-list{margin-top:6px;max-height:1180px;overflow-y:auto;scrollbar-width:none}
+  .wifi-empty{padding:40px 4px;font-size:32px;color:oklch(0.97 0.006 252 / .5);text-align:center}
+  .wifi-ap{display:flex;align-items:center;gap:26px;padding:28px 0;border-bottom:1px solid oklch(1 0 0 / .08)}
+  .wifi-ap:active{background:oklch(1 0 0 / .04)}
+  .wbars{display:flex;align-items:flex-end;gap:6px;height:33px;width:60px;flex:none}
+  .wbars i{width:11px;border-radius:4px;background:currentColor}
+  .wifi-ap-main{flex:1;min-width:0}
+  .wifi-ap-name{font-size:37px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wifi-ap-name.big{font-size:48px;white-space:normal}
+  .wifi-ap-sub{font-size:29px;color:oklch(0.97 0.006 252 / .5);margin-top:4px}
+  .wifi-chk{color:var(--amber)}
+  .wifi-lock{opacity:.5;flex:none;display:flex;align-items:center;color:var(--ink)}
+  .wifi-manage{display:flex;flex-direction:column;gap:22px;padding:20px 0 6px}
+  .wifi-manage .wifi-ap-sub{margin-bottom:14px}
+  .login-cancel.danger{color:oklch(0.72 0.17 25)}
+
   /* global on-screen keyboard overlay */
   #osk{position:absolute;left:0;right:0;bottom:0;z-index:90;background:oklch(0.16 0.03 252);
     border-top:1px solid oklch(1 0 0 / .1);padding:18px 14px 30px;

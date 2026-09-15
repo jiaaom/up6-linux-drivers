@@ -2,4 +2,6 @@
 . "$(dirname "$0")/common"
 [ -d /sys/module/t6_platform ] || fail "Install the T6 Drivers package first."
 [ -x /usr/sbin/t6-ledd ] || fail "Install T6 Control Center first (it provides the fan and LED daemons)."
+# The kiosk composites on the built-in panel via weston (system package).
+command -v weston >/dev/null || fail "weston is required for the panel kiosk: apt install weston"
 exit 0

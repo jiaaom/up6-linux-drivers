@@ -1,13 +1,13 @@
-//! Read-only Ethernet/Wi-Fi info via `ip` and `nmcli`.
+//! Ethernet/Wi-Fi info via `ip` and `nmcli`, plus Wi-Fi *config* (scan/connect).
 //!
-//! NetworkManager (with fnOS's `network_service` on top) owns the config, so
-//! this module only *reads* — never writes. Writing would diverge from fnOS's
-//! authoritative model (OVS bridge, wifi state); config is delegated to fnOS.
-//!
-//! The wired IP often lives on an OVS bridge interface (fnOS setup) rather than
-//! the physical NIC, so we take link/speed from the physical `en*` device but
-//! the address/gateway from whichever interface actually carries the default
-//! route.
+//! Ethernet config is deliberately left to fnOS: the wired IP lives on an OVS
+//! bridge (`en*-ovs`) that fnOS's `network_service` owns, so we only *read* it
+//! (link/speed from the physical `en*` device, address/gateway from whichever
+//! interface actually carries the default route). Wi-Fi, by contrast, is a
+//! standalone NetworkManager device with no OVS entanglement, so the panel can
+//! safely drive it directly — this matters for the headless bootstrap case
+//! (join a network from the panel before the box is reachable over the web UI).
+//! Those writes go through NetworkManager, which fnOS observes.
 
 use serde::Serialize;
 use std::process::Command;
@@ -24,6 +24,8 @@ pub struct Ethernet {
 
 #[derive(Serialize, Default)]
 pub struct Wifi {
+    /// The radio is powered on (independent of whether it's associated).
+    pub enabled: bool,
     pub connected: bool,
     pub iface: Option<String>,
     pub ssid: Option<String>,
@@ -36,6 +38,20 @@ pub struct Wifi {
 pub struct Network {
     pub ethernet: Ethernet,
     pub wifi: Wifi,
+}
+
+/// One access point in a scan result (deduped by SSID, strongest signal kept).
+#[derive(Serialize)]
+pub struct WifiAp {
+    pub ssid: String,
+    /// 0..=100.
+    pub signal: u32,
+    /// e.g. "WPA2", "WPA2 WPA3", or `None` for an open network.
+    pub security: Option<String>,
+    /// The AP we're currently associated with.
+    pub in_use: bool,
+    /// A saved NetworkManager profile exists for this SSID.
+    pub saved: bool,
 }
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
@@ -130,6 +146,7 @@ pub fn info() -> Network {
     }
 
     // Wi-Fi: link from the physical NIC; SSID/signal/security from nmcli.
+    n.wifi.enabled = run("nmcli", &["-t", "radio", "wifi"]).map(|s| s.trim() == "enabled").unwrap_or(false);
     if let Some(wl) = first_iface(&["wl"]) {
         n.wifi.connected = sysfs(&wl, "carrier").as_deref() == Some("1");
         if let Some((_, _, src)) = default_route(true) {
@@ -149,6 +166,141 @@ pub fn info() -> Network {
         }
     }
     n
+}
+
+// ---- Wi-Fi config (writes go through NetworkManager) ---------------------
+
+/// Run nmcli, returning trimmed stdout on success or the (stderr-derived)
+/// error message on failure. Never pass secrets in a way that would be logged;
+/// callers keep passwords out of any log line.
+fn nmcli_ok(args: &[&str]) -> Result<String, String> {
+    let o = Command::new("nmcli")
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to run nmcli: {e}"))?;
+    if o.status.success() {
+        Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
+    } else {
+        let err = String::from_utf8_lossy(&o.stderr);
+        let msg = err.trim();
+        // nmcli's stderr is usually a single tidy "Error: ..." line.
+        Err(if msg.is_empty() { "nmcli failed".into() } else { msg.to_string() })
+    }
+}
+
+/// Saved Wi-Fi profiles as `(profile_name, ssid)` pairs. A profile's *name*
+/// need not equal its SSID (NM appends the device, e.g. `UniFi-MLO-wlp0s20f3`),
+/// so we read each wifi profile's actual `802-11-wireless.ssid`.
+fn saved_wifi() -> Vec<(String, String)> {
+    let names: Vec<String> = run("nmcli", &["-t", "-f", "NAME,TYPE", "connection", "show"])
+        .map(|out| {
+            out.lines()
+                .filter_map(|l| {
+                    let f = split_terse(l);
+                    // NM reports wifi as "802-11-wireless".
+                    match (f.first(), f.get(1)) {
+                        (Some(name), Some(ty)) if ty.contains("wireless") => Some(name.clone()),
+                        _ => None,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    names
+        .iter()
+        .filter_map(|name| {
+            let out = run("nmcli", &["-t", "-f", "802-11-wireless.ssid", "connection", "show", name])?;
+            // Line is `802-11-wireless.ssid:<ssid>`; the value may contain
+            // escaped colons, so parse the whole line and take field 1.
+            let line = out.lines().next()?;
+            let ssid = split_terse(line).get(1).filter(|s| !s.is_empty()).cloned()?;
+            Some((name.clone(), ssid))
+        })
+        .collect()
+}
+
+/// The saved profile NAME for an SSID, if one exists.
+fn saved_wifi_profile(ssid: &str) -> Option<String> {
+    saved_wifi().into_iter().find(|(_, s)| s == ssid).map(|(name, _)| name)
+}
+
+/// Scan for nearby Wi-Fi networks. `rescan` forces a fresh scan (slower) rather
+/// than returning NetworkManager's cached list.
+pub fn scan(rescan: bool) -> Result<Vec<WifiAp>, String> {
+    let saved: Vec<String> = saved_wifi().into_iter().map(|(_, ssid)| ssid).collect();
+    let out = nmcli_ok(&[
+        "-t",
+        "-f",
+        "IN-USE,SSID,SIGNAL,SECURITY",
+        "device",
+        "wifi",
+        "list",
+        "--rescan",
+        if rescan { "yes" } else { "no" },
+    ])?;
+
+    // Dedup by SSID, keeping the strongest signal; drop hidden (empty) SSIDs.
+    let mut best: std::collections::HashMap<String, WifiAp> = std::collections::HashMap::new();
+    for line in out.lines() {
+        let f = split_terse(line);
+        let ssid = match f.get(1) {
+            Some(s) if !s.is_empty() => s.clone(),
+            _ => continue,
+        };
+        let in_use = f.first().map(|s| s == "*").unwrap_or(false);
+        let signal = f.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let security = f.get(3).filter(|s| !s.is_empty()).cloned();
+        let saved = saved.iter().any(|s| *s == ssid);
+        best.entry(ssid.clone())
+            .and_modify(|ap| {
+                if signal > ap.signal {
+                    ap.signal = signal;
+                    ap.security = security.clone();
+                }
+                ap.in_use |= in_use;
+            })
+            .or_insert(WifiAp { ssid, signal, security, in_use, saved });
+    }
+
+    let mut aps: Vec<WifiAp> = best.into_values().collect();
+    // Connected first, then by signal descending.
+    aps.sort_by(|a, b| b.in_use.cmp(&a.in_use).then(b.signal.cmp(&a.signal)));
+    Ok(aps)
+}
+
+/// Join a Wi-Fi network. Reuses a saved profile when `password` is `None` and a
+/// profile exists; otherwise (re)creates one. Open networks pass no password.
+pub fn connect(ssid: &str, password: Option<&str>) -> Result<(), String> {
+    // If there's a saved profile and no new password, just bring it up (by its
+    // NM profile name, which may differ from the SSID).
+    if password.is_none() {
+        if let Some(name) = saved_wifi_profile(ssid) {
+            return nmcli_ok(&["connection", "up", "id", &name]).map(|_| ());
+        }
+    }
+    let mut args = vec!["device", "wifi", "connect", ssid];
+    if let Some(pw) = password {
+        args.push("password");
+        args.push(pw);
+    }
+    nmcli_ok(&args).map(|_| ())
+}
+
+/// Disconnect the Wi-Fi radio's current association (keeps the saved profile).
+pub fn disconnect() -> Result<(), String> {
+    let iface = first_iface(&["wl"]).ok_or("no Wi-Fi interface")?;
+    nmcli_ok(&["device", "disconnect", &iface]).map(|_| ())
+}
+
+/// Delete the saved profile for an SSID ("forget this network").
+pub fn forget(ssid: &str) -> Result<(), String> {
+    let name = saved_wifi_profile(ssid).ok_or("no saved network for that SSID")?;
+    nmcli_ok(&["connection", "delete", "id", &name]).map(|_| ())
+}
+
+/// Turn the Wi-Fi radio on or off.
+pub fn set_radio(on: bool) -> Result<(), String> {
+    nmcli_ok(&["radio", "wifi", if on { "on" } else { "off" }]).map(|_| ())
 }
 
 #[cfg(test)]

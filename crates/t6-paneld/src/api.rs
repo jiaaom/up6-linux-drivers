@@ -1,7 +1,7 @@
 //! HTTP surface: the panel UI (static files) and the `/api/panel` aggregate.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post, put},
@@ -46,6 +46,14 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/leds/night"), put(put_led_night))
         .route(&p("/api/power/shutdown"), post(post_shutdown))
         .route(&p("/api/power/restart"), post(post_restart))
+        // Wi-Fi config. Not login-gated: joining a network is a physical-access
+        // device action (and the bootstrap path before the box is reachable
+        // over the web UI). Ethernet stays read-only (fnOS owns the OVS bridge).
+        .route(&p("/api/network/wifi/scan"), get(get_wifi_scan))
+        .route(&p("/api/network/wifi/connect"), post(post_wifi_connect))
+        .route(&p("/api/network/wifi/disconnect"), post(post_wifi_disconnect))
+        .route(&p("/api/network/wifi/forget"), post(post_wifi_forget))
+        .route(&p("/api/network/wifi/radio"), put(put_wifi_radio))
         .route(&p("/"), get(index))
         .route(&p("/{file}"), get(static_file));
     if !prefix.is_empty() {
@@ -174,6 +182,74 @@ async fn post_shutdown() -> Response {
 
 async fn post_restart() -> Response {
     run_power("reboot")
+}
+
+// ---- Wi-Fi config --------------------------------------------------------
+
+/// Map a `Result<T, String>` from the network layer to a JSON/400 response.
+fn net_result<T: serde::Serialize>(r: Result<T, String>) -> Response {
+    match r {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct ScanQuery {
+    /// Force a fresh radio scan rather than NetworkManager's cached list.
+    #[serde(default)]
+    rescan: bool,
+}
+
+async fn get_wifi_scan(Query(q): Query<ScanQuery>) -> Response {
+    net_result(t6_hw_rs::network::scan(q.rescan))
+}
+
+#[derive(Deserialize)]
+struct WifiConnectReq {
+    ssid: String,
+    /// Omitted/empty for an open network or to reuse a saved profile.
+    #[serde(default)]
+    password: Option<String>,
+}
+
+async fn post_wifi_connect(Json(req): Json<WifiConnectReq>) -> Response {
+    let pw = req.password.as_deref().filter(|s| !s.is_empty());
+    match t6_hw_rs::network::connect(&req.ssid, pw) {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "ssid": req.ssid })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+async fn post_wifi_disconnect() -> Response {
+    match t6_hw_rs::network::disconnect() {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct WifiForgetReq {
+    ssid: String,
+}
+
+async fn post_wifi_forget(Json(req): Json<WifiForgetReq>) -> Response {
+    match t6_hw_rs::network::forget(&req.ssid) {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "ssid": req.ssid })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct WifiRadioReq {
+    on: bool,
+}
+
+async fn put_wifi_radio(Json(req): Json<WifiRadioReq>) -> Response {
+    match t6_hw_rs::network::set_radio(req.on) {
+        Ok(()) => Json(serde_json::json!({ "on": req.on })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
 }
 
 async fn index(State(s): State<AppState>) -> Response {

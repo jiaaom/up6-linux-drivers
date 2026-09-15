@@ -40,12 +40,32 @@ impl Ledd {
         }
     }
 
-    /// A single word safe to put on a command line.
+    /// A single word safe to put on a command line. Allows the characters used
+    /// by ledd's own tokens: alphanumerics, `-`, `_` (e.g. the beep events
+    /// `ac_loss`, `drive_fault`) and `:`. Still rejects whitespace and anything
+    /// that could split or inject a second command.
     pub fn word(s: &str) -> Result<&str, String> {
-        if !s.is_empty() && s.len() <= 32 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == ':') {
+        if !s.is_empty() && s.len() <= 32 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ':') {
             Ok(s)
         } else {
             Err(format!("invalid value {s:?}"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Ledd;
+    #[test]
+    fn word_accepts_ledd_event_tokens() {
+        for ok in ["startup", "ac_loss", "drive_fault", "bay-1", "night:on"] {
+            assert!(Ledd::word(ok).is_ok(), "{ok} should be accepted");
+        }
+    }
+    #[test]
+    fn word_rejects_unsafe_tokens() {
+        for bad in ["", "a b", "a\nb", "a;b", "x".repeat(33).as_str()] {
+            assert!(Ledd::word(bad).is_err(), "{bad:?} should be rejected");
         }
     }
 }

@@ -38,7 +38,11 @@ sudo apt install dkms build-essential linux-headers-$(uname -r)
 
 Daemons and web app: a Rust toolchain (`cargo`, via [rustup](https://rustup.rs)).
 
-Front-panel kiosk (GPU acceleration): the Meteor Lake iGPU (PCI `0x7d55`)
+Front-panel kiosk: the panel runs an Electron shell on a private **weston**
+compositor, so weston must be installed (`sudo apt install weston`); the
+t6panel package's install step checks for it.
+
+GPU acceleration: the Meteor Lake iGPU (PCI `0x7d55`)
 needs **Mesa ≥ 23** to drive its `iris` GL/EGL driver. Debian 12's stock Mesa
 (22.3) does not recognise it, so the whole graphics stack — the weston
 compositor *and* the Electron panel — silently falls back to software

@@ -57,12 +57,20 @@ payload_t6control() {
 
 payload_t6panel() {
     local app=$1/app
-    mkdir -p "$app/bin" "$app/www"
+    mkdir -p "$app/bin" "$app/www" "$app/app/node_modules"
     log "building t6-paneld (release)"
     (cd "$CRATES" && cargo build --release --quiet -p t6-paneld)
     cp "$CRATES/target/release/t6-paneld" "$app/bin/"
     # The panel UI (served by t6-paneld from $TRIM_APPDEST/www).
     cp "$REPO/panel/www/"* "$app/www/"
+    # The on-device kiosk: the Electron shell + its bundled Electron runtime,
+    # launched at boot by the t6-panel-kiosk unit (see fpk/t6panel/cmd/common).
+    cp "$REPO/panel/app/"{main.js,preload.js,package.json,package-lock.json,run-kiosk.sh} "$app/app/"
+    chmod +x "$app/app/run-kiosk.sh"
+    [ -x "$REPO/panel/app/node_modules/electron/dist/electron" ] \
+        || die "panel/app/node_modules/electron missing — run 'npm ci' in panel/app first"
+    log "bundling Electron runtime (~280 MB)"
+    cp -a "$REPO/panel/app/node_modules/electron" "$app/app/node_modules/electron"
 }
 
 build_package() {

@@ -1,4 +1,5 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
+remove_kiosk
 remove_paneld
 exit 0

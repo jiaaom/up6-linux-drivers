@@ -62,3 +62,56 @@ stop_paneld() {
 paneld_running() {
     systemctl is-active --quiet "$PANELD_UNIT"
 }
+
+# ---- on-device kiosk (weston + Electron) --------------------------------
+#
+# The panel's Electron shell runs on the built-in DRM panel via a private
+# weston compositor. It is a boot service, not a desktop: no display manager,
+# no greeter (fnOS ships graphical.target with no DM; we just add one service
+# under multi-user.target). The bundled Electron runtime lives under
+# $TRIM_APPDEST/app; weston and a Meteor-Lake-capable Mesa are system packages
+# (checked in install_init).
+KIOSK_UNIT=t6-panel-kiosk
+KIOSK_UNIT_FILE=/etc/systemd/system/$KIOSK_UNIT.service
+
+install_kiosk() {
+    cat > "$KIOSK_UNIT_FILE" <<UNIT
+[Unit]
+Description=T6 front-panel kiosk (weston + Electron)
+# The renderer loads the backend's local shell ($PANEL_LOCAL_ADDR); the hidden
+# login window needs the gateway/login SPA — both come up under these.
+After=$PANELD_UNIT.service trim_nginx.service systemd-user-sessions.service
+Wants=$PANELD_UNIT.service
+
+[Service]
+Type=simple
+# weston needs DRM master + input and Electron runs --no-sandbox, so root.
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=WAYLAND_DISPLAY=wayland-panel
+Environment=NAS_HOST=127.0.0.1
+Environment=PANEL_PORT=${PANEL_LOCAL_ADDR##*:}
+ExecStart=$TRIM_APPDEST/app/run-kiosk.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable "$KIOSK_UNIT" >/dev/null 2>&1
+}
+
+remove_kiosk() {
+    systemctl disable --now "$KIOSK_UNIT" >/dev/null 2>&1 || true
+    rm -f "$KIOSK_UNIT_FILE"
+    systemctl daemon-reload
+}
+
+start_kiosk() {
+    [ -f "$KIOSK_UNIT_FILE" ] || install_kiosk
+    systemctl restart "$KIOSK_UNIT" || fail "t6-panel-kiosk failed to start (journalctl -u $KIOSK_UNIT)."
+}
+
+stop_kiosk() {
+    systemctl stop "$KIOSK_UNIT" 2>/dev/null || true
+}

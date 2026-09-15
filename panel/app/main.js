@@ -9,6 +9,24 @@
 const { app, BrowserWindow, session, ipcMain } = require('electron');
 const fs = require('fs');
 
+// GPU acceleration (panel/Linux only). The Meteor Lake iGPU (PCI 0x7d55) needs
+// Mesa >= 23 to drive iris; with a new-enough system Mesa, ANGLE's GLES backend
+// composites on the iGPU (~10% CPU vs ~9 cores pegged under SwiftShader). We
+// pick the GLES backend explicitly (the most reliable path on Mesa) and turn
+// off the GPU blocklist so rasterization/compositing stay on hardware.
+//
+// NOTE: --ozone-platform=wayland is NOT set here on purpose — Electron reads the
+// ozone platform from the real command line before this module runs, so
+// appendSwitch can't set it. The panel launcher (run-kiosk.sh) passes it on the
+// CLI. These GPU switches, by contrast, are consumed by the later-spawned GPU
+// process, so setting them here takes effect.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('use-angle', 'gles');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-zero-copy');
+}
+
 // On the panel/kiosk NAS_HOST is localhost; for a remote dev machine set it to
 // the NAS's address (e.g. its Tailscale IP) so both the UI and fnOS come from it.
 const NAS = process.env.NAS_HOST || '127.0.0.1';

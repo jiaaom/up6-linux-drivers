@@ -38,6 +38,23 @@ sudo apt install dkms build-essential linux-headers-$(uname -r)
 
 Daemons and web app: a Rust toolchain (`cargo`, via [rustup](https://rustup.rs)).
 
+Front-panel kiosk (GPU acceleration): the Meteor Lake iGPU (PCI `0x7d55`)
+needs **Mesa ≥ 23** to drive its `iris` GL/EGL driver. Debian 12's stock Mesa
+(22.3) does not recognise it, so the whole graphics stack — the weston
+compositor *and* the Electron panel — silently falls back to software
+rendering (llvmpipe / SwiftShader), which pegs the CPU and overheats the box.
+This is a system-library limitation we cannot work around in our own code, so
+install the backports GL stack:
+
+```bash
+sudo apt install -t bookworm-backports \
+  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 libgbm1
+```
+
+Verify weston reports the real GPU (`GL renderer: Mesa Intel(R) Arc(tm)
+Graphics (MTL)`, not `llvmpipe`) in its log. FygoOS/fnOS already ships the
+matching Vulkan and gallium backports; only these GL packages need bumping.
+
 ## Install For Plain Debian (skip for FygoOS!)
 
 ### Kernel modules

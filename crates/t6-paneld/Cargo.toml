@@ -11,3 +11,13 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 t6-hw-rs = { path = "../t6-hw-rs" }
+base64 = "0.23.1"
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
+rsa = "0.9"
+aes = "0.8"
+cbc = { version = "0.1", features = ["block-padding"] }
+cipher = { version = "0.4", features = ["alloc", "block-padding"] }
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+futures-util = "0.3"

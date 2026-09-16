@@ -44,6 +44,10 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/hwinfo"), get(get_hwinfo))
         .route(&p("/api/leds/night"), put(put_led_night))
+        .route(&p("/api/settings/ssh"), put(put_ssh))
+        // Fan profile (silent/balance/performance/custom). Device-level, no login.
+        .route(&p("/api/fan"), get(get_fan))
+        .route(&p("/api/fan"), put(put_fan))
         .route(&p("/api/power/shutdown"), post(post_shutdown))
         .route(&p("/api/power/restart"), post(post_restart))
         // Wi-Fi config. Not login-gated: joining a network is a physical-access
@@ -58,6 +62,24 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         // connection. Not login-gated (same physical-access model as Wi-Fi).
         .route(&p("/api/network/ethernet"), get(get_ethernet))
         .route(&p("/api/network/ethernet"), post(post_ethernet))
+        // Wi-Fi hotspot (AP mode). Not login-gated (physical-access model).
+        .route(&p("/api/network/hotspot"), get(get_hotspot))
+        .route(&p("/api/network/hotspot"), post(post_hotspot))
+        // Thunderbolt: status + device authorization, and IPv4 config for a
+        // host-to-host TB net interface (SMB over TB). Not login-gated.
+        .route(&p("/api/thunderbolt"), get(get_thunderbolt))
+        .route(&p("/api/thunderbolt/device"), post(post_tb_device))
+        .route(&p("/api/thunderbolt/net"), get(get_tb_net))
+        .route(&p("/api/thunderbolt/net"), post(post_tb_net))
+        // Sharing (SMB/NFS) — read-only status + share list.
+        .route(&p("/api/sharing"), get(get_sharing))
+        .route(&p("/api/storage"), get(get_storage))
+        .route(&p("/api/firmware"), get(get_firmware))
+        .route(&p("/api/fnos/login"), post(post_fnos_login))
+        .route(&p("/api/fnos/status"), get(get_fnos_status))
+        .route(&p("/api/fnos/logout"), post(post_fnos_logout))
+        .route(&p("/api/fnos/net"), get(get_fnos_net))
+        .route(&p("/api/fnos/files"), get(get_fnos_files))
         .route(&p("/"), get(index))
         .route(&p("/{file}"), get(static_file));
     if !prefix.is_empty() {
@@ -171,6 +193,33 @@ async fn put_led_night(Json(req): Json<NightReq>) -> Response {
     }
 }
 
+async fn put_ssh(Json(req): Json<NightReq>) -> Response {
+    match t6_hw_rs::ssh::set(req.on) {
+        Ok(()) => Json(serde_json::json!({ "enabled": req.on })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+async fn get_fan() -> Response {
+    Json(serde_json::json!({
+        "profile": t6_hw_rs::fans::profile(),
+        "profiles": t6_hw_rs::fans::profiles(),
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+struct FanReq {
+    profile: String,
+}
+
+async fn put_fan(Json(req): Json<FanReq>) -> Response {
+    match t6_hw_rs::fans::set_profile(&req.profile) {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "profile": req.profile })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
 /// Reboot / power off via systemd. The panel confirms first (physical access
 /// already implies power control, so these are not login-gated).
 fn run_power(action: &str) -> Response {
@@ -280,6 +329,160 @@ async fn post_ethernet(Json(req): Json<EthReq>) -> Response {
     let addr = req.address.as_deref().filter(|s| !s.is_empty());
     let gw = req.gateway.as_deref().filter(|s| !s.is_empty());
     match t6_hw_rs::network::eth_set(&req.method, addr, gw, &req.dns) {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+// ---- Wi-Fi hotspot -------------------------------------------------------
+
+async fn get_hotspot() -> Response {
+    Json(t6_hw_rs::network::hotspot_status()).into_response()
+}
+
+#[derive(Deserialize)]
+struct HotspotReq {
+    /// true = start (needs ssid + password), false = stop.
+    enabled: bool,
+    #[serde(default)]
+    ssid: String,
+    #[serde(default)]
+    password: String,
+    /// "a" (5 GHz) or "bg"/anything (2.4 GHz).
+    #[serde(default)]
+    band: String,
+}
+
+async fn post_hotspot(Json(req): Json<HotspotReq>) -> Response {
+    let r = if req.enabled {
+        t6_hw_rs::network::hotspot_start(&req.ssid, &req.password, &req.band)
+    } else {
+        t6_hw_rs::network::hotspot_stop()
+    };
+    match r {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "enabled": req.enabled })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+// ---- Thunderbolt ---------------------------------------------------------
+
+async fn get_thunderbolt() -> Response {
+    Json(t6_hw_rs::thunderbolt::info()).into_response()
+}
+
+async fn get_sharing() -> Response {
+    Json(t6_hw_rs::sharing::info()).into_response()
+}
+
+/// Volumes + physical-disk inventory (local, read-only) for the Volumes detail page.
+async fn get_storage() -> Response {
+    Json(serde_json::json!({
+        "volumes": t6_hw_rs::storage::volumes(),
+        "disks": t6_hw_rs::storage::disks(),
+    })).into_response()
+}
+
+/// Firmware-update check (show-only). Hits the public FygoOS update manifest, so
+/// it blocks on a network round-trip — run it off the hot poll path.
+async fn get_firmware() -> Response {
+    match tokio::task::spawn_blocking(crate::firmware::status).await {
+        Ok(fw) => Json(fw).into_response(),
+        Err(_) => Json(crate::firmware::Firmware::default()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct FnosLogin {
+    user: String,
+    password: String,
+}
+
+/// Sign in to fnOS (native WS client). The password is used transiently for the
+/// handshake and never stored; only the resume ticket is persisted.
+async fn post_fnos_login(Json(b): Json<FnosLogin>) -> Response {
+    match crate::fnos::do_login(&b.user, &b.password).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+async fn get_fnos_status() -> Response {
+    Json(crate::fnos::status().await).into_response()
+}
+
+async fn post_fnos_logout() -> Response {
+    crate::fnos::logout().await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+/// Proof-of-concept authenticated read: live NIC list via the fnOS API.
+async fn get_fnos_net() -> Response {
+    match crate::fnos::call("appcgi.network.net.list", serde_json::json!({})).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct FilesQ {
+    path: String,
+}
+
+/// Read-only directory listing via the fnOS file API (`file.ls`). Requires sign-in.
+async fn get_fnos_files(Query(q): Query<FilesQ>) -> Response {
+    match crate::fnos::call("file.ls", serde_json::json!({ "path": q.path })).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct TbDeviceReq {
+    /// "authorize" | "enroll" | "forget".
+    action: String,
+    uuid: String,
+}
+
+async fn post_tb_device(Json(req): Json<TbDeviceReq>) -> Response {
+    let r = match req.action.as_str() {
+        "authorize" => t6_hw_rs::thunderbolt::authorize(&req.uuid),
+        "enroll" => t6_hw_rs::thunderbolt::enroll(&req.uuid),
+        "forget" => t6_hw_rs::thunderbolt::forget(&req.uuid),
+        other => Err(format!("unknown action {other:?}")),
+    };
+    match r {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct TbNetQuery {
+    /// NM connection name of the TB net interface.
+    conn: String,
+}
+
+async fn get_tb_net(Query(q): Query<TbNetQuery>) -> Response {
+    Json(t6_hw_rs::network::ipv4_config(&q.conn)).into_response()
+}
+
+#[derive(Deserialize)]
+struct TbNetSetReq {
+    conn: String,
+    method: String,
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    gateway: Option<String>,
+    #[serde(default)]
+    dns: Vec<String>,
+}
+
+async fn post_tb_net(Json(req): Json<TbNetSetReq>) -> Response {
+    let addr = req.address.as_deref().filter(|s| !s.is_empty());
+    let gw = req.gateway.as_deref().filter(|s| !s.is_empty());
+    match t6_hw_rs::network::set_conn_ipv4(&req.conn, &req.method, addr, gw, &req.dns) {
         Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }

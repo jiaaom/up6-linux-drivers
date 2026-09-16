@@ -66,6 +66,91 @@ pub fn profile() -> Option<String> {
     load().and_then(|(p, _)| p)
 }
 
+const RUN_DIR: &str = "/run/t6-fand";
+const CONFIG: &str = "/etc/t6-fand.toml";
+
+/// Selectable fan profiles: the curve names common to every zone in the config
+/// (e.g. silent, balance, performance, custom), in config order. Empty if the
+/// config can't be read. Parsed by a light line scan (no toml dependency).
+pub fn profiles() -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(CONFIG) else { return Vec::new() };
+    let mut zones: Vec<Vec<String>> = Vec::new();
+    let mut cur: Option<Vec<String>> = None;
+    for line in text.lines() {
+        let l = line.trim();
+        if l.starts_with('[') {
+            if let Some(v) = cur.take() {
+                zones.push(v);
+            }
+            // A `[zones.<name>.curves]` table lists the curve (profile) names.
+            if l.starts_with("[zones.") && l.ends_with(".curves]") {
+                cur = Some(Vec::new());
+            }
+            continue;
+        }
+        if let Some(v) = cur.as_mut() {
+            if let Some(eq) = l.find('=') {
+                let name = l[..eq].trim();
+                if !name.is_empty() && !name.starts_with('#') {
+                    v.push(name.to_string());
+                }
+            }
+        }
+    }
+    if let Some(v) = cur.take() {
+        zones.push(v);
+    }
+    let mut it = zones.into_iter();
+    let Some(first) = it.next() else { return Vec::new() };
+    let rest: Vec<std::collections::HashSet<String>> = it.map(|z| z.into_iter().collect()).collect();
+    first.into_iter().filter(|n| rest.iter().all(|s| s.contains(n))).collect()
+}
+
+fn write_atomic(path: &str, content: &str) -> Result<(), String> {
+    let tmp = format!("{path}.tmp");
+    std::fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+/// Rewrite only the top-level `profile = "..."` line (keep comments/layout).
+fn persist_profile(profile: &str) -> Result<(), String> {
+    let text = std::fs::read_to_string(CONFIG).map_err(|e| e.to_string())?;
+    let mut done = false;
+    let mut out = String::with_capacity(text.len() + 32);
+    for line in text.lines() {
+        let is_profile = {
+            let l = line.trim_start();
+            l.starts_with("profile") && l["profile".len()..].trim_start().starts_with('=')
+        };
+        if !done && is_profile {
+            out.push_str(&format!("profile = \"{profile}\"\n"));
+            done = true;
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if !done {
+        let idx = out.find("\n[").map(|i| i + 1).unwrap_or(out.len());
+        out.insert_str(idx, &format!("profile = \"{profile}\"\n"));
+    }
+    write_atomic(CONFIG, &out)
+}
+
+/// Switch the fan profile: sets a runtime override (`/run/t6-fand/profile`,
+/// applied on the daemon's next tick) and persists it as the config default so
+/// it survives a reboot.
+pub fn set_profile(profile: &str) -> Result<(), String> {
+    if !profiles().iter().any(|p| p == profile) {
+        return Err(format!("unknown fan profile {profile:?}"));
+    }
+    if !std::path::Path::new(RUN_DIR).is_dir() {
+        return Err("t6-fand is not running".into());
+    }
+    write_atomic(&format!("{RUN_DIR}/profile"), profile)?;
+    persist_profile(profile)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

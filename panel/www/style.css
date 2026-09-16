@@ -85,7 +85,10 @@
   .tile .t{font-size:33px;font-weight:500}.tile .s{font-size:31px}
   .tname{font-size:52px;font-weight:500}
   .taskrow{display:flex;align-items:center;gap:24px;background:var(--card);border:1px solid var(--hair);border-radius:34px;padding:28px 34px}
-  .fwbanner{display:flex;align-items:center;gap:22px;background:oklch(0.6 0.16 62 / .16);border:1px solid oklch(0.74 0.12 62 / .45);border-radius:34px;padding:28px 34px}
+  .fwbanner{display:flex;align-items:center;gap:22px;background:var(--card);border:1px solid var(--hair);border-radius:34px;padding:28px 34px}
+  .fwbanner.fw-update{background:oklch(0.6 0.16 62 / .16);border-color:oklch(0.74 0.12 62 / .45)}
+  .fwdot{width:14px;height:14px;border-radius:7px;background:oklch(1 0 0 / .32);flex:none}
+  .fwbanner.fw-update .fwdot{background:var(--amber)}
 
   /* edit list rows */
   .erow{display:flex;align-items:center;gap:26px;background:var(--card);border:1px solid var(--hair);
@@ -114,6 +117,8 @@
   #settings{transform:translateX(100%);background:oklch(0.15 0.035 252);z-index:4}
   body.settings-open #settings{transform:translateX(0)}
   body.settings-open #home{transform:translateX(-10%)}
+  #subpage{transform:translateX(100%);background:oklch(0.15 0.035 252);z-index:6}
+  body.subpage-open #subpage{transform:translateX(0)}
   .setlabel{font-size:30px;color:oklch(0.97 0.006 252 / .5);margin:8px 4px 14px;text-transform:uppercase;letter-spacing:.08em}
   .setgroup{margin-bottom:34px}
   .setrow{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:60px}
@@ -182,6 +187,11 @@
   .seg-opt.on{background:var(--amber);color:oklch(0.2 0.04 62);font-weight:600}
   #ethManual{display:flex;flex-direction:column;gap:22px}
 
+  /* Hotspot config: centered overlay (keyboard-safe) */
+  #hotspot{position:absolute;inset:0;z-index:82;display:flex;align-items:center;justify-content:center;
+    background:oklch(0.13 0.03 252 / .96);opacity:0;pointer-events:none;transition:opacity .26s}
+  #hotspot.on{opacity:1;pointer-events:auto}
+
   /* Wi-Fi network list (inside the detail sheet) */
   .wifi-list{margin-top:6px;max-height:1180px;overflow-y:auto;scrollbar-width:none}
   .wifi-empty{padding:40px 4px;font-size:32px;color:oklch(0.97 0.006 252 / .5);text-align:center}
@@ -198,6 +208,36 @@
   .wifi-manage{display:flex;flex-direction:column;gap:22px;padding:20px 0 6px}
   .wifi-manage .wifi-ap-sub{margin-bottom:14px}
   .login-cancel.danger{color:oklch(0.72 0.17 25)}
+
+  /* Thunderbolt page */
+  .tb-dev{display:flex;flex-direction:column;gap:14px;padding:28px 0;border-bottom:1px solid oklch(1 0 0 / .08)}
+  .tb-dev .login-btn,.tb-dev .login-cancel{margin-top:8px}
+  .tb-pending{color:var(--amber)}
+  .tb-head{font-size:30px;color:oklch(0.97 0.006 252 / .5);margin:30px 0 6px;text-transform:uppercase;letter-spacing:.08em}
+  .tb-net{display:flex;flex-direction:column;gap:12px;padding:22px 0;border-bottom:1px solid oklch(1 0 0 / .08)}
+  .tb-hint{font-size:30px;color:oklch(0.97 0.006 252 / .5);line-height:1.5;padding:24px 4px}
+  .filecrumb{display:flex;align-items:center;gap:20px;margin-bottom:22px;flex-wrap:wrap}
+  .fc-up{font-size:32px;color:var(--amber);font-weight:500}
+  .fc-up:active{opacity:.6}
+  .fc-path{font-size:28px;color:oklch(0.97 0.006 252 / .45);word-break:break-all}
+  .filelist{background:var(--card);border:1px solid var(--hair);border-radius:40px;overflow:hidden}
+  .filerow{display:flex;align-items:center;gap:24px;padding:30px 38px;border-bottom:1px solid oklch(1 0 0 / .07)}
+  .filerow:last-child{border-bottom:none}
+  .filerow:active{background:oklch(1 0 0 / .05)}
+  .fico{flex:none;width:40px;height:34px;border-radius:7px;border:3px solid oklch(1 0 0 / .3)}
+  .fico.dir{background:oklch(0.74 0.12 62 / .22);border-color:oklch(0.74 0.12 62 / .55);position:relative}
+  .fico.dir::before{content:"";position:absolute;top:-9px;left:-1px;width:18px;height:9px;border:3px solid oklch(0.74 0.12 62 / .55);border-bottom:none;border-radius:5px 5px 0 0}
+  .finfo{flex:1;min-width:0}
+  .fname{font-size:34px;font-weight:500;word-break:break-word}
+  .fmeta{font-size:28px;color:oklch(0.97 0.006 252 / .45);margin-top:4px}
+  .dtags{display:flex;flex-wrap:wrap;gap:12px;padding:20px 0 4px}
+  .dtag{font-size:26px;font-weight:600;color:var(--amber);background:oklch(0.74 0.12 62 / .14);border-radius:12px;padding:8px 18px}
+  .fwnotes{padding:6px 0 4px}
+  .fwnote-sec{font-size:31px;font-weight:600;margin:22px 0 8px;color:oklch(0.74 0.12 62 / .95)}
+  .fwnote-sec:first-child{margin-top:6px}
+  .fwnote-line{font-size:31px;line-height:1.45;color:oklch(0.97 0.006 252 / .82);margin-bottom:8px}
+  .share-row{display:flex;align-items:center;gap:20px;padding:22px 0;border-bottom:1px solid oklch(1 0 0 / .08)}
+  .share-proto{flex:none;font-size:26px;font-weight:600;color:var(--amber);background:oklch(0.74 0.12 62 / .14);border-radius:12px;padding:8px 18px}
 
   /* global on-screen keyboard overlay */
   #osk{position:absolute;left:0;right:0;bottom:0;z-index:90;background:oklch(0.16 0.03 252);
@@ -220,9 +260,12 @@
   #scrim.show{opacity:1;pointer-events:auto}
   #detail{position:absolute;left:0;right:0;bottom:0;z-index:21;background:oklch(0.19 0.035 252);
     border-radius:48px 48px 0 0;border-top:1px solid oklch(1 0 0 / .12);padding:22px 44px 56px;
+    max-height:90vh;display:flex;flex-direction:column;
     transform:translateY(110%);transition:transform .34s cubic-bezier(.22,1,.36,1);box-shadow:0 -30px 80px oklch(0 0 0 / .5)}
   #detail.show{transform:translateY(0)}
-  #detailBody{margin:8px 0 8px}
+  /* Body scrolls within the sheet so a long list can't push the Done header off-screen. */
+  #detailBody{margin:8px 0 8px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+  #detailBody::-webkit-scrollbar{display:none}
   .drow{display:flex;align-items:baseline;justify-content:space-between;gap:24px;padding:26px 0;border-bottom:1px solid oklch(1 0 0 / .08)}
   .drow .k{font-size:32px;color:oklch(0.97 0.006 252 / .55);flex:none}
   .drow .v{font-size:34px;font-weight:500;text-align:right;word-break:break-word}

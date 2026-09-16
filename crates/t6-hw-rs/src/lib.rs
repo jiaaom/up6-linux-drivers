@@ -12,4 +12,7 @@ pub mod leds;
 pub mod net;
 pub mod network;
 pub mod sensors;
+pub mod sharing;
+pub mod ssh;
 pub mod storage;
+pub mod thunderbolt;

@@ -13,6 +13,8 @@
 //! both surfaces; only the gateway one ever carries a signed-in user.
 
 mod api;
+mod firmware;
+mod fnos;
 mod gateway;
 mod panel;
 mod settings;
@@ -67,6 +69,29 @@ fn parse_args() -> Opts {
 
 #[tokio::main]
 async fn main() {
+    // Dev-only: validate the native fnOS client against the live box.
+    if std::env::args().any(|a| a == "--fnos-selftest") {
+        let user = std::env::var("FNOS_USER").unwrap_or_default();
+        let pass = std::env::var("FNOS_PASS").unwrap_or_default();
+        match fnos::FnosClient::login(&user, &pass).await {
+            Ok(c) => {
+                println!("LOGIN OK uid={} admin={} ticket=<{}ch> machineId={}", c.session.uid, c.session.admin, c.session.ticket.len(), c.session.machine_id);
+                match c.request("appcgi.network.net.list", serde_json::json!({})).await {
+                    Ok(v) => {
+                        let ifs = v.get("data").and_then(|d| d.get("net")).and_then(|n| n.get("ifs")).and_then(|x| x.as_array()).cloned().unwrap_or_default();
+                        println!("net.list OK: {} interfaces", ifs.len());
+                        for i in &ifs {
+                            println!("  {} ipv4={:?} ssid={:?}", i.get("name").and_then(|x| x.as_str()).unwrap_or("?"), i.get("ipv4Addr").and_then(|x| x.as_str()), i.get("ssid").and_then(|x| x.as_str()));
+                        }
+                    }
+                    Err(e) => println!("net.list ERR: {e}"),
+                }
+            }
+            Err(e) => println!("LOGIN ERR: {e}"),
+        }
+        return;
+    }
+
     let opts = parse_args();
     // Port of the local shell, reported to the gateway surface so "sign out"
     // knows where to return.

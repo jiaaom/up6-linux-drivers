@@ -44,6 +44,16 @@ pub struct Wifi {
 pub struct Network {
     pub ethernet: Ethernet,
     pub wifi: Wifi,
+    pub hotspot: Hotspot,
+}
+
+/// Wi-Fi access-point ("hotspot") state. The password is never surfaced.
+#[derive(Serialize, Default)]
+pub struct Hotspot {
+    pub active: bool,
+    pub ssid: Option<String>,
+    /// "bg" (2.4 GHz) or "a" (5 GHz).
+    pub band: Option<String>,
 }
 
 /// One access point in a scan result (deduped by SSID, strongest signal kept).
@@ -184,6 +194,7 @@ pub fn info() -> Network {
             }
         }
     }
+    n.hotspot = hotspot_status();
     n
 }
 
@@ -349,42 +360,54 @@ pub struct EthConfig {
 fn wired_conn() -> Option<(String, String)> {
     let (_, dev, _) = default_route(false)?;
     let dev = dev?;
-    let conn = run("nmcli", &["-t", "-f", "GENERAL.CONNECTION", "device", "show", &dev])?
-        .lines()
-        .next()
-        .and_then(|l| split_terse(l).get(1).cloned())
-        .filter(|s| !s.is_empty())?;
+    let conn = device_connection(&dev)?;
     Some((conn, dev))
 }
 
+/// The active NM connection name on a device (e.g. "enp103s0-ovs", or a
+/// Thunderbolt net iface's connection).
+pub(crate) fn device_connection(dev: &str) -> Option<String> {
+    run("nmcli", &["-t", "-f", "GENERAL.CONNECTION", "device", "show", dev])?
+        .lines()
+        .next()
+        .and_then(|l| split_terse(l).get(1).cloned())
+        .filter(|s| !s.is_empty())
+}
+
 /// One terse `connection show` field value (first line), e.g. `ipv4.method`.
-fn conn_field(conn: &str, field: &str) -> Option<String> {
+pub(crate) fn conn_field(conn: &str, field: &str) -> Option<String> {
     let out = run("nmcli", &["-t", "-f", field, "connection", "show", conn])?;
     split_terse(out.lines().next()?).get(1).filter(|s| !s.is_empty()).cloned()
 }
 
-/// Read the editable Ethernet (wired) IPv4 config.
-pub fn eth_config() -> EthConfig {
-    let mut c = EthConfig { method: "auto".into(), ..Default::default() };
-    let Some((conn, dev)) = wired_conn() else { return c };
-    c.method = conn_field(&conn, "ipv4.method").unwrap_or_else(|| "auto".into());
-    // ipv4.addresses is comma-separated CIDRs; keep the first for the editor.
-    c.address = conn_field(&conn, "ipv4.addresses").and_then(|s| s.split(',').next().map(|x| x.trim().to_string())).filter(|s| !s.is_empty());
-    c.gateway = conn_field(&conn, "ipv4.gateway");
-    c.dns = conn_field(&conn, "ipv4.dns").map(|s| s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default();
-    c.conn = Some(conn);
-    c.iface = Some(dev);
-    c
+/// Editable IPv4 config of any NM connection (shared by Ethernet + TB net).
+#[derive(Serialize, Default)]
+pub struct Ipv4Cfg {
+    /// "auto" (DHCP) or "manual" (static).
+    pub method: String,
+    /// First static address as CIDR (e.g. "10.0.0.5/24"), when manual.
+    pub address: Option<String>,
+    pub gateway: Option<String>,
+    pub dns: Vec<String>,
 }
 
-/// Set the wired IPv4 config. `method` is "auto" (DHCP) or "manual" (static).
-/// For manual, `address` (CIDR "a.b.c.d/n") is required; `gateway` optional.
-/// `dns` (may be empty) applies in both modes — with DHCP a non-empty list
-/// overrides the leased servers.
-pub fn eth_set(method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
-    let (conn, _) = wired_conn().ok_or("no wired connection found")?;
+/// Read a connection's IPv4 config.
+pub fn ipv4_config(conn: &str) -> Ipv4Cfg {
+    Ipv4Cfg {
+        method: conn_field(conn, "ipv4.method").unwrap_or_else(|| "auto".into()),
+        // ipv4.addresses is comma-separated CIDRs; keep the first for the editor.
+        address: conn_field(conn, "ipv4.addresses").and_then(|s| s.split(',').next().map(|x| x.trim().to_string())).filter(|s| !s.is_empty()),
+        gateway: conn_field(conn, "ipv4.gateway"),
+        dns: conn_field(conn, "ipv4.dns").map(|s| s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+    }
+}
+
+/// Set a connection's IPv4 config and re-activate it. `method` is "auto" (DHCP)
+/// or "manual" (static; `address` CIDR required, `gateway` optional). `dns` (may
+/// be empty) applies in both modes — with DHCP a non-empty list overrides leases.
+pub fn set_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
     let dns_joined = dns.join(",");
-    let mut args: Vec<String> = vec!["connection".into(), "modify".into(), conn.clone()];
+    let mut args: Vec<String> = vec!["connection".into(), "modify".into(), conn.into()];
     let mut set = |k: &str, v: &str| { args.push(k.into()); args.push(v.into()); };
     match method {
         "auto" => {
@@ -405,8 +428,89 @@ pub fn eth_set(method: &str, address: Option<&str>, gateway: Option<&str>, dns: 
     }
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     nmcli_ok(&argv)?;
-    // Re-activate so the change takes effect now.
-    nmcli_ok(&["connection", "up", &conn]).map(|_| ())
+    nmcli_ok(&["connection", "up", conn]).map(|_| ())
+}
+
+/// Read the editable Ethernet (wired) IPv4 config.
+pub fn eth_config() -> EthConfig {
+    let mut c = EthConfig { method: "auto".into(), ..Default::default() };
+    let Some((conn, dev)) = wired_conn() else { return c };
+    let ip = ipv4_config(&conn);
+    c.method = ip.method;
+    c.address = ip.address;
+    c.gateway = ip.gateway;
+    c.dns = ip.dns;
+    c.conn = Some(conn);
+    c.iface = Some(dev);
+    c
+}
+
+/// Set the wired IPv4 config (delegates to the shared helper).
+pub fn eth_set(method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
+    let (conn, _) = wired_conn().ok_or("no wired connection found")?;
+    set_conn_ipv4(&conn, method, address, gateway, dns)
+}
+
+// ---- Wi-Fi hotspot (AP mode) ---------------------------------------------
+//
+// nmcli AP-mode sequence adapted from fn-wifi-hotspot (Ing/wjz304, MIT) — see
+// README acknowledgements. We use NM's `ipv4.method shared` (its own dnsmasq +
+// NAT) instead of a bundled dnsmasq/iptables, so it needs `dnsmasq-base` and
+// `iptables` on the system. "Approach A": the AP takes over the Wi-Fi card
+// (dropping any client association); bringing it down lets NM auto-reconnect
+// the saved client network. Runs on the Wi-Fi PHY, so it never touches the
+// wired/OVS path fnOS reconciles.
+
+const HOTSPOT_CONN: &str = "t6-hotspot";
+
+/// Current hotspot state (never exposes the PSK).
+pub fn hotspot_status() -> Hotspot {
+    let mut h = Hotspot::default();
+    h.ssid = conn_field(HOTSPOT_CONN, "802-11-wireless.ssid");
+    h.band = conn_field(HOTSPOT_CONN, "802-11-wireless.band");
+    h.active = run("nmcli", &["-t", "-f", "NAME", "connection", "show", "--active"])
+        .map(|o| o.lines().any(|l| l == HOTSPOT_CONN))
+        .unwrap_or(false);
+    h
+}
+
+/// Start (or restart) the hotspot. `band` is "a" (5 GHz) or anything else → 2.4 GHz.
+pub fn hotspot_start(ssid: &str, password: &str, band: &str) -> Result<(), String> {
+    if ssid.is_empty() || ssid.chars().count() > 32 {
+        return Err("SSID must be 1–32 characters".into());
+    }
+    if password.chars().count() < 8 {
+        return Err("password must be at least 8 characters (WPA2)".into());
+    }
+    let band = if matches!(band, "a" | "5" | "5g" | "5ghz") { "a" } else { "bg" };
+    let wl = first_iface(&["wl"]).ok_or("no Wi-Fi interface")?;
+    // Start clean so a re-start always applies the new settings.
+    let _ = nmcli_ok(&["connection", "down", HOTSPOT_CONN]);
+    let _ = nmcli_ok(&["connection", "delete", HOTSPOT_CONN]);
+    nmcli_ok(&["connection", "add", "type", "wifi", "ifname", &wl, "con-name", HOTSPOT_CONN, "autoconnect", "no", "ssid", ssid])?;
+    let modify = nmcli_ok(&[
+        "connection", "modify", HOTSPOT_CONN,
+        "802-11-wireless.mode", "ap",
+        "802-11-wireless.band", band,
+        "802-11-wireless.powersave", "2",
+        "802-11-wireless-security.key-mgmt", "wpa-psk",
+        "802-11-wireless-security.psk", password,
+        "802-11-wireless-security.proto", "rsn",
+        "802-11-wireless-security.pairwise", "ccmp",
+        "ipv4.method", "shared",
+        "ipv6.method", "disabled",
+    ]);
+    let up = modify.and_then(|_| nmcli_ok(&["--wait", "20", "connection", "up", HOTSPOT_CONN]));
+    if let Err(e) = up {
+        let _ = nmcli_ok(&["connection", "delete", HOTSPOT_CONN]);
+        return Err(e);
+    }
+    Ok(())
+}
+
+/// Stop the hotspot (deactivate; NM reconnects the saved client network).
+pub fn hotspot_stop() -> Result<(), String> {
+    nmcli_ok(&["connection", "down", HOTSPOT_CONN]).map(|_| ())
 }
 
 #[cfg(test)]

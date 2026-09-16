@@ -42,6 +42,10 @@ Front-panel kiosk: the panel runs an Electron shell on a private **weston**
 compositor, so weston must be installed (`sudo apt install weston`); the
 t6panel package's install step checks for it.
 
+Wi-Fi hotspot (optional): the hotspot uses NetworkManager's shared mode, which
+needs `dnsmasq-base` and `iptables` for the access point's DHCP and NAT —
+`sudo apt install dnsmasq-base iptables`.
+
 GPU acceleration: the Meteor Lake iGPU (PCI `0x7d55`)
 needs **Mesa ≥ 23** to drive its `iris` GL/EGL driver. Debian 12's stock Mesa
 (22.3) does not recognise it, so the whole graphics stack — the weston
@@ -83,12 +87,13 @@ Each daemon builds with `cargo` and installs a systemd unit; see
 ./packaging/build-fpk.sh
 ```
 
-produces two FygoOS packages (.fpk) in `build/`:
+produces the FygoOS packages (.fpk) in `build/`:
 
 | package | contents |
 |---|---|
 | `t6-drivers.fpk` | the two DKMS modules, built and loaded on install |
 | `t6control.fpk` | the `t6-fand` and `t6-ledd` daemons and the web app; depends on `t6-drivers` |
+| `t6panel.fpk` | the front-panel backend (`t6-paneld`) + the Electron kiosk shell, started on boot; depends on `t6control` |
 
 Install them from the App Center's manual-installation entry, or with
 `appcenter-cli install-fpk <file>`.
@@ -101,6 +106,17 @@ Install them from the App Center's manual-installation entry, or with
 - **Kernels**: everything builds warning-free against 6.1 (Debian 12), 6.12 (Debian 13) and 6.18 (fnOS).
 - **Hardware gate**: both modules refuse to load unless DMI reports `Insyde` / `MeteorLake` / BIOS version `T6MTLJKJBOXV*`. The global UP6 / PA60 ships the same BIOS image, so it is covered. Other boards can be added to the DMI table together with their IRQ line.
 - Both accept `force=1` to bypass the gate for testing an unknown board.
+
+### Acknowledgements
+
+- The Wi-Fi hotspot (AP-mode) support adapts the NetworkManager sequence from
+  [fn-wifi-hotspot](https://github.com/wjz304) by Ing (wjz304), MIT-licensed.
+- The fnOS/FygoOS integration patterns were informed by the community
+  [RROrg/fn-apps](https://github.com/RROrg/fn-apps) collection.
+- The native fnOS RPC client (`t6-paneld`'s `fnos` module) implements the
+  `com.trim.main` WebSocket auth protocol independently in Rust; the protocol was
+  understood with reference to the Apache-2.0 [`fnos`](https://www.npmjs.com/package/fnos)
+  npm package by Timandes White. No third-party code or binaries are bundled.
 
 --------
 

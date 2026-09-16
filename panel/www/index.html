@@ -76,6 +76,20 @@
       <div class="scroll" id="settingsScroll"></div>
     </div>
 
+    <!-- GENERIC SUB-PAGE (Settings-style full page: Ethernet, Wi-Fi, Volumes, Files…) -->
+    <div class="screen" id="subpage">
+      <div class="vign2"></div>
+      <div class="head">
+        <div class="statusbar"><span class="clock3"></span><div class="sb-icons" id="subCrumb" style="opacity:.5;font-size:28px"></div></div>
+        <div class="hero">
+          <div style="min-width:0"><div class="hostname" id="subTitle" style="font-size:76px"></div></div>
+          <div class="hbtns"><div class="pill solid" id="subDone">Done</div></div>
+        </div>
+        <div class="hair"></div>
+      </div>
+      <div class="scroll" id="subpageScroll"></div>
+    </div>
+
     <div id="scrim"></div>
     <div id="detail">
       <div class="grabber"></div>
@@ -108,7 +122,7 @@
     </div>
     <div id="ethedit">
       <div class="login-card">
-        <div class="login-title">Ethernet IPv4</div>
+        <div class="login-title" id="ipv4Title">Ethernet IPv4</div>
         <div class="seg" id="ethMode">
           <div class="seg-opt" data-m="auto">Automatic (DHCP)</div>
           <div class="seg-opt" data-m="manual">Manual</div>
@@ -124,10 +138,31 @@
         <div class="login-cancel" id="ethCancel">Cancel</div>
       </div>
     </div>
+    <div id="hotspot">
+      <div class="login-card">
+        <div class="login-title">Hotspot</div>
+        <div class="login-sub" id="hsStatus"></div>
+        <input id="hsSsid" class="login-input" type="text" placeholder="Network name (SSID)" autocapitalize="none" spellcheck="false">
+        <input id="hsPass" class="login-input" type="password" placeholder="Password (min 8 chars)" autocapitalize="none" spellcheck="false">
+        <div class="seg" id="hsBand">
+          <div class="seg-opt" data-m="bg">2.4 GHz</div>
+          <div class="seg-opt" data-m="a">5 GHz</div>
+        </div>
+        <div id="hsErr" class="login-err" hidden></div>
+        <div class="login-btn" id="hsToggle">Start Hotspot</div>
+        <div class="login-cancel" id="hsCancel">Close</div>
+      </div>
+    </div>
     <div id="osk"></div>
   </div>
 </div>
 
-<script src="app.js"></script>
+<script src="shell.js"></script>
+    <script src="home.js"></script>
+    <script src="settings.js"></script>
+    <script src="live.js"></script>
+    <script src="account.js"></script>
+    <script src="storage-files.js"></script>
+    <script src="network.js"></script>
 </body>
 </html>

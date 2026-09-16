@@ -1,16 +1,5 @@
-// Bridge between the renderer (panel UI) and the main process. Kept minimal for
-// now; the fnOS login/session API lands here next.
-const { contextBridge, ipcRenderer } = require('electron');
-
-contextBridge.exposeInMainWorld('fnos', {
-  login: (user, password) => ipcRenderer.invoke('fnos:login', { user, password }),
-  session: () => ipcRenderer.invoke('fnos:session'),
-  logout: () => ipcRenderer.invoke('fnos:logout'),
-  // Ethernet config via fnOS's own API (admin-gated; see main.js). Wi-Fi does
-  // NOT go through here — it uses t6-paneld's no-login nmcli endpoints.
-  net: {
-    list: () => ipcRenderer.invoke('net:list'),
-    info: (ifName) => ipcRenderer.invoke('net:info', ifName),
-    set: (cfg) => ipcRenderer.invoke('net:set', cfg),
-  },
-});
+// No renderer bridge is needed: the panel talks to t6-paneld directly over HTTP
+// (/api/*, including /api/fnos for the authenticated fnOS session). This file is
+// kept as an empty, context-isolated preload so webPreferences.preload stays a
+// valid path — add a contextBridge.exposeInMainWorld(...) here if the shell ever
+// needs to hand the renderer something the daemon can't.

@@ -10,18 +10,23 @@ function tick(){var d=new Date(),t=String(d.getHours()).padStart(2,'0')+':'+Stri
   document.querySelectorAll('#clock,.clock2,.clock3').forEach(function(e){e.textContent=t;});}
 tick();setInterval(tick,10000);
 var LAST=null; // most recent /api/panel payload
-// In the Electron shell, identity comes from the main process (which holds the
-// fnOS session), not from t6-paneld. In a plain browser FNOS is null and we
-// fall back to the /api/panel session field.
-var FNOS=(typeof window!=='undefined'&&window.fnos)?window.fnos:null, fnosUser=null;
+// The signed-in fnOS user (from t6-paneld's native /api/fnos session), or null.
+var fnosUser=null;
 function setAccount(session){
-  var s=FNOS?fnosUser:(session||null);
+  var s=fnosUser||(session||null);
   var acct=document.getElementById('acct'),at=document.getElementById('acctText'),dot=acct&&acct.querySelector('.acctdot');
   if(!acct)return;
   if(s&&s.username){acct.classList.remove('signin');at.textContent='Signed in as '+s.username;if(dot)dot.hidden=false;}
   else{acct.classList.add('signin');at.textContent='Sign in';if(dot)dot.hidden=true;}
 }
-function refreshFnos(){ if(FNOS&&FNOS.session){FNOS.session().then(function(u){fnosUser=u;setAccount();}).catch(function(){}); } }
+// Native fnOS session (t6-paneld /api/fnos). Works in both the kiosk and a plain
+// browser — it's just a fetch to the local daemon, no Electron bridge needed.
+function refreshFnos(){
+  fetch('api/fnos/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+    fnosUser=(s&&s.signedIn)?{username:s.username,uid:s.uid,admin:s.admin}:null;
+    setAccount();
+  }).catch(function(){});
+}
 window.refreshFnos=refreshFnos;
 
 /* ---------- model ---------- */
@@ -37,8 +42,8 @@ var order=['storage','system','conn','task','net','events'];
 var visible={storage:1,system:1,conn:1,task:1,net:1,events:0};
 
 var CONTENT={
-  storage:`<div class="card">
-      <div class="row-sb"><div style="font-size:32px" class="muted">Storage</div><div style="font-size:30px" class="muted2" id="volCount">—</div></div>
+  storage:`<div class="card" data-tile="storage">
+      <div class="row-sb"><div style="font-size:32px" class="muted">Storage</div><div style="display:flex;align-items:center;gap:16px"><span style="font-size:30px" class="muted2" id="volCount">—</span><span style="font-size:34px;opacity:.4">›</span></div></div>
       <div class="vols" style="margin-top:26px"></div></div>`,
   system:`<div class="card">
       <div style="display:flex;justify-content:space-between">
@@ -56,9 +61,10 @@ var CONTENT={
   conn:`<div class="grid">
       <div class="tile on" data-tile="eth"><div style="width:44px;height:30px;border:4px solid var(--amber);border-radius:8px"></div><div><div class="t">Ethernet</div><div class="s muted eth-sub">—</div></div></div>
       <div class="tile on" data-tile="wifi"><div style="display:flex;align-items:flex-end;gap:6px;height:34px"><div style="width:8px;height:12px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:20px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:27px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:34px;border-radius:4px;background:var(--amber);opacity:.35"></div></div><div><div class="t">Wi-Fi</div><div class="s muted wifi-sub">—</div></div></div>
-      <div class="tile off"><div style="width:34px;height:34px;border-radius:17px;border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">Hotspot</div><div class="s muted2">Off</div></div></div>
-      <div class="tile off"><div style="width:34px;height:34px;border-radius:9px;transform:rotate(45deg);border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">TB4</div><div class="s muted2">No link</div></div></div>
-      <div class="tile on"><div style="display:flex;gap:6px"><div style="width:16px;height:34px;border-radius:5px;background:var(--amber)"></div><div style="width:16px;height:34px;border-radius:5px;background:var(--amber);opacity:.55"></div></div><div><div class="t">Sharing</div><div class="s muted">SMB · NFS</div></div></div>
+      <div class="tile off" data-tile="hotspot"><div style="width:34px;height:34px;border-radius:17px;border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">Hotspot</div><div class="s muted2 hotspot-sub">Off</div></div></div>
+      <div class="tile off" data-tile="tb4"><div style="width:34px;height:34px;border-radius:9px;transform:rotate(45deg);border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">TB4</div><div class="s muted2 tb-sub">No link</div></div></div>
+      <div class="tile on" data-tile="sharing"><div style="display:flex;gap:6px"><div style="width:16px;height:34px;border-radius:5px;background:var(--amber)"></div><div style="width:16px;height:34px;border-radius:5px;background:var(--amber);opacity:.55"></div></div><div><div class="t">Sharing</div><div class="s muted sharing-sub">SMB · NFS</div></div></div>
+      <div class="tile on" data-tile="files"><div style="width:42px;height:32px;border:4px solid var(--amber);border-radius:8px;position:relative"><div style="position:absolute;top:-10px;left:-2px;width:20px;height:10px;border:4px solid var(--amber);border-bottom:none;border-top-left-radius:6px;border-top-right-radius:6px"></div></div><div><div class="t">Files</div><div class="s muted2 files-sub">Browse</div></div></div>
       <div class="tile off"><div style="width:34px;height:34px;border-radius:17px;border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">Settings</div><div class="s muted2">Screen · SSH</div></div></div></div>`,
   task:`<div class="taskrow">
       <div style="width:50px;height:50px;border-radius:25px;border:5px solid oklch(0.74 0.12 62 / .28);border-top-color:var(--amber2);animation:spin 1.4s linear infinite"></div>
@@ -81,12 +87,65 @@ function renderHome(){
     var el=document.createElement('div');el.className='widget';el.dataset.id=id;el.innerHTML=CONTENT[id];
     homeScroll.appendChild(el);
   });
-  var fw=document.createElement('div');fw.className='widget';
-  fw.innerHTML=`<div class="fwbanner"><div style="width:14px;height:14px;border-radius:7px;background:var(--amber)"></div>
-      <div style="flex:1"><div style="font-size:33px;font-weight:500">Firmware 0.9.19 available</div><div style="font-size:31px" class="muted">Tap to review</div></div>
+  var fw=document.createElement('div');fw.className='widget';fw.id='fwWidget';fw.style.display='none';
+  fw.innerHTML=`<div class="fwbanner"><div class="fwdot"></div>
+      <div style="flex:1"><div id="fwTitle" style="font-size:33px;font-weight:500"></div><div id="fwSub" style="font-size:31px" class="muted"></div></div>
       <div style="font-size:36px;opacity:.45">›</div></div>`;
+  fw.addEventListener('click',showFirmware);
   homeScroll.appendChild(fw);
   bindTiles();
+  checkFirmware();
+}
+
+// Firmware update check (show-only, no install). The backend serves the public
+// FygoOS update manifest from a throttled disk cache, so the card renders
+// instantly and rarely touches the network. The card always shows: an amber
+// "update available" call-to-action, or the installed version when up to date /
+// unreachable. Tapping shows the cached release notes (never re-fetched here).
+var fwState=null;
+function applyFw(){
+  var w=document.getElementById('fwWidget');if(!w||!fwState)return;
+  var b=w.querySelector('.fwbanner');
+  var t=document.getElementById('fwTitle'),s=document.getElementById('fwSub');
+  if(fwState.update_available){
+    b.classList.add('fw-update');
+    t.textContent='FygoOS '+(fwState.available||'')+' available';
+    s.textContent='Tap to review';
+  }else{
+    b.classList.remove('fw-update');
+    t.textContent='Firmware '+(fwState.current||'—');
+    s.textContent=fwState.available?'Up to date · Tap for release notes':'Tap for details';
+  }
+  w.style.display='';
+}
+function checkFirmware(force){
+  // The backend already caches/throttles, so we just cache the response per
+  // session (keyed on having a current version) and render from it.
+  if(fwState&&!force){applyFw();return;}
+  fetch('api/firmware',{cache:'no-store'}).then(function(r){return r.json();})
+    .then(function(d){if(d&&d.current){fwState=d;applyFw();}}).catch(function(){});
+}
+function showFirmware(){
+  if(!fwState||!fwState.current)return;
+  document.getElementById('detailTitle').textContent='Firmware';
+  var html='';
+  if(fwState.update_available)html+=drow('Available',fwState.available);
+  html+=drow('Installed',fwState.current);
+  if(fwState.notes){
+    html+='<div class="tb-head">'+(fwState.update_available?'What’s new':'Release notes')+'</div><div class="fwnotes">';
+    fwState.notes.split(/\n/).forEach(function(line){
+      line=line.trim();if(!line)return;
+      var m=line.match(/^\[(.+)\]$/);
+      html+=m?'<div class="fwnote-sec">'+esc(m[1])+'</div>':'<div class="fwnote-line">'+esc(line)+'</div>';
+    });
+    html+='</div>';
+  }else{
+    html+='<div class="tb-hint">Release notes aren’t available yet — they’ll appear after the next successful update check.</div>';
+  }
+  if(fwState.update_available)html+='<div class="tb-hint">Install this update from the NAS web UI under Update &amp; Restore.</div>';
+  document.getElementById('detailBody').innerHTML=html;
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('detail').classList.add('show');
 }
 
 var editScroll=document.getElementById('editScroll');
@@ -135,16 +194,33 @@ function openSettings(){
 }
 function closeSettings(){document.body.classList.remove('settings-open');}
 document.getElementById('settingsDone').addEventListener('click',closeSettings);
+
+/* Generic full-screen sub-page in the Settings visual style (Ethernet, Wi-Fi,
+   Volumes, Files…). Content-heavy sections live here instead of the bottom
+   sheet. `onMount` runs after the HTML is in the DOM to wire handlers. */
+var subpageScroll=document.getElementById('subpageScroll');
+function openPage(title,html,onMount){
+  document.getElementById('subTitle').textContent=title;
+  document.getElementById('subCrumb').textContent=title;
+  subpageScroll.innerHTML=html||'';
+  subpageScroll.scrollTop=0;
+  document.body.classList.add('subpage-open');
+  if(onMount)onMount();
+}
+function closePage(){document.body.classList.remove('subpage-open');}
+document.getElementById('subDone').addEventListener('click',closePage);
 var TIMEOUTS=[[0,'Never'],[60,'1 min'],[300,'5 min'],[900,'15 min']];
 var LANGS=[['en','English'],['ja','日本語'],['zh','简体中文']];
+var FAN_PRESETS=[['silent','Silent'],['balance','Balanced'],['performance','Performance'],['custom','Custom']];
 function buildSettings(){
   var bri=(LAST&&LAST.display&&LAST.display.brightness!=null)?LAST.display.brightness:50;
   var to=(LAST&&LAST.screen&&LAST.screen.timeout_s!=null)?LAST.screen.timeout_s:0;
   var lang=(LAST&&LAST.language)||'en';
   var ledsOn=!(LAST&&LAST.leds&&LAST.leds.night); // indicator lights active when night mode is off
+  var sshOn=!!(LAST&&LAST.ssh&&LAST.ssh.enabled);
   var host=(LAST&&LAST.host&&LAST.host.name)||'—';
   var seg=TIMEOUTS.map(function(t){return '<div class="segopt'+(t[0]===to?' on':'')+'" data-s="'+t[0]+'">'+t[1]+'</div>';}).join('');
-  var langSeg=LANGS.map(function(l){return '<div class="segopt'+(l[0]===lang?' on':'')+'" data-lang="'+l[0]+'">'+l[1]+'</div>';}).join('');
+  // var langSeg=LANGS.map(function(l){return '<div class="segopt'+(l[0]===lang?' on':'')+'" data-lang="'+l[0]+'">'+l[1]+'</div>';}).join(''); // language selection: placeholder, disabled until i18n
   settingsScroll.innerHTML=
     '<div class="setgroup"><div class="setlabel">Screen</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Brightness</div><div class="setval" id="briVal">'+bri+'%</div></div>'+
@@ -158,9 +234,19 @@ function buildSettings(){
       '<div class="hairrow"></div>'+
       '<div class="setrow tap" id="hwInfoRow"><div class="lbl">Hardware Information</div><div class="chev">›</div></div>'+
     '</div></div>'+
+    '<div class="setgroup"><div class="setlabel">Cooling</div><div class="card">'+
+      '<div class="setrow"><div class="lbl">Fan profile</div></div>'+
+      '<div class="seg" id="fanSeg">'+FAN_PRESETS.map(function(f){return '<div class="segopt" data-fan="'+f[0]+'">'+f[1]+'</div>';}).join('')+'</div>'+
+    '</div></div>'+
+    /* Language selection is a placeholder — the UI is English-only until real
+       i18n lands. Hidden for now (re-enable this group + its wiring below).
     '<div class="setgroup"><div class="setlabel">General</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Language</div></div>'+
       '<div class="seg" id="langSeg">'+langSeg+'</div>'+
+    '</div></div>'+
+    */
+    '<div class="setgroup"><div class="setlabel">Remote access</div><div class="card">'+
+      '<div class="setrow"><div class="lbl">SSH (Secure Shell)</div><div class="etoggle'+(sshOn?' on':'')+'" id="sshToggle"><div class="knob"></div></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">About</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Panel app</div><div class="setval">0.1.0</div></div>'+
@@ -180,7 +266,36 @@ function buildSettings(){
     fetch('api/leds/night',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:night})}).catch(function(){});
   });
   document.getElementById('hwInfoRow').addEventListener('click',showHwInfo);
-  // Language -> persisted (UI strings still English for now; real i18n later)
+  // SSH on/off (systemctl via t6-paneld). Security-relevant → confirm first.
+  var sshT=document.getElementById('sshToggle');
+  if(sshT)sshT.addEventListener('click',function(){
+    var nowOn=!sshT.classList.contains('on');
+    showConfirm(nowOn?'Enable SSH?':'Disable SSH?',
+      nowOn?'Allow remote shell access to this NAS on port 22.':'Turn off remote shell access. Existing sessions stay connected until they close.',
+      nowOn?'Enable':'Disable', !nowOn, function(){
+        sshT.classList.toggle('on',nowOn);
+        if(LAST&&LAST.ssh)LAST.ssh.enabled=nowOn; else if(LAST)LAST.ssh={enabled:nowOn};
+        fetch('api/settings/ssh',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:nowOn})})
+          .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||'');});})
+          .then(function(){toast('SSH '+(nowOn?'enabled':'disabled'));})
+          .catch(function(){sshT.classList.toggle('on',!nowOn);toast('SSH change failed');});
+      });
+  });
+  // Fan profile -> t6-fand (highlight the active one, switch on tap)
+  fetch('api/fan',{cache:'no-store'}).then(function(r){return r.json();}).then(function(f){
+    document.querySelectorAll('#fanSeg .segopt').forEach(function(o){o.classList.toggle('on',o.dataset.fan===f.profile);});
+  }).catch(function(){});
+  document.querySelectorAll('#fanSeg .segopt').forEach(function(o){
+    o.addEventListener('click',function(){
+      document.querySelectorAll('#fanSeg .segopt').forEach(function(x){x.classList.remove('on');});
+      o.classList.add('on');
+      fetch('api/fan',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile:o.dataset.fan})})
+        .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error((t||'').trim());});})
+        .then(function(){toast('Fan profile: '+o.textContent);})
+        .catch(function(e){toast(e.message||'Fan change failed');});
+    });
+  });
+  /* Language selection disabled (placeholder until i18n). Re-enable with the group above.
   document.querySelectorAll('#langSeg .segopt').forEach(function(o){
     o.addEventListener('click',function(){
       document.querySelectorAll('#langSeg .segopt').forEach(function(x){x.classList.remove('on');});
@@ -188,6 +303,7 @@ function buildSettings(){
       fetch('api/settings/language',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c})}).catch(function(){});
     });
   });
+  */
   // Screen timeout selector -> persisted device-side
   document.querySelectorAll('#timeoutSeg .segopt').forEach(function(o){
     o.addEventListener('click',function(){
@@ -298,6 +414,11 @@ function initSlider(initial){
 function bindTiles(){
   homeScroll.querySelectorAll('[data-tile="eth"]').forEach(function(t){t.addEventListener('click',showEthDetail);});
   homeScroll.querySelectorAll('[data-tile="wifi"]').forEach(function(t){t.addEventListener('click',showWifiDetail);});
+  homeScroll.querySelectorAll('[data-tile="hotspot"]').forEach(function(t){t.addEventListener('click',showHotspot);});
+  homeScroll.querySelectorAll('[data-tile="tb4"]').forEach(function(t){t.addEventListener('click',showTbDetail);});
+  homeScroll.querySelectorAll('[data-tile="sharing"]').forEach(function(t){t.addEventListener('click',showSharing);});
+  homeScroll.querySelectorAll('[data-tile="storage"]').forEach(function(t){t.addEventListener('click',showVolumes);});
+  homeScroll.querySelectorAll('[data-tile="files"]').forEach(function(t){t.addEventListener('click',showFiles);});
   homeScroll.querySelectorAll('.tile').forEach(function(t){
     var lab=t.querySelector('.t');
     if(lab&&lab.textContent==='Settings')t.addEventListener('click',openSettings);
@@ -309,7 +430,7 @@ function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.c
 function setText(sel,v){var e=document.querySelector(sel);if(e&&v!=null)e.textContent=v;}
 function shortFan(n){return n.replace(/ fan$/,'').replace('SSD bay ','SSD ');}
 var prevNet=null, layoutApplied=false, netHist=[];
-function fmtB(b){if(b>=1e12)return (b/1e12).toFixed(1)+' TB';if(b>=1e11)return (b/1e9).toFixed(0)+' GB';if(b>=1e9)return (b/1e9).toFixed(1)+' GB';return (b/1e6).toFixed(0)+' MB';}
+function fmtB(b){b=+b||0;if(b>=1e12)return (b/1e12).toFixed(1)+' TB';if(b>=1e11)return (b/1e9).toFixed(0)+' GB';if(b>=1e9)return (b/1e9).toFixed(1)+' GB';if(b>=1e6)return (b/1e6).toFixed(0)+' MB';if(b>=1e3)return (b/1e3).toFixed(0)+' KB';return b+' B';}
 function fmtRate(bps){var mb=bps*8/1e6;if(mb<1)return (bps*8/1e3).toFixed(0)+' Kb/s';return mb.toFixed(mb<10?1:0)+' Mb/s';}
 function fmtSpeed(m){return m==null?'—':(m>=1000?(m/1000)+' Gb/s':m+' Mb/s');}
 function fmtSig(s){return s==null?'—':s+'%';}
@@ -355,6 +476,19 @@ function refresh(d){
   var wt=document.querySelector('[data-tile="wifi"]');
   if(wt){var w=nw.wifi||{},wc=w.connected&&w.ssid;wt.className='tile '+(wc?'on':'off');
     var ws=wt.querySelector('.wifi-sub');if(ws)ws.textContent=wc?w.ssid:'Off';}
+  var ht=document.querySelector('[data-tile="hotspot"]');
+  if(ht){var h=nw.hotspot||{};ht.className='tile '+(h.active?'on':'off');
+    var hs=ht.querySelector('.hotspot-sub');if(hs)hs.textContent=h.active?(h.ssid||'On'):'Off';}
+  var tt=document.querySelector('[data-tile="tb4"]');
+  if(tt){var tb=d.thunderbolt||{},devs=tb.devices||[],pend=devs.filter(function(x){return x.pending;}).length;
+    var on=devs.length>0||(tb.net||[]).some(function(x){return x.connected;});
+    tt.className='tile '+(on?'on':'off');
+    var ts=tt.querySelector('.tb-sub');
+    if(ts)ts.textContent=pend?(pend+' to authorize'):(devs.length?(devs[0].name||(devs.length+' device'+(devs.length>1?'s':''))):'No link');}
+  var sh=document.querySelector('[data-tile="sharing"]');
+  if(sh){var sg=d.sharing||{},protos=[sg.smb?'SMB':null,sg.nfs?'NFS':null].filter(Boolean);
+    sh.className='tile '+(protos.length?'on':'off');
+    var sgs=sh.querySelector('.sharing-sub');if(sgs)sgs.textContent=protos.length?protos.join(' · '):'Off';}
   // network throughput (rate from counter deltas between polls) + rolling chart
   if(d.net){var now=Date.now();
     if(prevNet){var dt=(now-prevNet.t)/1000;
@@ -371,22 +505,13 @@ function refresh(d){
 function poll(){fetch('api/panel',{cache:'no-store'}).then(function(r){return r.json();}).then(refresh).catch(function(){});}
 document.getElementById('acct').addEventListener('click',function(){
   var signedOut=document.getElementById('acct').classList.contains('signin');
-  if(FNOS){
-    // Electron: our own login screen / logout via the held fnOS session.
-    if(signedOut){showLogin();}
-    else{showConfirm('Sign out?','You will need to sign in again for files and settings.','Sign out',false,function(){
-      FNOS.logout().then(function(){fnosUser=null;setAccount();});
-    });}
-  }else{
-    // Plain-browser dev fallback.
-    var host=location.protocol+'//'+location.hostname;
-    if(signedOut){location.href=host+'/signin?redirect_uri='+encodeURIComponent(host+'/app/t6panel/');}
-    else{var port=(LAST&&LAST.session&&LAST.session.shell_port)||9600;
-      showConfirm('Sign out?','Return to the status screen.','Sign out',false,function(){location.href=location.protocol+'//'+location.hostname+':'+port+'/';});}
-  }
+  if(signedOut){showLogin();}
+  else{showConfirm('Sign out?','You will be signed out of fnOS on this panel and need to sign in again for account features.','Sign out',false,function(){
+    fetch('api/fnos/logout',{method:'POST'}).then(function(){fnosUser=null;setAccount();toast('Signed out');}).catch(function(){fnosUser=null;setAccount();});
+  });}
 });
 
-/* ---------- login screen (Electron) ---------- */
+/* ---------- login screen (native /api/fnos) ---------- */
 var loginEl=document.getElementById('login');
 function showLogin(){
   document.getElementById('loginErr').hidden=true;
@@ -400,11 +525,13 @@ function submitLogin(){
   var err=document.getElementById('loginErr'),btn=document.getElementById('loginSubmit');
   if(!u||!p){err.textContent='Enter your username and password.';err.hidden=false;return;}
   err.hidden=true;btn.classList.add('busy');btn.textContent='Signing in…';
-  FNOS.login(u,p).then(function(res){
-    btn.classList.remove('busy');btn.textContent='Sign in';
-    if(res&&res.ok){hideLogin();fnosUser=res.user;setAccount();}
-    else{err.textContent=(res&&res.error)||'Sign in failed.';err.hidden=false;}
-  }).catch(function(){btn.classList.remove('busy');btn.textContent='Sign in';err.textContent='Sign in failed.';err.hidden=false;});
+  fetch('api/fnos/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:u,password:p})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+    .then(function(res){
+      btn.classList.remove('busy');btn.textContent='Sign in';
+      if(res.ok&&res.j&&res.j.signedIn){hideLogin();fnosUser={username:res.j.username,uid:res.j.uid,admin:res.j.admin};setAccount();toast('Signed in');}
+      else{err.textContent=(res.j&&res.j.error)||'Sign in failed.';err.hidden=false;}
+    }).catch(function(){btn.classList.remove('busy');btn.textContent='Sign in';err.textContent='Sign in failed.';err.hidden=false;});
 }
 document.getElementById('loginCancel').addEventListener('click',hideLogin);
 document.getElementById('loginSubmit').addEventListener('click',submitLogin);
@@ -479,16 +606,103 @@ function showDetail(title,rows){
   document.getElementById('detail').classList.add('show');
 }
 function closeDetail(){hideWifiPass();hideEthEdit();document.getElementById('detail').classList.remove('show');document.getElementById('scrim').classList.remove('show');}
+/* ---------- Files browser (read-only, native via fnOS file.ls) ---------- */
+var filesPath=null; // null = root (volume picker)
+function fmtDate(s){if(!s)return '';var d=new Date(s*1000);return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});}
+function filesJoin(p,n){return p.replace(/\/+$/,'')+'/'+n;}
+function filesBase(p){var s=String(p||'').replace(/\/+$/,'').split('/');return s[s.length-1]||'';}
+function isVolRoot(p){return /^\/vol\d+$/.test(String(p||''));}
+function filesParent(p){if(isVolRoot(p))return null;var s=p.replace(/\/+$/,'').split('/');s.pop();var up=s.join('/');return up||null;}
+function showFiles(){
+  if(!fnosUser){toast('Sign in to browse files');showLogin();return;}
+  filesPath=null; openPage('Files','',filesRender);
+}
+function fileIcon(dir){return dir
+  ? '<span class="fico dir"></span>'
+  : '<span class="fico"></span>';}
+function fileRow(name,path,dir,meta){
+  var sub=dir?'':(meta&&meta.size!=null?fmtB(meta.size):(meta&&meta.mtim?fmtDate(meta.mtim):''));
+  return '<div class="filerow" data-path="'+esc(path)+'" data-dir="'+(dir?1:0)+'">'+fileIcon(dir)+
+    '<div class="finfo"><div class="fname">'+esc(name)+'</div>'+(sub?'<div class="fmeta">'+esc(sub)+'</div>':'')+'</div>'+
+    (dir?'<span class="chev">›</span>':'')+'</div>';
+}
+function bindFileRows(){
+  subpageScroll.querySelectorAll('.filerow').forEach(function(el){
+    el.addEventListener('click',function(){
+      if(el.dataset.dir==='1'){filesPath=el.dataset.path;filesRender();}
+      // files are read-only for now (no preview yet)
+    });
+  });
+  var up=subpageScroll.querySelector('.fc-up');
+  if(up)up.addEventListener('click',function(){filesPath=isVolRoot(filesPath)?null:filesParent(filesPath);filesRender();});
+}
+function filesRender(){
+  if(filesPath===null){
+    var vols=(LAST&&LAST.storage)||[];
+    document.getElementById('subTitle').textContent='Files';
+    subpageScroll.innerHTML='<div class="setgroup"><div class="setlabel">Volumes</div><div class="filelist">'+
+      (vols.length?vols.map(function(v){return fileRow(v.name,v.mount,true,null);}).join(''):'<div class="wifi-empty">No volumes</div>')+
+      '</div></div>';
+    bindFileRows(); return;
+  }
+  subpageScroll.innerHTML='<div class="wifi-empty">Loading…</div>';
+  var reqPath=filesPath;
+  fetch('api/fnos/files?path='+encodeURIComponent(reqPath),{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    if(filesPath!==reqPath)return; // user navigated away
+    if(d.error){subpageScroll.innerHTML='<div class="filecrumb"><span class="fc-up">‹ Back</span></div><div class="wifi-empty">'+esc(d.error)+'</div>';bindFileRows();return;}
+    var files=(d.files||(d.data&&d.data.files)||[]).slice();
+    files.sort(function(a,b){return (b.dir?1:0)-(a.dir?1:0)|| String(a.name).localeCompare(String(b.name));});
+    document.getElementById('subTitle').textContent=filesBase(filesPath)||'Files';
+    var upLabel=isVolRoot(filesPath)?'Volumes':(filesBase(filesParent(filesPath))||'Volumes');
+    var crumb='<div class="filecrumb"><span class="fc-up">‹ '+esc(upLabel)+'</span><span class="fc-path">'+esc(filesPath)+'</span></div>';
+    var list=files.length?files.map(function(f){return fileRow(f.name,filesJoin(filesPath,f.name),!!f.dir,f);}).join(''):'<div class="wifi-empty">Empty folder</div>';
+    subpageScroll.innerHTML=crumb+'<div class="filelist">'+list+'</div>';
+    bindFileRows();
+  }).catch(function(){if(filesPath===reqPath){subpageScroll.innerHTML='<div class="wifi-empty">Could not list folder.</div>';}});
+}
+
+/* ---------- Volumes / disks detail page (local lsblk + statvfs, read-only) ---------- */
+function showVolumes(){
+  openPage('Storage','<div class="wifi-empty">Loading…</div>',function(){
+    fetch('api/storage',{cache:'no-store'}).then(function(r){return r.json();}).then(renderVolumes)
+      .catch(function(){subpageScroll.innerHTML='<div class="wifi-empty">Could not read storage.</div>';});
+  });
+}
+function renderVolumes(d){
+  var vols=d.volumes||[],disks=d.disks||[],html='';
+  html+='<div class="setgroup"><div class="setlabel">Volumes</div><div class="card">'+
+    (vols.length?vols.map(function(v,i){var pct=v.total_bytes?Math.round(v.used_bytes/v.total_bytes*100):0;
+      return (i?'<div class="hairrow"></div>':'')+
+        '<div class="setrow"><div class="lbl">'+esc(v.name)+'<div class="edesc">'+esc(v.mount)+'</div></div>'+
+        '<div class="setval">'+fmtB(v.used_bytes)+' / '+fmtB(v.total_bytes)+'<div class="edesc" style="text-align:right">'+pct+'% used</div></div></div>';
+    }).join(''):'<div class="setrow"><div class="lbl muted">No data volumes</div></div>')+'</div></div>';
+  html+='<div class="setgroup"><div class="setlabel">Disks</div>';
+  if(!disks.length){html+='<div class="card"><div class="setrow"><div class="lbl muted">No disks detected</div></div></div>';}
+  else{disks.forEach(function(dk){
+    var tags=[String(dk.bus||'').toUpperCase(),dk.ssd?'SSD':'HDD'];if(dk.removable)tags.push('Removable');
+    html+='<div class="card" style="margin-bottom:22px">'+
+      '<div class="setrow"><div class="lbl">'+esc(dk.model)+'<div class="edesc">/dev/'+esc(dk.name)+(dk.serial?(' · SN '+esc(dk.serial)):'')+'</div></div><div class="setval">'+fmtB(dk.size_bytes)+'</div></div>'+
+      '<div class="dtags">'+tags.map(function(t){return '<span class="dtag">'+esc(t)+'</span>';}).join('')+'</div>'+
+      ((dk.parts&&dk.parts.length)?dk.parts.map(function(p){
+        return '<div class="hairrow"></div><div class="setrow"><div class="lbl" style="font-size:31px">'+esc(p.name)+(p.label?(' · '+esc(p.label)):'')+
+          '<div class="edesc">'+(p.fstype?esc(p.fstype):'—')+(p.mount?(' · '+esc(p.mount)):' · not mounted')+'</div></div>'+
+          '<div class="setval" style="font-size:31px">'+fmtB(p.size_bytes)+'</div></div>';
+      }).join(''):'')+'</div>';
+  });}
+  html+='</div><div class="tb-hint">Read-only overview from the panel. Manage volumes from the NAS web UI.</div>';
+  subpageScroll.innerHTML=html;
+}
+function setRows(rows){
+  return rows.filter(function(r){return r;}).map(function(r,i){
+    return (i?'<div class="hairrow"></div>':'')+'<div class="setrow"><div class="lbl">'+esc(r[0])+'</div><div class="setval">'+esc(r[1]||'—')+'</div></div>';
+  }).join('');
+}
 function showEthDetail(){
   var e=(LAST&&LAST.network&&LAST.network.ethernet)||{};
-  document.getElementById('detailTitle').textContent='Ethernet';
   var rows=[['Status',e.connected?'Connected':'Disconnected'],['Link speed',fmtSpeed(e.speed_mbps)],['IP address',e.ip],['Router',e.gateway],['DNS',(e.dns||[]).join(', ')]];
-  document.getElementById('detailBody').innerHTML=
-    rows.map(function(r){return '<div class="drow"><div class="k">'+r[0]+'</div><div class="v">'+esc(r[1]||'—')+'</div></div>';}).join('')+
-    '<div class="login-btn" id="ethEditBtn" style="margin-top:24px">Configure IPv4…</div>';
-  document.getElementById('scrim').classList.add('show');
-  document.getElementById('detail').classList.add('show');
-  document.getElementById('ethEditBtn').addEventListener('click',ethEdit);
+  var html='<div class="setgroup"><div class="setlabel">Connection</div><div class="card">'+setRows(rows)+'</div></div>'+
+    '<div class="setgroup"><div class="card"><div class="setrow tap" id="ethEditRow"><div class="lbl">Configure IPv4…</div><div class="chev">›</div></div></div></div>';
+  openPage('Ethernet',html,function(){document.getElementById('ethEditRow').addEventListener('click',ethEdit);});
 }
 /* Ethernet IPv4 editor (drives NetworkManager on the wired/OVS connection) */
 function ethSetMode(m){
@@ -496,8 +710,13 @@ function ethSetMode(m){
   document.getElementById('ethMode').dataset.m=m;
   document.getElementById('ethManual').hidden=(m!=='manual');
 }
-function ethEdit(){
-  fetch('api/network/ethernet',{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
+// Generalized IPv4 editor (shared by Ethernet and Thunderbolt-net). The caller
+// supplies where to read/write and any extra body fields (e.g. the TB conn).
+var ipv4Ctx=null;
+function ipv4Open(ctx){
+  ipv4Ctx=ctx;
+  document.getElementById('ipv4Title').textContent=ctx.title;
+  fetch(ctx.getUrl,{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
     ethSetMode(c.method==='manual'?'manual':'auto');
     var a=(c.address||'').split('/');
     document.getElementById('ethAddr').value=a[0]||'';
@@ -506,18 +725,93 @@ function ethEdit(){
     document.getElementById('ethDns').value=(c.dns||[]).join(', ');
     document.getElementById('ethErr').hidden=true;
     document.getElementById('ethedit').classList.add('on');
-  }).catch(function(){toast('Could not read Ethernet config');});
+  }).catch(function(){toast('Could not read '+ctx.title);});
 }
+function ethEdit(){ ipv4Open({title:'Ethernet IPv4',getUrl:'api/network/ethernet',postUrl:'api/network/ethernet',extra:{}}); }
+function tbNetEdit(conn){ ipv4Open({title:'Thunderbolt IPv4',getUrl:'api/thunderbolt/net?conn='+encodeURIComponent(conn),postUrl:'api/thunderbolt/net',extra:{conn:conn}}); }
 function hideEthEdit(){document.getElementById('ethedit').classList.remove('on');}
+
+/* ---------- Thunderbolt page (status + device authorization + TB networking) ---------- */
+var TB_SEC={user:'User authorization',secure:'Secure (key)',dponly:'DisplayPort only',none:'None (open)',usb4:'USB4',nopcie:'No PCIe tunnels'};
+function showTbDetail(){
+  fetch('api/thunderbolt',{cache:'no-store'}).then(function(r){return r.json();}).then(renderTb).catch(function(){toast('Could not read Thunderbolt');});
+}
+function renderTb(tb){
+  document.getElementById('detailTitle').textContent='Thunderbolt';
+  var html=drow('Controller',tb.controller)+drow('Security',TB_SEC[tb.security]||tb.security);
+  if(!tb.supported){html+='<div class="wifi-empty">No Thunderbolt controller</div>';}
+  else if(!(tb.devices||[]).length){html+='<div class="wifi-empty">No devices connected</div>';}
+  else{
+    html+=(tb.devices||[]).map(function(dv){
+      var status=dv.pending?'Pending authorization':(dv.stored?'Authorized · Remembered':'Authorized');
+      var sub=[dv.vendor,(dv.generation?'TB'+dv.generation:'')].filter(Boolean).join(' · ');
+      var btns='';
+      if(dv.pending)btns='<div class="login-btn tb-act" data-a="authorize" data-u="'+esc(dv.uuid)+'">Authorize</div><div class="login-cancel tb-act" data-a="enroll" data-u="'+esc(dv.uuid)+'">Authorize &amp; Remember</div>';
+      else if(!dv.stored)btns='<div class="login-cancel tb-act" data-a="enroll" data-u="'+esc(dv.uuid)+'">Remember this device</div>';
+      else btns='<div class="login-cancel danger tb-act" data-a="forget" data-u="'+esc(dv.uuid)+'">Forget this device</div>';
+      return '<div class="tb-dev"><div class="wifi-ap-name big">'+esc(dv.name)+'</div>'+
+        (sub?'<div class="wifi-ap-sub">'+esc(sub)+'</div>':'')+
+        '<div class="wifi-ap-sub'+(dv.pending?' tb-pending':'')+'">'+status+'</div>'+btns+'</div>';
+    }).join('');
+  }
+  if((tb.net||[]).length){
+    html+='<div class="tb-head">Thunderbolt networking</div>';
+    html+=(tb.net||[]).map(function(nif){
+      return '<div class="tb-net"><div class="wifi-ap-name">'+esc(nif.iface)+'</div>'+
+        '<div class="wifi-ap-sub">'+(nif.connected?'Connected':'Down')+' · '+esc((nif.ipv4&&nif.ipv4.address)||'no address')+'</div>'+
+        (nif.conn?'<div class="login-cancel tb-netcfg" data-c="'+esc(nif.conn)+'">Configure IPv4…</div>':'')+'</div>';
+    }).join('');
+  }else if(tb.supported){
+    html+='<div class="tb-hint">Connect another computer over Thunderbolt for a high-speed peer link (SMB over TB).</div>';
+  }
+  document.getElementById('detailBody').innerHTML=html;
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('detail').classList.add('show');
+  document.querySelectorAll('.tb-act').forEach(function(b){b.addEventListener('click',function(){tbDeviceAction(b.dataset.a,b.dataset.u);});});
+  document.querySelectorAll('.tb-netcfg').forEach(function(b){b.addEventListener('click',function(){tbNetEdit(b.dataset.c);});});
+}
+function tbDeviceAction(action,uuid){
+  toast(action==='forget'?'Forgetting…':'Authorizing…');
+  fetch('api/thunderbolt/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action,uuid:uuid})})
+    .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
+    .then(function(){toast('Done');setTimeout(function(){poll();showTbDetail();},1000);})
+    .catch(function(e){toast(e.message||'Failed');});
+}
+
+/* ---------- Sharing (SMB/NFS) — read-only status; share list gated on sign-in ---------- */
+function showSharing(){
+  fetch('api/sharing',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+    document.getElementById('detailTitle').textContent='Sharing';
+    var html=drow('SMB (Windows)',s.smb?'Enabled':'Disabled')+
+      drow('NFS (Unix / Linux)',s.nfs?'Enabled':'Disabled')+
+      drow('Active connections',String(s.connections||0));
+    html+='<div class="tb-head">Shared folders</div>';
+    if(!fnosUser){
+      html+='<div class="tb-hint">Sign in to view shared folders.</div>';
+    }else if(!(s.shares||[]).length){
+      html+='<div class="wifi-empty">No shared folders</div>';
+    }else{
+      html+=(s.shares||[]).map(function(sh){
+        return '<div class="share-row"><div class="wifi-ap-main"><div class="wifi-ap-name">'+esc(sh.name)+'</div><div class="wifi-ap-sub">'+esc(sh.path)+'</div></div><div class="share-proto">'+esc((sh.protocol||'').toUpperCase())+'</div></div>';
+      }).join('');
+    }
+    html+='<div class="tb-hint">Shares are managed from the NAS web UI.</div>';
+    document.getElementById('detailBody').innerHTML=html;
+    document.getElementById('scrim').classList.add('show');
+    document.getElementById('detail').classList.add('show');
+  }).catch(function(){toast('Could not read sharing status');});
+}
 (function(){
   var ov=document.getElementById('ethedit'); if(!ov)return;
   document.querySelectorAll('#ethMode .seg-opt').forEach(function(o){o.addEventListener('click',function(){ethSetMode(o.dataset.m);});});
   document.getElementById('ethCancel').addEventListener('click',function(){hideEthEdit();});
   document.getElementById('ethApply').addEventListener('click',function(){
+    if(!ipv4Ctx)return;
     var m=document.getElementById('ethMode').dataset.m||'auto';
     var err=document.getElementById('ethErr');
     var dns=document.getElementById('ethDns').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
     var body={method:m,dns:dns};
+    for(var k in ipv4Ctx.extra)body[k]=ipv4Ctx.extra[k];
     if(m==='manual'){
       var ip=document.getElementById('ethAddr').value.trim();
       var pfx=(document.getElementById('ethPrefix').value.trim()||'24');
@@ -527,9 +821,11 @@ function hideEthEdit(){document.getElementById('ethedit').classList.remove('on')
       body.gateway=document.getElementById('ethGw').value.trim();
     }
     err.hidden=true; toast('Applying…');
-    fetch('api/network/ethernet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    fetch(ipv4Ctx.postUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
-      .then(function(){toast('Ethernet updated');hideEthEdit();closeDetail();setTimeout(function(){poll();},1500);})
+      .then(function(){toast('Updated');hideEthEdit();
+        setTimeout(function(){fetch('api/panel',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){LAST=d;refresh(d);
+          if(document.body.classList.contains('subpage-open'))showEthDetail(); else closeDetail();}).catch(function(){});},1400);})
       .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});
   });
 })();
@@ -541,18 +837,13 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function wifiChk(r){if(!r.ok)return r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});return r.json().catch(function(){return {};});}
 function wifiBars(sig){var n=sig>=75?4:sig>=50?3:sig>=25?2:1,h=[12,19,26,33],o='';for(var i=0;i<4;i++)o+='<i style="height:'+h[i]+'px;opacity:'+(i<n?1:.3)+'"></i>';return '<div class="wbars">'+o+'</div>';}
 function wifiSub(ap){if(ap.in_use)return 'Connected';var s=ap.security||'Open';return ap.saved?('Saved · '+s):s;}
-function showWifiDetail(){
-  document.getElementById('detailTitle').textContent='Wi-Fi';
-  document.getElementById('scrim').classList.add('show');
-  document.getElementById('detail').classList.add('show');
-  wifiRender();
-}
+function showWifiDetail(){ openPage('Wi-Fi','',wifiRender); }
 function wifiRender(){
   hideWifiPass();
   var w=(LAST&&LAST.network&&LAST.network.wifi)||{},on=!!w.enabled;
-  document.getElementById('detailBody').innerHTML=
-    '<div class="drow"><div class="k">Wi-Fi</div><div class="v"><div class="etoggle'+(on?' on':'')+'" id="wifiToggle"><div class="knob"></div></div></div></div>'+
-    '<div id="wifiList" class="wifi-list">'+(on?'<div class="wifi-empty">Scanning…</div>':'<div class="wifi-empty">Wi-Fi is off</div>')+'</div>';
+  subpageScroll.innerHTML=
+    '<div class="setgroup"><div class="card"><div class="setrow"><div class="lbl">Wi-Fi</div><div class="etoggle'+(on?' on':'')+'" id="wifiToggle"><div class="knob"></div></div></div></div></div>'+
+    '<div class="setgroup"><div class="setlabel">Networks</div><div id="wifiList" class="wifi-list">'+(on?'<div class="wifi-empty">Scanning…</div>':'<div class="wifi-empty">Wi-Fi is off</div>')+'</div></div>';
   document.getElementById('wifiToggle').addEventListener('click',function(){
     fetch('api/network/wifi/radio',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!on})})
       .then(wifiChk).then(function(){setTimeout(function(){poll();wifiRender();},900);})
@@ -585,8 +876,8 @@ function wifiManage(ap){
     drow('Router',w.gateway)+
     drow('DNS',(w.dns||[]).join(', '))+
     drow('IPv6',w.ipv6);
-  document.getElementById('detailBody').innerHTML='<div class="wifi-manage"><div class="wifi-ap-name big">'+esc(ap.ssid)+'</div>'+
-    det+
+  subpageScroll.innerHTML='<div class="wifi-manage"><div class="wifi-ap-name big">'+esc(ap.ssid)+'</div>'+
+    '<div class="setgroup"><div class="card">'+det.replace(/drow/g,'setrow').replace(/class="k"/g,'class="lbl"').replace(/class="v"/g,'class="setval"')+'</div></div>'+
     '<div class="login-btn" id="wifiDisc" style="margin-top:24px">Disconnect</div>'+
     (ap.saved?'<div class="login-cancel danger" id="wifiForget">Forget this network</div>':'')+
     '<div class="login-cancel" id="wifiBack">Back</div></div>';
@@ -621,6 +912,43 @@ function hideWifiPass(){var w=document.getElementById('wifipass');if(w)w.classLi
   submit.addEventListener('click',go);
   inp.addEventListener('keydown',function(e){if(e.key==='Enter')go();});
   cancel.addEventListener('click',function(){hideWifiPass();inp.blur();});
+})();
+/* Hotspot (AP mode via t6-paneld → NetworkManager) */
+function hsSetBand(m){document.querySelectorAll('#hsBand .seg-opt').forEach(function(o){o.classList.toggle('on',o.dataset.m===m);});document.getElementById('hsBand').dataset.m=m;}
+function showHotspot(){
+  fetch('api/network/hotspot',{cache:'no-store'}).then(function(r){return r.json();}).then(function(h){
+    var active=!!h.active, ov=document.getElementById('hotspot');
+    document.getElementById('hsStatus').textContent=active?('On · '+(h.ssid||'')):'Off';
+    document.getElementById('hsSsid').value=h.ssid||'';
+    document.getElementById('hsPass').value='';
+    hsSetBand(h.band==='a'?'a':'bg');
+    document.getElementById('hsToggle').textContent=active?'Stop Hotspot':'Start Hotspot';
+    document.getElementById('hsSsid').disabled=active;
+    document.getElementById('hsPass').disabled=active;
+    document.getElementById('hsErr').hidden=true;
+    ov.dataset.active=active?'1':'';
+    ov.classList.add('on');
+    if(!active)setTimeout(function(){document.getElementById('hsSsid').focus();},60);
+  }).catch(function(){toast('Could not read hotspot status');});
+}
+function hideHotspot(){document.getElementById('hotspot').classList.remove('on');}
+(function(){
+  var ov=document.getElementById('hotspot'); if(!ov)return;
+  document.querySelectorAll('#hsBand .seg-opt').forEach(function(o){o.addEventListener('click',function(){if(!document.getElementById('hsSsid').disabled)hsSetBand(o.dataset.m);});});
+  document.getElementById('hsCancel').addEventListener('click',hideHotspot);
+  document.getElementById('hsToggle').addEventListener('click',function(){
+    var active=ov.dataset.active==='1', err=document.getElementById('hsErr'), body;
+    if(active){ body={enabled:false}; toast('Stopping hotspot…'); }
+    else{
+      var ssid=document.getElementById('hsSsid').value.trim(), pass=document.getElementById('hsPass').value, band=document.getElementById('hsBand').dataset.m||'bg';
+      if(!ssid){err.textContent='Enter a network name.';err.hidden=false;return;}
+      if(pass.length<8){err.textContent='Password must be at least 8 characters.';err.hidden=false;return;}
+      body={enabled:true,ssid:ssid,password:pass,band:band}; err.hidden=true; toast('Starting hotspot…');
+    }
+    fetch('api/network/hotspot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(wifiChk).then(function(){toast(active?'Hotspot stopped':'Hotspot started');hideHotspot();setTimeout(poll,1500);})
+      .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});
+  });
 })();
 function showHwInfo(){
   fetch('api/hwinfo',{cache:'no-store'}).then(function(r){return r.json();}).then(function(h){

@@ -65,7 +65,7 @@ payload_t6panel() {
     cp "$REPO/panel/www/"* "$app/www/"
     # The on-device kiosk: the Electron shell + its bundled Electron runtime,
     # launched at boot by the t6-panel-kiosk unit (see fpk/t6panel/cmd/common).
-    cp "$REPO/panel/app/"{main.js,preload.js,package.json,package-lock.json,run-kiosk.sh} "$app/app/"
+    cp "$REPO/panel/app/"{main.js,preload.js,package.json,package-lock.json,run-kiosk.sh,weston.ini} "$app/app/"
     chmod +x "$app/app/run-kiosk.sh"
     [ -x "$REPO/panel/app/node_modules/electron/dist/electron" ] \
         || die "panel/app/node_modules/electron missing — run 'npm ci' in panel/app first"

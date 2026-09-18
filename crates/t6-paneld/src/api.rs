@@ -43,6 +43,8 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/hwinfo"), get(get_hwinfo))
+        // Local resource monitor (CPU/mem/GPU/NPU/disks/procs) — sysfs+procfs, no login.
+        .route(&p("/api/sysmon"), get(get_sysmon))
         .route(&p("/api/leds/night"), put(put_led_night))
         .route(&p("/api/settings/ssh"), put(put_ssh))
         // Fan profile (silent/balance/performance/custom). Device-level, no login.
@@ -58,6 +60,8 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/network/wifi/disconnect"), post(post_wifi_disconnect))
         .route(&p("/api/network/wifi/forget"), post(post_wifi_forget))
         .route(&p("/api/network/wifi/radio"), put(put_wifi_radio))
+        .route(&p("/api/network/wifi/profile"), get(get_wifi_profile))
+        .route(&p("/api/network/wifi/profile"), put(put_wifi_profile))
         // Ethernet (wired) IPv4 config — DHCP/static + DNS on the OVS/wired
         // connection. Not login-gated (same physical-access model as Wi-Fi).
         .route(&p("/api/network/ethernet"), get(get_ethernet))
@@ -80,6 +84,23 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/fnos/logout"), post(post_fnos_logout))
         .route(&p("/api/fnos/net"), get(get_fnos_net))
         .route(&p("/api/fnos/files"), get(get_fnos_files))
+        .route(&p("/api/fnos/team-files"), get(get_fnos_team_files))
+        .route(&p("/api/fnos/trash"), get(get_fnos_trash))
+        .route(&p("/api/fnos/favorites"), get(get_fnos_favorites))
+        .route(&p("/api/fnos/search"), get(get_fnos_search))
+        .route(&p("/api/fnos/recent"), get(get_fnos_recent))
+        .route(&p("/api/fnos/health"), get(get_fnos_health))
+        .route(&p("/api/fnos/folder-size"), get(get_fnos_folder_size))
+        .route(&p("/api/fnos/files/mkdir"), post(post_fnos_mkdir))
+        .route(&p("/api/fnos/files/rename"), post(post_fnos_rename))
+        .route(&p("/api/fnos/files/fav"), post(post_fnos_fav))
+        .route(&p("/api/fnos/files/trash"), post(post_fnos_trash))
+        .route(&p("/api/fnos/trash/restore"), post(post_fnos_trash_restore))
+        .route(&p("/api/fnos/files/copy"), post(post_fnos_copy))
+        .route(&p("/api/fnos/files/move"), post(post_fnos_move))
+        .route(&p("/api/fnos/notifications"), get(get_fnos_notifications))
+        .route(&p("/api/fnos/notifications/read-all"), post(post_fnos_notifications_read_all))
+        .route(&p("/api/fnos/preview-cookie"), get(get_fnos_preview_cookie))
         .route(&p("/"), get(index))
         .route(&p("/{file}"), get(static_file));
     if !prefix.is_empty() {
@@ -101,6 +122,10 @@ fn session_value(headers: &HeaderMap, shell_port: Option<u16>) -> Value {
         None => Value::Null,
     }
 }
+
+/// Local resource monitor snapshot (see t6_hw_rs::sysmon). Deltas need two
+/// calls; the System page polls every ~2 s.
+async fn get_sysmon() -> Json<Value> { Json(t6_hw_rs::sysmon::snapshot()) }
 
 async fn get_panel(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
     let mut v = crate::panel::build();
@@ -305,6 +330,32 @@ async fn put_wifi_radio(Json(req): Json<WifiRadioReq>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+struct WifiProfileQ {
+    ssid: String,
+}
+
+/// Read a saved network's auto-join state (for the Wi-Fi network-detail page).
+async fn get_wifi_profile(Query(q): Query<WifiProfileQ>) -> Response {
+    match t6_hw_rs::network::autojoin(&q.ssid) {
+        Ok(a) => Json(serde_json::json!({ "ssid": q.ssid, "autoconnect": a })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct WifiProfileReq {
+    ssid: String,
+    autoconnect: bool,
+}
+
+async fn put_wifi_profile(Json(req): Json<WifiProfileReq>) -> Response {
+    match t6_hw_rs::network::set_autojoin(&req.ssid, req.autoconnect) {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "autoconnect": req.autoconnect })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
 // ---- Ethernet (wired) config ---------------------------------------------
 
 async fn get_ethernet() -> Response {
@@ -426,15 +477,436 @@ async fn get_fnos_net() -> Response {
 
 #[derive(Deserialize)]
 struct FilesQ {
-    path: String,
+    // Omitted (not empty-string) makes `file.ls`/`file.team.lsDir` return the
+    // caller's own home dir / team-folder root — see refs/fnos-api-catalog.md.
+    path: Option<String>,
+}
+
+fn ls_params(path: &Option<String>) -> serde_json::Value {
+    match path {
+        Some(p) => serde_json::json!({ "path": p }),
+        None => serde_json::json!({}),
+    }
 }
 
 /// Read-only directory listing via the fnOS file API (`file.ls`). Requires sign-in.
+/// No `path` = the caller's personal home dir (Personal Folder).
 async fn get_fnos_files(Query(q): Query<FilesQ>) -> Response {
-    match crate::fnos::call("file.ls", serde_json::json!({ "path": q.path })).await {
+    match crate::fnos::call("file.ls", ls_params(&q.path)).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
     }
+}
+
+/// Team Folder listing. The team *root* is NOT `file.team.lsDir` with no path
+/// (that returns empty) — the fnOS web client gets it from
+/// `appcgi.filestor.getTeamDirList`. Sub-paths list normally via `file.ls`.
+/// Result normalized to the browser's `{files:[{name,dir,...}]}` shape.
+async fn get_fnos_team_files(Query(q): Query<FilesQ>) -> Response {
+    match &q.path {
+        Some(p) => match crate::fnos::call("file.ls", serde_json::json!({ "path": p })).await {
+            Ok(v) => Json(v).into_response(),
+            Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+        },
+        None => match crate::fnos::call("appcgi.filestor.getTeamDirList", serde_json::json!({})).await {
+            Ok(v) => {
+                // getTeamDirList returns team share dirs; normalize whichever
+                // array key it uses into {files:[{name,path,dir:1}]}.
+                let arr = v.get("teamDirList")
+                    .or_else(|| v.get("list"))
+                    .or_else(|| v.get("dirs"))
+                    .or_else(|| v.get("teamDir"))
+                    .and_then(|a| a.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let files: Vec<serde_json::Value> = arr.into_iter().map(|mut it| {
+                    let path = it.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string();
+                    let name = it.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())
+                        .unwrap_or_else(|| path.rsplit('/').next().unwrap_or("").to_string());
+                    if let Some(o) = it.as_object_mut() {
+                        o.insert("name".into(), serde_json::json!(name));
+                        o.insert("dir".into(), serde_json::json!(1));
+                    }
+                    it
+                }).collect();
+                Json(serde_json::json!({ "files": files })).into_response()
+            }
+            Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+        },
+    }
+}
+
+/// Personal trash (`file.trash.list`) — flat, includes deletion metadata
+/// (`rmTime`/`rmUid`). Read-only: no restore/empty actions exposed yet.
+async fn get_fnos_trash() -> Response {
+    match crate::fnos::call("file.trash.list", serde_json::json!({})).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+/// Starred items (`file.fav.list`) — flat, full absolute paths (not scoped to
+/// one folder). Normalized to the same `{files:[{name,path,dir,...}]}` shape
+/// the file browser already renders, since fnOS returns it as `{fav:[...]}`
+/// with no `name` field.
+async fn get_fnos_favorites() -> Response {
+    match crate::fnos::call("file.fav.list", serde_json::json!({})).await {
+        Ok(v) => {
+            let items = v.get("fav").and_then(|f| f.as_array()).cloned().unwrap_or_default();
+            let files: Vec<serde_json::Value> = items
+                .into_iter()
+                .map(|mut it| {
+                    let name = it
+                        .get("path")
+                        .and_then(|p| p.as_str())
+                        .and_then(|p| p.rsplit('/').next())
+                        .unwrap_or("")
+                        .to_string();
+                    if let Some(obj) = it.as_object_mut() {
+                        obj.insert("name".into(), serde_json::json!(name));
+                    }
+                    it
+                })
+                .collect();
+            Json(serde_json::json!({ "files": files })).into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+/// Recently-opened items (`file.recent.list`) — server-side, shared with the
+/// fnOS web client. Shape: `{recent:[{path,dir,...}]}`.
+/// fnOS-side health for the home banner: the resource monitor's active alert
+/// ("beep") reasons — what fnOS itself would sound the buzzer for (disk
+/// failure, degraded storage, overheat, UPS…). `succ` with no payload = no
+/// active alerts. The non-empty shape isn't documented, so any list/strings in
+/// the payload are surfaced generically as `alerts:[..]`. Cheap; the UI polls
+/// it on the 30 s notification cadence.
+async fn get_fnos_health() -> Response {
+    match crate::fnos::call("appcgi.resmon.alert.getBeepReasons", serde_json::json!({})).await {
+        Ok(v) => {
+            let mut alerts: Vec<String> = Vec::new();
+            fn collect(v: &serde_json::Value, out: &mut Vec<String>) {
+                match v {
+                    serde_json::Value::String(s) => { if !s.is_empty() { out.push(s.clone()); } }
+                    serde_json::Value::Array(a) => { for x in a { collect(x, out); } }
+                    serde_json::Value::Object(o) => {
+                        for (k, x) in o {
+                            if ["req", "reqid", "result", "rev", "errno"].contains(&k.as_str()) { continue; }
+                            collect(x, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            collect(&v, &mut alerts);
+            Json(serde_json::json!({ "alerts": alerts, "raw": v })).into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+async fn get_fnos_recent() -> Response {
+    match crate::fnos::call("file.recent.list", serde_json::json!({})).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+/// Recursive size of a folder (or files) via `file.calc({files:[path]})`.
+async fn get_fnos_folder_size(Query(q): Query<FilesQ>) -> Response {
+    let path = match &q.path {
+        Some(p) => p.clone(),
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "path required" }))).into_response(),
+    };
+    match crate::fnos::call("file.calc", serde_json::json!({ "files": [path] })).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct MkdirBody { path: String, name: String }
+/// Create a folder: `file.mkdir({path})`.
+async fn post_fnos_mkdir(Json(b): Json<MkdirBody>) -> Response {
+    let full = format!("{}/{}", b.path.trim_end_matches('/'), b.name);
+    match crate::fnos::call("file.mkdir", serde_json::json!({ "path": full })).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true, "path": full })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct RenameBody { path: String, #[serde(rename = "newName")] new_name: String }
+/// Rename in place: `file.rename({path, newName})`.
+async fn post_fnos_rename(Json(b): Json<RenameBody>) -> Response {
+    match crate::fnos::call("file.rename", serde_json::json!({ "path": b.path, "newName": b.new_name })).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct FavBody { path: String, on: bool }
+/// Toggle a favorite: `file.fav.add` / `file.fav.del` ({path}).
+async fn post_fnos_fav(Json(b): Json<FavBody>) -> Response {
+    let method = if b.on { "file.fav.add" } else { "file.fav.del" };
+    match crate::fnos::call(method, serde_json::json!({ "path": b.path })).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct PathsBody { paths: Vec<String> }
+/// Move items to Trash (reversible): `file.rm({files, moveToTrashbin:true})`.
+/// Permanent delete (moveToTrashbin:false) is intentionally NOT exposed.
+async fn post_fnos_trash(Json(b): Json<PathsBody>) -> Response {
+    if b.paths.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "no paths" }))).into_response();
+    }
+    match crate::fnos::call("file.rm", serde_json::json!({ "files": b.paths, "moveToTrashbin": true })).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+/// Restore items from Trash: `file.trash.restore({files})`.
+async fn post_fnos_trash_restore(Json(b): Json<PathsBody>) -> Response {
+    if b.paths.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "no paths" }))).into_response();
+    }
+    match crate::fnos::call("file.trash.restore", serde_json::json!({ "files": b.paths })).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct TransferBody {
+    /// Absolute source paths.
+    paths: Vec<String>,
+    /// Absolute destination directory.
+    to: String,
+    /// fnOS conflict strategy (numeric enum): 0 = Skip (server default —
+    /// silently skips conflicts yet reports "succ"!), 1 = Replace, 2 = Rename
+    /// (keep both). The UI pre-checks name collisions and asks the user.
+    #[serde(default)]
+    overwrite: Option<i64>,
+    /// Debug: include the raw task frames.
+    #[serde(default)]
+    debug: Option<u8>,
+}
+
+/// Copy or move via fnOS's own task API (`file.cp` / `file.mv`). These are
+/// long-running tasks: the server streams progress frames (`result:"doing"`)
+/// and a terminal `succ`/`fail` under the request's reqid, so we collect them
+/// with `call_stream` (like finder search) to report real completion + errors.
+/// Params mirror the web client: `{files, pathTo, overwrite, details:{name,dir,count}}`.
+async fn file_transfer(method: &str, b: &TransferBody) -> Response {
+    if b.paths.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "no paths" }))).into_response();
+    }
+    let first = b.paths[0].rsplit('/').next().unwrap_or("").to_string();
+    let mut params = serde_json::json!({
+        "files": b.paths,
+        "pathTo": b.to,
+        "details": { "name": first, "count": b.paths.len() },
+    });
+    if let Some(ow) = b.overwrite {
+        params["overwrite"] = serde_json::json!(ow);
+    }
+    let budget = std::time::Duration::from_secs(90);
+    let frames = match crate::fnos::call_stream(method, params, budget).await {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    };
+    // Interpret: terminal frame = result present && != "doing".
+    let mut task_id = serde_json::Value::Null;
+    let mut terminal: Option<&serde_json::Value> = None;
+    for fr in &frames {
+        if task_id.is_null() { if let Some(t) = fr.get("taskId") { task_id = t.clone(); } }
+        if fr.get("result").and_then(|r| r.as_str()).map_or(false, |r| r != "doing") { terminal = Some(fr); }
+    }
+    let mut out = serde_json::json!({ "taskId": task_id, "frames": frames.len() });
+    match terminal {
+        Some(t) => {
+            let res = t.get("result").and_then(|r| r.as_str()).unwrap_or("");
+            out["finished"] = serde_json::json!(true);
+            out["ok"] = serde_json::json!(res == "succ");
+            out["result"] = serde_json::json!(res);
+            if let Some(e) = t.get("errno") { out["errno"] = e.clone(); }
+            if let Some(m) = t.get("errmsg").or_else(|| t.get("msg")) { out["errmsg"] = m.clone(); }
+            // conflict/detail payloads the web client uses for its dialog
+            for k in ["failedFiles", "failedFilesCount", "conflict", "conflictFiles"] {
+                if let Some(v) = t.get(k) { out[k] = v.clone(); }
+            }
+        }
+        None => {
+            // budget elapsed before a terminal frame — task may still be running
+            out["finished"] = serde_json::json!(false);
+            out["ok"] = serde_json::json!(false);
+            out["pending"] = serde_json::json!(true);
+        }
+    }
+    if b.debug.is_some() { out["raw"] = serde_json::json!(frames); }
+    Json(out).into_response()
+}
+async fn post_fnos_copy(Json(b): Json<TransferBody>) -> Response { file_transfer("file.cp", &b).await }
+async fn post_fnos_move(Json(b): Json<TransferBody>) -> Response { file_transfer("file.mv", &b).await }
+
+#[derive(Deserialize)]
+struct SearchQ {
+    /// Search keyword (name substring).
+    q: String,
+    /// fnOS finder scope: `my-files` (all the user's files, every volume),
+    /// `all-files`, `team-files`, … Defaults to `my-files`.
+    #[serde(default)]
+    scope: Option<String>,
+    /// Optional absolute path to restrict the search to one subtree.
+    #[serde(default)]
+    path: Option<String>,
+}
+
+/// Indexed name search via fnOS's finder (`appcgi.finder.fileSearch`). Unlike a
+/// `file.ls` walk this is server-side, indexed, and spans all volumes. It
+/// *streams*: the server sends many frames under one reqid (intermediate ones
+/// `result:"doing"` carrying `matchedFiles`, a terminal `result:"succ"`), which
+/// `call_stream` collects. We aggregate + de-dup `matchedFiles`, cap the count,
+/// and give each hit a `loc` (containing folder) for the results UI. Read-only.
+async fn get_fnos_search(Query(q): Query<SearchQ>) -> Response {
+    const MAX_RESULTS: usize = 200;
+    let budget = std::time::Duration::from_millis(6000);
+
+    let needle = q.q.trim();
+    if needle.is_empty() {
+        return Json(serde_json::json!({ "files": [], "capped": false })).into_response();
+    }
+    // fnOS finder params: `{key: <keyword>, path: [<dir>,…]}`. `path` is an
+    // ARRAY of search roots (omit to search everything the user can access,
+    // across all volumes). There is no `scope` field.
+    let mut obj = serde_json::Map::new();
+    obj.insert("key".into(), serde_json::json!(needle));
+    if let Some(p) = &q.path {
+        obj.insert("path".into(), serde_json::json!([p]));
+    }
+    let params = Value::Object(obj);
+    let _ = &q.scope; // scope kept in the query for the UI; not an RPC field
+
+    let frames = match crate::fnos::call_stream("appcgi.finder.fileSearch", params, budget).await {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    };
+
+    // Each frame's `data` is an incremental batch of hits. An item's `path` is
+    // its CONTAINING folder, volume-relative and WITHOUT a leading slash
+    // (e.g. "vol1/1000/Workspace"); `name` is the entry. Normalize to an
+    // absolute full path (`/vol1/1000/Workspace/<name>`) and a `loc` (parent)
+    // so the results UI can navigate/preview and show a location line.
+    let mut files: Vec<serde_json::Value> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut finished = false;
+    for fr in &frames {
+        if fr.get("result").and_then(|r| r.as_str()).map_or(false, |r| r != "doing") {
+            finished = true;
+        }
+        let batch = fr.get("data").and_then(|m| m.as_array());
+        if let Some(arr) = batch {
+            for it in arr {
+                if files.len() >= MAX_RESULTS { break; }
+                let name = it.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                if name.is_empty() { continue; }
+                let parent = it.get("path").and_then(|p| p.as_str()).unwrap_or("").trim_start_matches('/');
+                let full = if parent.is_empty() { format!("/{name}") } else { format!("/{parent}/{name}") };
+                if !seen.insert(full.clone()) { continue; }
+                let loc = if parent.is_empty() { "/".to_string() } else { format!("/{parent}") };
+                let mut e = it.clone();
+                if let Some(obj) = e.as_object_mut() {
+                    obj.insert("path".into(), serde_json::json!(full));
+                    obj.insert("loc".into(), serde_json::json!(loc));
+                }
+                files.push(e);
+            }
+        }
+    }
+    let capped = !finished || files.len() >= MAX_RESULTS;
+    Json(serde_json::json!({ "files": files, "capped": capped })).into_response()
+}
+
+#[derive(Deserialize)]
+struct NotifQ {
+    #[serde(default = "default_notif_limit")]
+    limit: i64,
+}
+fn default_notif_limit() -> i64 {
+    30
+}
+
+/// fnOS notification center: recent system notifications (`notify.list`) plus
+/// the unread badge count (`notify.unreadTotal`). Normalized to
+/// `{unread, total, items:[{id,title,content,datetime,level,read,from}]}`.
+async fn get_fnos_notifications(Query(q): Query<NotifQ>) -> Response {
+    let list = match crate::fnos::call(
+        "notify.list",
+        serde_json::json!({ "start": 0, "limit": q.limit }),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response()
+        }
+    };
+    // unreadTotal is authoritative for the badge; fall back to counting the
+    // page's unread rows if that call fails (e.g. method quirk), never fatal.
+    let unread = match crate::fnos::call("notify.unreadTotal", serde_json::json!({})).await {
+        Ok(v) => v.get("unreadTotal").and_then(|x| x.as_i64()).unwrap_or(0),
+        Err(_) => list
+            .get("notifyList")
+            .and_then(|l| l.as_array())
+            .map(|a| a.iter().filter(|n| n.get("read").and_then(|r| r.as_i64()) == Some(0)).count() as i64)
+            .unwrap_or(0),
+    };
+    let items: Vec<serde_json::Value> = list
+        .get("notifyList")
+        .and_then(|l| l.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| {
+            serde_json::json!({
+                "id": n.get("id").cloned().unwrap_or(serde_json::Value::Null),
+                "title": n.get("title").cloned().unwrap_or(serde_json::Value::Null),
+                "content": n.get("content").cloned().unwrap_or(serde_json::Value::Null),
+                "datetime": n.get("datetime").cloned().unwrap_or(serde_json::Value::Null),
+                "level": n.get("level").cloned().unwrap_or(serde_json::json!(0)),
+                "read": n.get("read").cloned().unwrap_or(serde_json::json!(1)),
+                "from": n.get("from").cloned().unwrap_or(serde_json::Value::Null),
+            })
+        })
+        .collect();
+    Json(serde_json::json!({
+        "unread": unread,
+        "total": list.get("total").cloned().unwrap_or(serde_json::json!(items.len())),
+        "items": items,
+    }))
+    .into_response()
+}
+
+/// Mark every notification read (`notify.setReadAll`). User-initiated only.
+async fn post_fnos_notifications_read_all() -> Response {
+    match crate::fnos::call("notify.setReadAll", serde_json::json!({})).await {
+        Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+/// The fnOS `ost` session cookie (minted at login from our WS ticket — see
+/// `fnos::mint_preview_cookie`), for the Electron shell to apply to its own
+/// cookie jar before embedding the Preview iframe. `cookie:null` if not
+/// signed in, or if minting failed.
+async fn get_fnos_preview_cookie() -> Response {
+    Json(serde_json::json!({ "cookie": crate::fnos::preview_cookie().await })).into_response()
 }
 
 #[derive(Deserialize)]

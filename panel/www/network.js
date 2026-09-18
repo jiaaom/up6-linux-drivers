@@ -102,7 +102,6 @@ function showSharing(){
         return '<div class="share-row"><div class="wifi-ap-main"><div class="wifi-ap-name">'+esc(sh.name)+'</div><div class="wifi-ap-sub">'+esc(sh.path)+'</div></div><div class="share-proto">'+esc((sh.protocol||'').toUpperCase())+'</div></div>';
       }).join('');
     }
-    html+='<div class="tb-hint">Shares are managed from the NAS web UI.</div>';
     document.getElementById('detailBody').innerHTML=html;
     document.getElementById('scrim').classList.add('show');
     document.getElementById('detail').classList.add('show');
@@ -138,59 +137,132 @@ function showSharing(){
 })();
 
 /* ---------- Wi-Fi config sheet (drives NetworkManager via t6-paneld) ---------- */
-var wifiAps=[], wifiPassSsid=null;
-var WIFI_LOCK='<div class="wifi-lock"><svg width="30" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></div>';
+var wifiAps=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function wifiChk(r){if(!r.ok)return r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});return r.json().catch(function(){return {};});}
-function wifiBars(sig){var n=sig>=75?4:sig>=50?3:sig>=25?2:1,h=[12,19,26,33],o='';for(var i=0;i<4;i++)o+='<i style="height:'+h[i]+'px;opacity:'+(i<n?1:.3)+'"></i>';return '<div class="wbars">'+o+'</div>';}
-function wifiSub(ap){if(ap.in_use)return 'Connected';var s=ap.security||'Open';return ap.saved?('Saved · '+s):s;}
+/* Wi-Fi signal glyph — the design's three-arc icon; arcs above the current
+   strength dim to .25. `sig` is 0..100, `stroke` an optional CSS color. */
+function wifiArcs(sig,stroke){
+  sig=+sig||0; stroke=stroke||'currentColor';
+  var o=[sig>=70?1:.25, sig>=40?1:.25, sig>0?1:.25];
+  return '<svg class="warc" viewBox="0 0 48 48" fill="none" stroke="'+stroke+'" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="M6 19a25 25 0 0 1 36 0" opacity="'+o[0]+'"/>'+
+    '<path d="M12.5 26.5a16 16 0 0 1 23 0" opacity="'+o[1]+'"/>'+
+    '<path d="M18.5 33.5a7.5 7.5 0 0 1 11 0" opacity="'+o[2]+'"/>'+
+    '<circle cx="24" cy="39.5" r="1.8" fill="'+stroke+'" stroke="none"/></svg>';
+}
+var WIFI_LOCK='<svg class="wlock" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="21" width="28" height="20" rx="4"/><path d="M17 21v-6a7 7 0 0 1 14 0v6"/></svg>';
+var WIFI_CHEV='<svg class="wchev" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 12l12 12-12 12"/></svg>';
+function wifiBand(w){return w.band||null;}
+function wifiHeroSub(w){
+  if(!w.enabled)return 'Off';
+  if(!w.connected||!w.ssid)return 'On · not connected';
+  var bits=['Connected'];if(w.band)bits.push(w.band);if(w.dbm!=null)bits.push(w.dbm+' dBm');else if(w.signal!=null)bits.push(w.signal+'%');
+  return bits.join(' · ');
+}
 function showWifiDetail(){ openPage('Wi-Fi','',wifiRender); }
 function wifiRender(){
   hideWifiPass();
   var w=(LAST&&LAST.network&&LAST.network.wifi)||{},on=!!w.enabled;
-  subpageScroll.innerHTML=
-    '<div class="setgroup"><div class="card"><div class="setrow"><div class="lbl">Wi-Fi</div><div class="etoggle'+(on?' on':'')+'" id="wifiToggle"><div class="knob"></div></div></div></div></div>'+
-    '<div class="setgroup"><div class="setlabel">Networks</div><div id="wifiList" class="wifi-list">'+(on?'<div class="wifi-empty">Scanning…</div>':'<div class="wifi-empty">Wi-Fi is off</div>')+'</div></div>';
+  var connected=on&&w.connected&&w.ssid;
+  // The subpage header already shows the big "Wi-Fi" title + Done, so the hero
+  // here is the master-switch row: live radio status on the left, toggle right.
+  var hero='<div class="wifi-hero">'+
+      '<div class="wifi-hero-main"><div class="wifi-hero-label">Wi-Fi</div>'+
+      '<div class="wifi-hero-sub">'+esc(wifiHeroSub(w))+'</div></div>'+
+      '<div class="wtoggle'+(on?' on':'')+'" id="wifiToggle"><div class="knob"></div></div></div>';
+  var connCard=connected?
+    '<div class="wifi-conn" id="wifiConnCard">'+
+      '<div class="wifi-conn-row">'+wifiArcs(w.signal,'oklch(0.82 0.11 62)')+
+        '<div class="wifi-conn-info"><div class="wifi-conn-name">'+esc(w.ssid)+'</div>'+
+        '<div class="wifi-conn-ip">'+esc(w.ip||'—')+(w.prefix!=null?' · DHCP':'')+'</div></div>'+WIFI_CHEV+'</div>'+
+      '<div class="wifi-chips">'+
+        '<div class="wchip"><div class="wchip-k">Security</div><div class="wchip-v">'+esc((w.security||'Open').split(' ')[0])+'</div></div>'+
+        '<div class="wchip"><div class="wchip-k">Router</div><div class="wchip-v">'+esc(w.gateway||'—')+'</div></div>'+
+        '<div class="wchip"><div class="wchip-k">Channel</div><div class="wchip-v">'+(w.channel!=null?w.channel:'—')+'</div></div>'+
+      '</div></div>':'';
+  var body='<div class="wifi-page">'+hero+'<div class="wifi-hair"></div>'+
+    (on?connCard+'<div id="wifiKnownWrap"></div><div id="wifiOtherWrap"></div>'+
+        '<div class="wifi-note">Known networks are joined automatically. Wi-Fi is disabled while the hotspot is on.</div>'
+       :'<div class="wifi-note" style="margin-top:24px">Wi-Fi is off. Turn it on to see available networks.</div>')+
+    '</div>';
+  subpageScroll.innerHTML=body;
   document.getElementById('wifiToggle').addEventListener('click',function(){
     fetch('api/network/wifi/radio',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!on})})
       .then(wifiChk).then(function(){setTimeout(function(){poll();wifiRender();},900);})
       .catch(function(e){toast(e.message||'Wi-Fi toggle failed');});
   });
+  var cc=document.getElementById('wifiConnCard');if(cc)cc.addEventListener('click',function(){wifiDetail(w.ssid);});
   if(on)wifiScan();
 }
-function wifiScan(){
-  fetch('api/network/wifi/scan?rescan=true',{cache:'no-store'}).then(wifiChk).then(function(aps){
-    wifiAps=aps||[];var list=document.getElementById('wifiList');if(!list)return;
-    if(!wifiAps.length){list.innerHTML='<div class="wifi-empty">No networks found</div>';return;}
-    list.innerHTML=wifiAps.map(function(ap,i){
-      return '<div class="wifi-ap" data-i="'+i+'">'+wifiBars(ap.signal)+
-        '<div class="wifi-ap-main"><div class="wifi-ap-name">'+esc(ap.ssid)+(ap.in_use?' <span class="wifi-chk">✓</span>':'')+'</div>'+
-        '<div class="wifi-ap-sub">'+esc(wifiSub(ap))+'</div></div>'+(ap.security?WIFI_LOCK:'')+'</div>';
-    }).join('');
-    list.querySelectorAll('.wifi-ap').forEach(function(el){el.addEventListener('click',function(){wifiTap(wifiAps[+el.dataset.i]);});});
-  }).catch(function(e){var list=document.getElementById('wifiList');if(list)list.innerHTML='<div class="wifi-empty">'+esc(e.message||'Scan failed')+'</div>';});
+function wifiNetRow(ap,i){
+  return '<div class="wifi-ap" data-i="'+i+'">'+wifiArcs(ap.signal)+
+    '<div class="wifi-ap-name">'+esc(ap.ssid)+'</div>'+
+    (ap.security?WIFI_LOCK:'')+WIFI_CHEV+'</div>';
 }
-function wifiTap(ap){if(!ap)return;if(ap.in_use){wifiManage(ap);return;}if(ap.saved||!ap.security){wifiDoConnect(ap.ssid,null);return;}wifiPass(ap);}
+function wifiSection(label,rowsHtml,spinner,extra){
+  return '<div class="wifi-seclabel">'+esc(label)+(spinner?'<span class="wifi-spin"></span>':'')+'</div>'+
+    '<div class="wifi-card">'+rowsHtml+(extra||'')+'</div>';
+}
+function wifiScan(){
+  var kw=document.getElementById('wifiKnownWrap'),ow=document.getElementById('wifiOtherWrap');
+  if(ow)ow.innerHTML=wifiSection('Other networks','<div class="wifi-empty">Scanning…</div>',true);
+  fetch('api/network/wifi/scan?rescan=true',{cache:'no-store'}).then(wifiChk).then(function(aps){
+    wifiAps=(aps||[]).slice();
+    var kw=document.getElementById('wifiKnownWrap'),ow=document.getElementById('wifiOtherWrap');
+    if(!ow)return;
+    // Known = saved profiles (excluding the one we're already showing as connected); Other = the rest.
+    var known=[],other=[];
+    wifiAps.forEach(function(ap,i){ap._i=i;if(ap.in_use)return;(ap.saved?known:other).push(ap);});
+    if(kw)kw.innerHTML=known.length?wifiSection('Known networks',known.map(function(ap){return wifiNetRow(ap,ap._i);}).join('')):'';
+    var otherRows=other.length?other.map(function(ap){return wifiNetRow(ap,ap._i);}).join(''):'';
+    var otherRow='<div class="wifi-ap wifi-other" id="wifiOther"><div class="wifi-ap-spacer"></div><div class="wifi-ap-name accent">Other…</div>'+WIFI_CHEV.replace('wchev','wchev accent')+'</div>';
+    if(ow)ow.innerHTML=wifiSection('Other networks',otherRows,false,otherRow);
+    subpageScroll.querySelectorAll('.wifi-ap[data-i]').forEach(function(el){el.addEventListener('click',function(){wifiTap(wifiAps[+el.dataset.i]);});});
+    var oth=document.getElementById('wifiOther');if(oth)oth.addEventListener('click',wifiHidden);
+  }).catch(function(e){var ow=document.getElementById('wifiOtherWrap');if(ow)ow.innerHTML=wifiSection('Other networks','<div class="wifi-empty">'+esc(e.message||'Scan failed')+'</div>',false);});
+}
+function wifiTap(ap){if(!ap)return;if(ap.in_use){wifiDetail(ap.ssid);return;}if(ap.saved||!ap.security){wifiDoConnect(ap.ssid,null);return;}wifiPass(ap);}
 function maskFromPrefix(p){if(p==null||p<0||p>32)return null;var m=[0,0,0,0];for(var i=0;i<p;i++)m[Math.floor(i/8)]|=128>>(i%8);return m.join('.');}
 function drow(k,v){return v?'<div class="drow"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>':'';}
-function wifiManage(ap){
+function wifiIrow(k,v,mono){return '<div class="wifi-drow"><div class="wifi-drow-k">'+esc(k)+'</div><div class="wifi-drow-v'+(mono?' mono':'')+'">'+esc(v)+'</div></div>';}
+// 6c — network detail for the connected network: auto-join, IPv4, signal, forget.
+function wifiDetail(ssid){
   var w=(LAST&&LAST.network&&LAST.network.wifi)||{};
-  var det=drow('Status','Connected')+
-    drow('Signal',w.signal!=null?w.signal+'%':null)+
-    drow('Security',w.security||ap.security)+
-    drow('IPv4',w.ip)+
-    drow('Subnet mask',maskFromPrefix(w.prefix))+
-    drow('Router',w.gateway)+
-    drow('DNS',(w.dns||[]).join(', '))+
-    drow('IPv6',w.ipv6);
-  subpageScroll.innerHTML='<div class="wifi-manage"><div class="wifi-ap-name big">'+esc(ap.ssid)+'</div>'+
-    '<div class="setgroup"><div class="card">'+det.replace(/drow/g,'setrow').replace(/class="k"/g,'class="lbl"').replace(/class="v"/g,'class="setval"')+'</div></div>'+
-    '<div class="login-btn" id="wifiDisc" style="margin-top:24px">Disconnect</div>'+
-    (ap.saved?'<div class="login-cancel danger" id="wifiForget">Forget this network</div>':'')+
-    '<div class="login-cancel" id="wifiBack">Back</div></div>';
-  document.getElementById('wifiDisc').addEventListener('click',function(){wifiNetAct('disconnect',null,'Disconnected');});
-  var fg=document.getElementById('wifiForget');if(fg)fg.addEventListener('click',function(){wifiNetAct('forget',{ssid:ap.ssid},'Network forgotten');});
-  document.getElementById('wifiBack').addEventListener('click',wifiRender);
+  var isConn=w.ssid===ssid;
+  var ipv4=isConn?(
+    wifiIrow('Configure','Automatic')+
+    wifiIrow('IP address',w.ip||'—',true)+
+    wifiIrow('Subnet mask',maskFromPrefix(w.prefix)||'—',true)+
+    wifiIrow('Router',w.gateway||'—',true)+
+    wifiIrow('DNS',(w.dns||[]).join(', ')||'—',true)
+  ):wifiIrow('Status','Saved network');
+  var chips=isConn?('<div class="wifi-seclabel">Signal</div><div class="wifi-sigchips">'+
+    '<div class="wsig"><div class="wsig-k">Strength</div><div class="wsig-v">'+(w.dbm!=null?w.dbm+' dBm':(w.signal!=null?w.signal+'%':'—'))+'</div></div>'+
+    '<div class="wsig"><div class="wsig-k">Band</div><div class="wsig-v">'+esc(w.band||'—')+'</div></div>'+
+    '<div class="wsig"><div class="wsig-k">Link</div><div class="wsig-v">'+esc(w.rate||'—')+'</div></div></div>'):'';
+  var body='<div class="wifi-page">'+
+    '<div class="wifi-card"><div class="wifi-drow"><div class="wifi-drow-k">Auto-join</div><div class="etoggle" id="wifiAuto"><div class="knob"></div></div></div></div>'+
+    '<div class="wifi-seclabel">IPv4</div><div class="wifi-card">'+ipv4+'</div>'+chips+
+    '<div class="wifi-forget" id="wifiForget">Forget this network</div></div>';
+  openPage(ssid,body,function(){
+    pageBack=function(){ showWifiDetail(); }; // "Done" returns to the Wi-Fi list, not Home
+    var t=document.getElementById('wifiAuto');
+    fetch('api/network/wifi/profile?ssid='+encodeURIComponent(ssid),{cache:'no-store'}).then(wifiChk).then(function(p){
+      if(!t)return;
+      if(p&&p.autoconnect)t.classList.add('on');
+      t.addEventListener('click',function(){
+        var on=!t.classList.contains('on');
+        fetch('api/network/wifi/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid,autoconnect:on})})
+          .then(wifiChk).then(function(){t.classList.toggle('on',on);}).catch(function(e){toast(e.message||'Failed');});
+      });
+    }).catch(function(){if(t){t.style.opacity='.4';t.title='No saved profile';}});
+    document.getElementById('wifiForget').addEventListener('click',function(){
+      showConfirm('Forget “'+ssid+'”?','This removes the saved network. You’ll need the password to reconnect.','Forget',true,function(){
+        wifiNetAct('forget',{ssid:ssid},'Network forgotten');
+      });
+    });
+  });
 }
 function wifiNetAct(action,body,okMsg){
   fetch('api/network/wifi/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})})
@@ -202,23 +274,38 @@ function wifiDoConnect(ssid,pw,onErr){
     .then(wifiChk).then(function(){toast('Connected to '+ssid);hideWifiPass();setTimeout(function(){poll();wifiRender();},1200);})
     .catch(function(e){var m=e.message||'Connection failed';if(onErr)onErr(m);else toast(m);});
 }
-// Password entry is a centered overlay (like sign-in) so the keyboard, which
-// covers the bottom sheet, doesn't hide the field.
-function wifiPass(ap){
-  wifiPassSsid=ap.ssid;
-  document.getElementById('wpSub').textContent=ap.ssid;
-  var inp=document.getElementById('wpInput');inp.value='';document.getElementById('wpErr').hidden=true;
-  document.getElementById('wifipass').classList.add('on');
-  setTimeout(function(){inp.focus();},60);
+/* Password / hidden-network entry reuses the app's shared centered overlay +
+   the global on-screen keyboard (#osk, account.js), which auto-shows when any
+   text field is focused — same pattern as sign-in, Ethernet and Hotspot.
+   `hidden` mode reveals an extra SSID field for joining an unlisted network. */
+function wifiPass(ap){ wifiOpenPass(ap.ssid,false); }
+function wifiHidden(){ wifiOpenPass('',true); }
+function wifiOpenPass(ssid,hidden){
+  var el=document.getElementById('wifipass');
+  document.getElementById('wpTitle').textContent=hidden?'Other network':'Enter password';
+  document.getElementById('wpSub').textContent=hidden?'Join a network that isn’t listed':ssid;
+  var ssidInp=document.getElementById('wpSsid'),inp=document.getElementById('wpInput');
+  ssidInp.hidden=!hidden;ssidInp.value=hidden?'':ssid;
+  inp.value='';document.getElementById('wpErr').hidden=true;
+  el.dataset.hidden=hidden?'1':'';el.classList.add('on');
+  setTimeout(function(){(hidden?ssidInp:inp).focus();},60);
 }
 function hideWifiPass(){var w=document.getElementById('wifipass');if(w)w.classList.remove('on');}
 (function(){
-  var submit=document.getElementById('wpSubmit'),cancel=document.getElementById('wpCancel'),inp=document.getElementById('wpInput');
-  if(!submit)return;
-  function go(){var pw=inp.value;if(!pw)return;wifiDoConnect(wifiPassSsid,pw,function(m){var e=document.getElementById('wpErr');e.textContent=m;e.hidden=false;});}
+  var el=document.getElementById('wifipass');if(!el)return;
+  var submit=document.getElementById('wpSubmit'),cancel=document.getElementById('wpCancel');
+  var ssidInp=document.getElementById('wpSsid'),inp=document.getElementById('wpInput');
+  function go(){
+    var hidden=el.dataset.hidden==='1';
+    var ssid=hidden?ssidInp.value.trim():document.getElementById('wpSub').textContent;
+    if(hidden&&!ssid){var e=document.getElementById('wpErr');e.textContent='Enter a network name.';e.hidden=false;ssidInp.focus();return;}
+    var pw=inp.value;
+    wifiDoConnect(ssid,pw,function(m){var e=document.getElementById('wpErr');e.textContent=m;e.hidden=false;});
+  }
   submit.addEventListener('click',go);
   inp.addEventListener('keydown',function(e){if(e.key==='Enter')go();});
-  cancel.addEventListener('click',function(){hideWifiPass();inp.blur();});
+  ssidInp.addEventListener('keydown',function(e){if(e.key==='Enter')inp.focus();});
+  cancel.addEventListener('click',function(){hideWifiPass();inp.blur();ssidInp.blur();});
 })();
 /* Hotspot (AP mode via t6-paneld → NetworkManager) */
 function hsSetBand(m){document.querySelectorAll('#hsBand .seg-opt').forEach(function(o){o.classList.toggle('on',o.dataset.m===m);});document.getElementById('hsBand').dataset.m=m;}
@@ -269,6 +356,6 @@ document.getElementById('detailClose').addEventListener('click',closeDetail);
 document.getElementById('scrim').addEventListener('click',closeDetail);
 
 confirmEl=document.getElementById('confirm');
-renderHome();
+if(!restoreHomeFromCache())renderHome(); // cached layout + storage figures first; the poll refines
 poll();setInterval(poll,2000);
 refreshFnos(); // pick up an existing Electron/fnOS session for the account chip

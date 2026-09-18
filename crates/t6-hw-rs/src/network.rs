@@ -38,6 +38,16 @@ pub struct Wifi {
     pub dns: Vec<String>,
     /// First non-link-local IPv6 address (with prefix), if any.
     pub ipv6: Option<String>,
+    /// Signal strength in dBm (from /proc/net/wireless), e.g. -39. `iw` isn't
+    /// installed on this box, so we read the wireless-ext level column.
+    pub dbm: Option<i32>,
+    /// Human band label derived from the associated frequency: "2.4 GHz",
+    /// "5 GHz", or "6 GHz".
+    pub band: Option<String>,
+    /// Wi-Fi channel of the associated AP (nmcli CHAN).
+    pub channel: Option<u32>,
+    /// Negotiated link rate as nmcli reports it, e.g. "270 Mbit/s".
+    pub rate: Option<String>,
 }
 
 #[derive(Serialize, Default)]
@@ -94,6 +104,23 @@ fn first_iface(prefixes: &[&str]) -> Option<String> {
 
 fn tok_after(toks: &[&str], key: &str) -> Option<String> {
     toks.iter().position(|&t| t == key).and_then(|i| toks.get(i + 1)).map(|s| s.to_string())
+}
+
+/// Signal level in dBm from `/proc/net/wireless` (the wireless-extensions
+/// "level" column), since `iw` isn't installed here. Line shape:
+/// `wlpXsY: 0000   70.  -39.  -256  ...` → status, link, level, noise.
+fn wifi_dbm(iface: &Option<String>) -> Option<i32> {
+    let iface = iface.as_deref()?;
+    let body = std::fs::read_to_string("/proc/net/wireless").ok()?;
+    for line in body.lines() {
+        let line = line.trim_start();
+        if let Some(rest) = line.strip_prefix(iface).and_then(|r| r.strip_prefix(':')) {
+            // rest = "0000   70.  -39.  -256 ..."; level is the 3rd whitespace token.
+            let lvl = rest.split_whitespace().nth(2)?;
+            return lvl.trim_end_matches('.').parse::<i32>().ok();
+        }
+    }
+    None
 }
 
 /// The default route carried over Wi-Fi (`is_wifi`) or not: (gateway, dev, src_ip).
@@ -182,17 +209,27 @@ pub fn info() -> Network {
         let v6 = nmcli_field(&wl, "IP6.ADDRESS");
         n.wifi.ipv6 = v6.iter().find(|a| !a.to_lowercase().starts_with("fe80")).or_else(|| v6.first()).cloned();
         n.wifi.iface = Some(wl);
-        if let Some(out) = run("nmcli", &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi"]) {
+        if let Some(out) = run(
+            "nmcli",
+            &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY,CHAN,RATE,FREQ", "device", "wifi"],
+        ) {
             for line in out.lines() {
                 let f = split_terse(line);
                 if f.first().map(|s| s == "*").unwrap_or(false) {
                     n.wifi.ssid = f.get(1).filter(|s| !s.is_empty()).cloned();
                     n.wifi.signal = f.get(2).and_then(|s| s.parse().ok());
                     n.wifi.security = f.get(3).filter(|s| !s.is_empty()).cloned();
+                    n.wifi.channel = f.get(4).and_then(|s| s.parse().ok());
+                    n.wifi.rate = f.get(5).filter(|s| !s.is_empty()).cloned();
+                    // FREQ is like "5745 MHz" → band bucket.
+                    n.wifi.band = f.get(6).and_then(|s| s.split_whitespace().next()).and_then(|m| m.parse::<u32>().ok()).map(|mhz| {
+                        if mhz >= 5925 { "6 GHz" } else if mhz >= 4900 { "5 GHz" } else { "2.4 GHz" }.to_string()
+                    });
                     break;
                 }
             }
         }
+        n.wifi.dbm = wifi_dbm(&n.wifi.iface);
     }
     n.hotspot = hotspot_status();
     n
@@ -331,6 +368,20 @@ pub fn forget(ssid: &str) -> Result<(), String> {
 /// Turn the Wi-Fi radio on or off.
 pub fn set_radio(on: bool) -> Result<(), String> {
     nmcli_ok(&["radio", "wifi", if on { "on" } else { "off" }]).map(|_| ())
+}
+
+/// Whether the saved profile for an SSID auto-joins (connection.autoconnect).
+pub fn autojoin(ssid: &str) -> Result<bool, String> {
+    let name = saved_wifi_profile(ssid).ok_or("no saved network for that SSID")?;
+    let out = nmcli_ok(&["-t", "-f", "connection.autoconnect", "connection", "show", &name])?;
+    // Terse output is "connection.autoconnect:yes".
+    Ok(out.split(':').nth(1).map(|v| v.trim() == "yes").unwrap_or(true))
+}
+
+/// Set whether the saved profile for an SSID auto-joins.
+pub fn set_autojoin(ssid: &str, on: bool) -> Result<(), String> {
+    let name = saved_wifi_profile(ssid).ok_or("no saved network for that SSID")?;
+    nmcli_ok(&["connection", "modify", "id", &name, "connection.autoconnect", if on { "yes" } else { "no" }]).map(|_| ())
 }
 
 // ---- Ethernet config (writes go through NetworkManager) ------------------

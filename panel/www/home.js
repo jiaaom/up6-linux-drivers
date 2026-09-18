@@ -4,49 +4,60 @@ var META={
   storage:{title:'Storage',desc:'Collapse after 2 volumes'},
   system:{title:'System',desc:'CPU · GPU · memory · 3 fans'},
   conn:{title:'Connectivity',desc:'6 tiles · choose which'},
-  task:{title:'Task center',desc:'Always visible'},
+  filemgr:{title:'File Manager',desc:'Personal · Team · Trash · Favorites'},
+  notif:{title:'Notifications',desc:'System alerts & activity'},
   net:{title:'Network traffic',desc:'Live throughput graph'},
-  events:{title:'Recent events',desc:'Log of notable activity'},
 };
-var order=['storage','system','conn','task','net','events'];
-var visible={storage:1,system:1,conn:1,task:1,net:1,events:0};
+var order=['storage','system','conn','filemgr','notif','net'];
+var visible={storage:1,system:1,conn:1,filemgr:1,notif:1,net:1};
 
 var CONTENT={
   storage:`<div class="card" data-tile="storage">
-      <div class="row-sb"><div style="font-size:32px" class="muted">Storage</div><div style="display:flex;align-items:center;gap:16px"><span style="font-size:30px" class="muted2" id="volCount">—</span><span style="font-size:34px;opacity:.4">›</span></div></div>
-      <div class="vols" style="margin-top:26px"></div></div>`,
-  system:`<div class="card">
+      <div class="row-sb"><div style="font-size:16px" class="muted">Storage</div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:15px" class="muted2" id="volCount">—</span><span style="font-size:17px;opacity:.4">›</span></div></div>
+      <div class="vols" style="margin-top:13px"></div></div>`,
+  system:`<div class="card tap" data-tile="system">
       <div style="display:flex;justify-content:space-between">
-        <div><div style="font-size:32px" class="muted">CPU</div><div class="tname"><span class="f-cpu">44</span>°</div></div>
-        <div><div style="font-size:32px" class="muted">GPU</div><div class="tname"><span class="f-gpu">41</span>°</div></div>
-        <div><div style="font-size:32px" class="muted">Memory</div><div class="tname"><span class="f-mem">61</span>%</div></div>
-        <div><div style="font-size:32px" class="muted">Drives</div><div class="tname"><span class="f-drives">38</span>°</div></div></div>
-      <div style="display:flex;align-items:center;gap:26px;margin-top:26px;padding-top:24px;border-top:1px solid oklch(1 0 0 / .09)">
-        <div style="font-size:32px;flex:none" class="muted">Fans</div>
-        <div class="fanlist" style="display:flex;gap:16px;flex:1">
-          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:18px;padding:14px 18px"><div style="font-size:30px" class="muted2">CPU</div><div style="font-size:36px;font-weight:500">1180</div></div>
-          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:18px;padding:14px 18px"><div style="font-size:30px" class="muted2">SSD 1-2</div><div style="font-size:36px;font-weight:500">1240</div></div>
-          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:18px;padding:14px 18px"><div style="font-size:30px" class="muted2">SSD 3-6</div><div style="font-size:36px;font-weight:500">980</div></div>
+        <div><div style="font-size:16px" class="muted">CPU</div><div class="tname"><span class="f-cpu">44</span>°</div></div>
+        <div><div style="font-size:16px" class="muted">GPU</div><div class="tname"><span class="f-gpu">41</span>°</div></div>
+        <div><div style="font-size:16px" class="muted">Memory</div><div class="tname"><span class="f-mem">61</span>%</div></div>
+        <div><div style="font-size:16px" class="muted">Drives</div><div class="tname"><span class="f-drives">38</span>°</div></div></div>
+      <div style="display:flex;align-items:center;gap:13px;margin-top:13px;padding-top:12px;border-top:0.5px solid oklch(1 0 0 / .09)">
+        <div style="font-size:16px;flex:none" class="muted">Fans</div>
+        <div class="fanlist" style="display:flex;gap:8px;flex:1">
+          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">CPU</div><div style="font-size:18px;font-weight:500">1180</div></div>
+          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">SSD 1-2</div><div style="font-size:18px;font-weight:500">1240</div></div>
+          <div style="flex:1;background:oklch(1 0 0 / .05);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">SSD 3-6</div><div style="font-size:18px;font-weight:500">980</div></div>
         </div></div></div>`,
   conn:`<div class="grid">
-      <div class="tile on" data-tile="eth"><div style="width:44px;height:30px;border:4px solid var(--amber);border-radius:8px"></div><div><div class="t">Ethernet</div><div class="s muted eth-sub">—</div></div></div>
-      <div class="tile on" data-tile="wifi"><div style="display:flex;align-items:flex-end;gap:6px;height:34px"><div style="width:8px;height:12px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:20px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:27px;border-radius:4px;background:var(--amber)"></div><div style="width:8px;height:34px;border-radius:4px;background:var(--amber);opacity:.35"></div></div><div><div class="t">Wi-Fi</div><div class="s muted wifi-sub">—</div></div></div>
-      <div class="tile off" data-tile="hotspot"><div style="width:34px;height:34px;border-radius:17px;border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">Hotspot</div><div class="s muted2 hotspot-sub">Off</div></div></div>
-      <div class="tile off" data-tile="tb4"><div style="width:34px;height:34px;border-radius:9px;transform:rotate(45deg);border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">TB4</div><div class="s muted2 tb-sub">No link</div></div></div>
-      <div class="tile on" data-tile="sharing"><div style="display:flex;gap:6px"><div style="width:16px;height:34px;border-radius:5px;background:var(--amber)"></div><div style="width:16px;height:34px;border-radius:5px;background:var(--amber);opacity:.55"></div></div><div><div class="t">Sharing</div><div class="s muted sharing-sub">SMB · NFS</div></div></div>
-      <div class="tile on" data-tile="files"><div style="width:42px;height:32px;border:4px solid var(--amber);border-radius:8px;position:relative"><div style="position:absolute;top:-10px;left:-2px;width:20px;height:10px;border:4px solid var(--amber);border-bottom:none;border-top-left-radius:6px;border-top-right-radius:6px"></div></div><div><div class="t">Files</div><div class="s muted2 files-sub">Browse</div></div></div>
-      <div class="tile off"><div style="width:34px;height:34px;border-radius:17px;border:4px solid oklch(1 0 0 / .28)"></div><div><div class="t">Settings</div><div class="s muted2">Screen · SSH</div></div></div></div>`,
-  task:`<div class="taskrow">
-      <div style="width:50px;height:50px;border-radius:25px;border:5px solid oklch(0.74 0.12 62 / .28);border-top-color:var(--amber2);animation:spin 1.4s linear infinite"></div>
-      <div style="flex:1"><div style="font-size:33px;font-weight:500">Task center</div><div style="font-size:31px" class="muted">2 running</div></div>
-      <div style="min-width:52px;height:52px;padding:0 16px;border-radius:26px;background:var(--amber2);color:oklch(0.2 0.04 62);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:600">2</div></div>`,
-  net:`<div class="card"><div class="row-sb"><div style="font-size:32px" class="muted">Network traffic</div><div style="font-size:30px" class="muted2">last 60 s</div></div>
-      <div class="netbars" style="display:flex;align-items:flex-end;gap:7px;height:150px;margin-top:24px"></div>
-      <div class="row-sb" style="margin-top:20px"><span style="font-size:31px" class="muted net-dn">↓ —</span><span style="font-size:31px" class="muted net-up">↑ —</span></div></div>`,
-  events:`<div class="card"><div style="font-size:32px" class="muted">Recent events</div>
-      <div style="margin-top:22px;font-size:31px;display:flex;gap:18px"><span class="muted2">21:40</span><span>Backup to USB_4TB completed</span></div>
-      <div style="margin-top:16px;font-size:31px;display:flex;gap:18px"><span class="muted2">18:02</span><span>Volume 4 above 90% full</span></div>
-      <div style="margin-top:16px;font-size:31px;display:flex;gap:18px"><span class="muted2">09:15</span><span>SMB share “media” accessed</span></div></div>`,
+      <div class="tile on" data-tile="eth"><div style="width:22px;height:15px;border:2px solid var(--amber);border-radius:4px"></div><div><div class="t">Ethernet</div><div class="s muted eth-sub">—</div></div></div>
+      <div class="tile on" data-tile="wifi"><div style="display:flex;align-items:flex-end;gap:3px;height:17px"><div style="width:4px;height:6px;border-radius:2px;background:var(--amber)"></div><div style="width:4px;height:10px;border-radius:2px;background:var(--amber)"></div><div style="width:4px;height:13.5px;border-radius:2px;background:var(--amber)"></div><div style="width:4px;height:17px;border-radius:2px;background:var(--amber);opacity:.35"></div></div><div><div class="t">Wi-Fi</div><div class="s muted wifi-sub">—</div></div></div>
+      <div class="tile off" data-tile="hotspot"><div style="width:17px;height:17px;border-radius:8.5px;border:2px solid oklch(1 0 0 / .28)"></div><div><div class="t">Hotspot</div><div class="s muted2 hotspot-sub">Off</div></div></div>
+      <div class="tile off" data-tile="tb4"><div style="width:17px;height:17px;border-radius:4.5px;transform:rotate(45deg);border:2px solid oklch(1 0 0 / .28)"></div><div><div class="t">TB4</div><div class="s muted2 tb-sub">No link</div></div></div>
+      <div class="tile on" data-tile="sharing"><div style="display:flex;gap:3px"><div style="width:8px;height:17px;border-radius:2.5px;background:var(--amber)"></div><div style="width:8px;height:17px;border-radius:2.5px;background:var(--amber);opacity:.55"></div></div><div><div class="t">Sharing</div><div class="s muted sharing-sub">SMB · NFS</div></div></div>
+      <div class="tile off"><div style="width:17px;height:17px;border-radius:8.5px;border:2px solid oklch(1 0 0 / .28)"></div><div><div class="t">Settings</div><div class="s muted2">Screen · SSH</div></div></div></div>`,
+  filemgr:`<div class="card fm-homecard">
+      <div class="fm-hc-head" data-tile="filemgr-all">
+        <div class="fm-hc-title"><svg width="19" height="19" viewBox="0 0 48 48" fill="none" stroke="var(--amber)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v20a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V19a3 3 0 0 0-3-3H24l-4-5H9a3 3 0 0 0-3 3z"/></svg><span>Files</span></div>
+        <div class="fm-hc-all">All shortcuts ›</div>
+      </div>
+      <div class="fm-hc-grid">
+        <div class="fm-hc-tile" data-tile="filemgr-personal"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v20a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V19a3 3 0 0 0-3-3H24l-4-5H9a3 3 0 0 0-3 3z"/><circle cx="24" cy="25" r="4"/><path d="M17 35a7 7 0 0 1 14 0"/></svg><div class="fm-hc-l">Personal</div></div>
+        <div class="fm-hc-tile" data-tile="filemgr-team"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v20a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V19a3 3 0 0 0-3-3H24l-4-5H9a3 3 0 0 0-3 3z"/><circle cx="19" cy="25" r="3.5"/><circle cx="30" cy="25" r="3.5"/><path d="M13 35a6 6 0 0 1 12 0M25 35a6 6 0 0 1 11-1"/></svg><div class="fm-hc-l">Team</div></div>
+        <div class="fm-hc-tile" data-tile="filemgr-trash"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15h30"/><path d="M19 15v-4h10v4"/><path d="M13 15l2.5 24a3 3 0 0 0 3 2.7h11a3 3 0 0 0 3-2.7L35 15"/><path d="M21 23v11M27 23v11"/></svg><div class="fm-hc-l">Trash</div></div>
+        <div class="fm-hc-tile" data-tile="filemgr-fav"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M24 7l5.3 10.8 11.9 1.7-8.6 8.4 2 11.9L24 34.2l-10.6 5.6 2-11.9-8.6-8.4 11.9-1.7L24 7z"/></svg><div class="fm-hc-l">Favorites</div></div>
+      </div></div>`,
+  notif:`<div class="card" data-tile="notif">
+      <div class="row-sb">
+        <div style="display:flex;align-items:center;gap:9px">
+          <svg width="17" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <div style="font-size:16px" class="muted">Notifications</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px"><span class="notif-badge" style="display:none"></span><span style="font-size:17px;opacity:.4">›</span></div>
+      </div>
+      <div class="notif-preview" style="margin-top:13px"><div class="notif-empty muted2" style="font-size:15px">Loading…</div></div></div>`,
+  net:`<div class="card"><div class="row-sb"><div style="font-size:16px" class="muted">Network traffic</div><div style="font-size:15px" class="muted2">last 60 s</div></div>
+      <div class="netbars" style="display:flex;align-items:flex-end;gap:3.5px;height:75px;margin-top:12px"></div>
+      <div class="row-sb" style="margin-top:10px"><span style="font-size:15.5px" class="muted net-dn">↓ —</span><span style="font-size:15.5px" class="muted net-up">↑ —</span></div></div>`,
 };
 
 var homeScroll=document.getElementById('homeScroll');
@@ -59,12 +70,13 @@ function renderHome(){
   });
   var fw=document.createElement('div');fw.className='widget';fw.id='fwWidget';fw.style.display='none';
   fw.innerHTML=`<div class="fwbanner"><div class="fwdot"></div>
-      <div style="flex:1"><div id="fwTitle" style="font-size:33px;font-weight:500"></div><div id="fwSub" style="font-size:31px" class="muted"></div></div>
-      <div style="font-size:36px;opacity:.45">›</div></div>`;
+      <div style="flex:1"><div id="fwTitle" style="font-size:16.5px;font-weight:500"></div><div id="fwSub" style="font-size:15.5px" class="muted"></div></div>
+      <div style="font-size:18px;opacity:.45">›</div></div>`;
   fw.addEventListener('click',showFirmware);
   homeScroll.appendChild(fw);
   bindTiles();
   checkFirmware();
+  if(window.paintHomeCached)paintHomeCached(); // storage card from live/cached data, not an empty shell until the next poll
 }
 
 // Firmware update check (show-only, no install). The backend serves the public
@@ -112,7 +124,6 @@ function showFirmware(){
   }else{
     html+='<div class="tb-hint">Release notes aren’t available yet — they’ll appear after the next successful update check.</div>';
   }
-  if(fwState.update_available)html+='<div class="tb-hint">Install this update from the NAS web UI under Update &amp; Restore.</div>';
   document.getElementById('detailBody').innerHTML=html;
   document.getElementById('scrim').classList.add('show');
   document.getElementById('detail').classList.add('show');
@@ -151,6 +162,7 @@ document.getElementById('donebtn').addEventListener('click',function(){
   var hidden=order.filter(function(id){return !visible[id];});
   fetch('api/settings/dashboard',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({order:order,hidden:hidden})}).catch(function(){});
   if(LAST)LAST.dashboard={order:order.slice(),hidden:hidden.slice()};
+  if(window.homeCacheSave)homeCacheSave({dashboard:{order:order.slice(),hidden:hidden.slice()}});
   renderHome();
 });
 

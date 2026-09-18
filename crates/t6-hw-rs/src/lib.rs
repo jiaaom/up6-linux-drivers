@@ -15,4 +15,5 @@ pub mod sensors;
 pub mod sharing;
 pub mod ssh;
 pub mod storage;
+pub mod sysmon;
 pub mod thunderbolt;

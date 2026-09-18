@@ -26,8 +26,10 @@ mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
 # Start weston on the DRM output if it isn't already up on our socket.
+# --config points at our own weston.ini (2x output scale on the touch panel —
+# see that file for why), rather than relying on any system-wide weston config.
 if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
-  weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 &
+  weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --config="$APP_DIR/weston.ini" &
   for _ in $(seq 1 40); do
     [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
     sleep 0.25

@@ -5,7 +5,7 @@
 //! or without a login. Volume *contents* are a separate, login-gated concern.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 #[derive(Debug, Serialize)]
@@ -102,7 +102,59 @@ pub struct Part {
     pub size_bytes: u64,
     pub fstype: Option<String>,
     pub label: Option<String>,
+    /// Where the data on this partition is reachable. For a plain filesystem
+    /// that's its own mountpoint; for a pool/array member it's the mount of
+    /// what is built on top (see `via`), which lsblk alone reports as empty.
     pub mount: Option<String>,
+    /// How `mount` was reached when the partition isn't mounted directly:
+    /// "ZFS pool <name>" or the stacked device chain, e.g. "md2 → LVM".
+    pub via: Option<String>,
+}
+
+/// ZFS pool name → mountpoint of its root dataset, from /proc/self/mounts
+/// (the source of a zfs mount is the dataset name, `pool` or `pool/child`).
+fn zfs_pool_mounts() -> BTreeMap<String, String> {
+    let text = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+    let mut out = BTreeMap::new();
+    for line in text.lines() {
+        let mut f = line.split_whitespace();
+        let (Some(src), Some(mnt), Some(fs)) = (f.next(), f.next(), f.next()) else { continue };
+        if fs != "zfs" {
+            continue;
+        }
+        let pool = src.split('/').next().unwrap_or(src).to_string();
+        // Prefer the root dataset; otherwise the shortest path (closest to the root).
+        let e = out.entry(pool.clone()).or_insert_with(|| mnt.to_string());
+        if src == pool || (mnt.len() < e.len() && !e.is_empty()) {
+            *e = mnt.to_string();
+        }
+    }
+    out
+}
+
+/// Walk down the devices stacked on `c` (md → LVM → filesystem, …) to the first
+/// one that is mounted. Returns (mount, chain of device names walked through).
+fn stacked_mount(c: &LsblkDev, chain: &mut Vec<String>) -> Option<String> {
+    for ch in &c.children {
+        if let Some(m) = ch.mountpoint.as_deref().filter(|s| !s.is_empty()) {
+            chain.push(stack_label(ch));
+            return Some(m.to_string());
+        }
+        chain.push(stack_label(ch));
+        if let Some(m) = stacked_mount(ch, chain) {
+            return Some(m);
+        }
+        chain.pop();
+    }
+    None
+}
+
+fn stack_label(d: &LsblkDev) -> String {
+    match d.dtype.as_deref() {
+        Some("lvm") => "LVM".into(),
+        Some("crypt") => "LUKS".into(),
+        _ => d.name.clone(),
+    }
 }
 
 #[derive(Serialize)]
@@ -118,13 +170,34 @@ pub struct Disk {
     pub parts: Vec<Part>,
 }
 
-fn part_of(c: &LsblkDev) -> Part {
-    Part {
-        name: c.name.clone(),
-        size_bytes: c.size.unwrap_or(0),
-        fstype: c.fstype.clone().filter(|s| !s.is_empty()),
-        label: c.label.clone().filter(|s| !s.is_empty()),
-        mount: c.mountpoint.clone().filter(|s| !s.is_empty()),
+fn part_of(c: &LsblkDev, zfs: &BTreeMap<String, String>) -> Part {
+    let fstype = c.fstype.clone().filter(|s| !s.is_empty());
+    let label = c.label.clone().filter(|s| !s.is_empty());
+    let mut mount = c.mountpoint.clone().filter(|s| !s.is_empty());
+    let mut via = None;
+    if mount.is_none() {
+        if fstype.as_deref() == Some("zfs_member") {
+            // lsblk's LABEL of a zfs_member is the pool name.
+            if let Some(m) = label.as_ref().and_then(|p| zfs.get(p)) {
+                mount = Some(m.clone());
+                via = label.as_ref().map(|p| format!("ZFS pool {}", short_pool(p)));
+            }
+        } else {
+            let mut chain = Vec::new();
+            if let Some(m) = stacked_mount(c, &mut chain) {
+                mount = Some(m);
+                via = Some(chain.join(" → "));
+            }
+        }
+    }
+    Part { name: c.name.clone(), size_bytes: c.size.unwrap_or(0), fstype, label, mount, via }
+}
+
+/// fnOS names pools `trim_<uuid>`; keep that readable on a small screen.
+fn short_pool(p: &str) -> String {
+    match p.strip_prefix("trim_") {
+        Some(rest) if rest.len() > 8 => format!("trim_{}…", &rest[..8]),
+        _ => p.to_string(),
     }
 }
 
@@ -141,6 +214,7 @@ pub fn disks() -> Vec<Disk> {
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
+    let zfs = zfs_pool_mounts();
     root.blockdevices
         .into_iter()
         .filter(|d| d.dtype.as_deref() == Some("disk"))
@@ -151,7 +225,7 @@ pub fn disks() -> Vec<Disk> {
             bus: d.tran.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| "—".into()),
             ssd: !d.rota.unwrap_or(true),
             removable: d.rm.unwrap_or(false) || d.hotplug.unwrap_or(false),
-            parts: d.children.iter().filter(|c| c.dtype.as_deref() == Some("part")).map(part_of).collect(),
+            parts: d.children.iter().filter(|c| c.dtype.as_deref() == Some("part")).map(|c| part_of(c, &zfs)).collect(),
             name: d.name,
         })
         .collect()

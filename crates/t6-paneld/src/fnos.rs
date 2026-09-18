@@ -48,10 +48,22 @@ pub struct Session {
     pub ticket: String,
     pub machine_id: String,
     hmac_key: Vec<u8>,
+    /// The fnOS `ost` session cookie, minted from `ticket` via `POST /app/ticket`
+    /// (see `mint_preview_cookie`). Used only to authenticate the embedded
+    /// Preview iframe (`/app/trim-preview/`) — a separate, cookie-based auth
+    /// surface from our WS/HMAC one. `None` if minting failed (preview simply
+    /// won't be available; every other feature is unaffected).
+    pub preview_cookie: Option<String>,
 }
 
 enum Cmd {
     Request { frame: String, reqid: String, resp: oneshot::Sender<Value> },
+    /// A streaming request (e.g. `appcgi.finder.fileSearch`): the server sends
+    /// many frames sharing this `reqid` (intermediate ones with `result:"doing"`,
+    /// a terminal one with `result != "doing"`). Every frame is forwarded on the
+    /// channel; the reader drops the registration on the terminal frame or when
+    /// the receiver is gone.
+    Stream { frame: String, reqid: String, tx: mpsc::Sender<Value> },
 }
 
 /// A live, authenticated fnOS connection. Cloneable handle onto one socket.
@@ -60,6 +72,7 @@ pub struct FnosClient {
     tx: mpsc::Sender<Cmd>,
     pub session: Session,
 }
+
 
 fn reqid() -> String {
     let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
@@ -101,6 +114,38 @@ fn hmac_b64(json: &str, key: &[u8]) -> String {
     let mut m = HmacSha256::new_from_slice(key).expect("hmac key");
     m.update(json.as_bytes());
     B64.encode(m.finalize().into_bytes())
+}
+
+/// Exchange our WS-login `ticket` for the fnOS browser session cookie (`ost`),
+/// by calling the same endpoint the web login page's JS calls after a
+/// successful sign-in: `POST /app/ticket {"ticket": ...}` → `Set-Cookie: ost=...`.
+/// This is a *separate* auth surface from our WS/HMAC one (used only to
+/// authenticate the embedded Preview iframe, which speaks plain cookie-gated
+/// HTTP) — reverse-engineered and documented in `refs/fnos-preview-app.md`.
+/// Shells `curl` (already used for the firmware check) rather than pulling in
+/// an HTTP client crate. Best-effort: `None` on any failure.
+fn mint_preview_cookie(ticket: &str) -> Option<String> {
+    let body = json!({ "ticket": ticket }).to_string();
+    let out = std::process::Command::new("curl")
+        .args([
+            "-s", "-D", "-", "-o", "/dev/null",
+            "--connect-timeout", "5", "--max-time", "10",
+            "-X", "POST", "http://127.0.0.1:5666/app/ticket",
+            "-H", "Content-Type: application/json",
+            "-d", &body,
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let headers = String::from_utf8_lossy(&out.stdout);
+    // Header line looks like: `Set-Cookie: ost=<value>; Path=/; HttpOnly; SameSite=Lax`
+    headers.lines().find_map(|line| {
+        let rest = line.strip_prefix("Set-Cookie:").or_else(|| line.strip_prefix("set-cookie:"))?;
+        let value = rest.trim().split(';').next()?;
+        value.strip_prefix("ost=").map(str::to_string)
+    })
 }
 
 /// Read frames until `pred` returns a value, ignoring `pong`/unrelated frames.
@@ -186,19 +231,24 @@ impl FnosClient {
         // The `secret` is AES-encrypted with our session key; decrypt → HMAC key.
         let secret_b64 = resp.get("secret").and_then(|s| s.as_str()).ok_or("no secret")?;
         let hmac_key = aes_cbc_decrypt(&B64.decode(secret_b64).map_err(|e| e.to_string())?, &aes_key, &iv)?;
+        let ticket = resp.get("ticket").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let preview_cookie = mint_preview_cookie(&ticket);
         let session = Session {
             uid: resp.get("uid").and_then(|x| x.as_i64()).unwrap_or(-1),
             admin: resp.get("admin").and_then(|x| x.as_bool()).unwrap_or(false),
             username: user.to_string(),
-            ticket: resp.get("ticket").and_then(|x| x.as_str()).unwrap_or("").to_string(),
             machine_id: resp.get("machineId").and_then(|x| x.as_str()).unwrap_or("").to_string(),
             hmac_key,
+            ticket,
+            preview_cookie,
         };
 
         // 4) hand the socket to a background router + heartbeat task
         let (tx, mut rx) = mpsc::channel::<Cmd>(32);
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Value>>>> = Arc::new(Mutex::new(HashMap::new()));
+        let streaming: Arc<Mutex<HashMap<String, mpsc::Sender<Value>>>> = Arc::new(Mutex::new(HashMap::new()));
         let pending_rx = pending.clone();
+        let streaming_rx = streaming.clone();
         tokio::spawn(async move {
             let mut hb = tokio::time::interval(Duration::from_secs(30));
             loop {
@@ -206,6 +256,10 @@ impl FnosClient {
                     cmd = rx.recv() => match cmd {
                         Some(Cmd::Request { frame, reqid, resp }) => {
                             pending.lock().await.insert(reqid, resp);
+                            if write.send(Message::Text(frame)).await.is_err() { break; }
+                        }
+                        Some(Cmd::Stream { frame, reqid, tx }) => {
+                            streaming.lock().await.insert(reqid, tx);
                             if write.send(Message::Text(frame)).await.is_err() { break; }
                         }
                         None => break, // all handles dropped
@@ -225,8 +279,23 @@ impl FnosClient {
                     _ => continue,
                 };
                 if let Ok(v) = serde_json::from_str::<Value>(&text) {
-                    if let Some(id) = v.get("reqid").and_then(|x| x.as_str()) {
-                        if let Some(tx) = pending_rx.lock().await.remove(id) {
+                    if let Some(id) = v.get("reqid").and_then(|x| x.as_str()).map(|s| s.to_string()) {
+                        // Streaming request? Forward every frame; a frame whose
+                        // `result` is present and not "doing" is terminal.
+                        let is_stream = streaming_rx.lock().await.contains_key(&id);
+                        if is_stream {
+                            let terminal = v.get("result").and_then(|r| r.as_str())
+                                .map_or(false, |r| r != "doing");
+                            let send_ok = match streaming_rx.lock().await.get(&id) {
+                                Some(ch) => ch.send(v).await.is_ok(),
+                                None => false,
+                            };
+                            if terminal || !send_ok {
+                                streaming_rx.lock().await.remove(&id);
+                            }
+                            continue;
+                        }
+                        if let Some(tx) = pending_rx.lock().await.remove(&id) {
                             let _ = tx.send(v);
                         }
                     }
@@ -253,6 +322,40 @@ impl FnosClient {
         tokio::time::timeout(Duration::from_secs(10), resp_rx)
             .await.map_err(|_| format!("request {req} timed out"))?
             .map_err(|_| "response dropped".to_string())
+    }
+
+    /// Make a *streaming* RPC (e.g. `appcgi.finder.fileSearch`). Collects every
+    /// frame the server sends under this request's `reqid` until a terminal
+    /// frame (`result != "doing"`) arrives or `budget` elapses, then returns all
+    /// collected frames in order. On timeout the collected frames so far are
+    /// returned (partial results) — callers can treat that as "capped".
+    pub async fn request_stream(&self, req: &str, params: Value, budget: Duration) -> Result<Vec<Value>, String> {
+        let id = reqid();
+        let mut obj = params.as_object().cloned().unwrap_or_default();
+        obj.insert("req".into(), json!(req));
+        obj.insert("reqid".into(), json!(id));
+        let jsontext = Value::Object(obj).to_string();
+        let frame = format!("{}{}", hmac_b64(&jsontext, &self.session.hmac_key), jsontext);
+
+        let (tx, mut rx) = mpsc::channel::<Value>(64);
+        self.tx.send(Cmd::Stream { frame, reqid: id, tx })
+            .await.map_err(|_| "fnos connection closed".to_string())?;
+
+        let mut frames = Vec::new();
+        let deadline = tokio::time::Instant::now() + budget;
+        loop {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(f)) => {
+                    let terminal = f.get("result").and_then(|r| r.as_str())
+                        .map_or(false, |r| r != "doing");
+                    frames.push(f);
+                    if terminal { break; }
+                }
+                Ok(None) => break,   // registration dropped (shouldn't happen mid-stream)
+                Err(_) => break,     // budget elapsed — return partial
+            }
+        }
+        Ok(frames)
     }
 }
 
@@ -318,10 +421,68 @@ pub async fn status() -> Value {
 }
 
 /// Make an authenticated RPC on the current session (error if not signed in).
+///
+/// Clone the client handle out of the lock, then release the lock *before* the
+/// WS round-trip. `FnosClient` is a cheap cloneable handle onto the one socket
+/// (an mpsc sender + session), and the background task already pipelines
+/// concurrent requests by reqid — so holding the lock across `request().await`
+/// would needlessly serialize every `/api/fnos/*` call behind whichever one is
+/// currently in flight (e.g. a slow `notify.list`, or one nearing the 10s
+/// timeout), stalling folder listings. Cloning out first lets them run in
+/// parallel.
 pub async fn call(req: &str, params: Value) -> Result<Value, String> {
-    let guard = cell().lock().await;
-    let client = guard.as_ref().ok_or("not signed in to fnOS")?;
-    client.request(req, params).await
+    let client = {
+        let guard = cell().lock().await;
+        guard.as_ref().ok_or("not signed in to fnOS")?.clone()
+    };
+    let resp = client.request(req, params).await?;
+    if is_session_expired(&resp) {
+        invalidate_session().await;
+        return Err(SESSION_EXPIRED.to_string());
+    }
+    Ok(resp)
+}
+
+/// Streaming variant of [`call`] — see [`FnosClient::request_stream`]. Returns
+/// every frame collected within `budget`.
+pub async fn call_stream(req: &str, params: Value, budget: Duration) -> Result<Vec<Value>, String> {
+    let client = {
+        let guard = cell().lock().await;
+        guard.as_ref().ok_or("not signed in to fnOS")?.clone()
+    };
+    let frames = client.request_stream(req, params, budget).await?;
+    if frames.iter().any(is_session_expired) {
+        invalidate_session().await;
+        return Err(SESSION_EXPIRED.to_string());
+    }
+    Ok(frames)
+}
+
+/// fnOS `errno` for "not logged in" (没有登录): the session ticket is no longer
+/// valid server-side even though our WS socket is still open. Our own
+/// `status()` can't see this (it only checks the in-memory handle), so a stale
+/// session would otherwise surface as an *empty* folder listing rather than a
+/// sign-in prompt. Detect it centrally and drop the session.
+const ERRNO_NOT_LOGGED_IN: i64 = 4224;
+pub const SESSION_EXPIRED: &str = "fnOS session expired — please sign in again";
+fn is_session_expired(v: &Value) -> bool {
+    v.get("result").and_then(|r| r.as_str()) == Some("fail")
+        && v.get("errno").and_then(|e| e.as_i64()) == Some(ERRNO_NOT_LOGGED_IN)
+}
+/// Drop the dead session so `status()` honestly reports signed-out and the panel
+/// re-authenticates instead of showing empty data.
+async fn invalidate_session() {
+    *cell().lock().await = None;
+    let _ = std::fs::remove_file(SESSION_FILE);
+}
+
+/// The `ost` cookie value for the current session, if signed in and minting
+/// succeeded — for the panel's Electron shell to apply to its own cookie jar
+/// before opening the Preview iframe. Not a secret in the same class as the
+/// WS HMAC key (it's exactly what a normal browser login would hold), but
+/// still a live session credential — callers should treat it as such.
+pub async fn preview_cookie() -> Option<String> {
+    cell().lock().await.as_ref().and_then(|c| c.session.preview_cookie.clone())
 }
 
 /// Sign out: revoke server-side (`user.logout`), drop the live session, and

@@ -53,6 +53,7 @@ fn ram_bytes() -> Option<u64> {
     None
 }
 
+pub fn gpu_name() -> Option<String> { gpu() }
 fn gpu() -> Option<String> {
     let out = Command::new("lspci").output().ok()?;
     if !out.status.success() {

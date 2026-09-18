@@ -90,6 +90,9 @@ Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=WAYLAND_DISPLAY=wayland-panel
 Environment=NAS_HOST=127.0.0.1
 Environment=PANEL_PORT=${PANEL_LOCAL_ADDR##*:}
+# Chromium profile (UI prefs in localStorage). Without this — and with no
+# \$HOME under systemd — Electron would use /tmp, which is wiped at boot.
+Environment=PANEL_DATA_DIR=/var/lib/t6-paneld/kiosk
 ExecStart=$TRIM_APPDEST/app/run-kiosk.sh
 Restart=on-failure
 RestartSec=3

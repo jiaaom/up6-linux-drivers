@@ -2,10 +2,10 @@
 /* appliance: no context menu, no long-press callout, no image/text drag */
 addEventListener('contextmenu',function(e){e.preventDefault();},{passive:false});
 addEventListener('dragstart',function(e){e.preventDefault();},{passive:false});
-var device=document.getElementById('device');
-function fit(){var vw=innerWidth,vh=innerHeight,s=Math.min(vw/1080,vh/2160);
-  device.style.transform='translateX(-50%) scale('+s+')';device.style.top=Math.max(0,(vh-2160*s)/2)+'px';return s;}
-addEventListener('resize',fit);addEventListener('orientationchange',fit);fit();
+// #device now fills the viewport normally via CSS (position:absolute;inset:0)
+// instead of a fixed-size canvas transform-scaled by JS — see style.css and
+// refs/linux-wayland-dpi.md for why. The real screen density is handled by the
+// Wayland compositor (weston scale=2 on the touch panel's output), not here.
 
 function tick(){var d=new Date(),t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   document.querySelectorAll('#clock,.clock2,.clock3').forEach(function(e){e.textContent=t;});}

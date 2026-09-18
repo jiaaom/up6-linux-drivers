@@ -17,7 +17,7 @@ function submitLogin(){
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
     .then(function(res){
       btn.classList.remove('busy');btn.textContent='Sign in';
-      if(res.ok&&res.j&&res.j.signedIn){hideLogin();fnosUser={username:res.j.username,uid:res.j.uid,admin:res.j.admin};setAccount();toast('Signed in');}
+      if(res.ok&&res.j&&res.j.signedIn){hideLogin();fnosUser={username:res.j.username,uid:res.j.uid,admin:res.j.admin};setAccount();refreshNotifications(true);toast('Signed in');}
       else{err.textContent=(res.j&&res.j.error)||'Sign in failed.';err.hidden=false;}
     }).catch(function(){btn.classList.remove('busy');btn.textContent='Sign in';err.textContent='Sign in failed.';err.hidden=false;});
 }

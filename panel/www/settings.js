@@ -8,22 +8,40 @@ function openSettings(){
     .then(function(d){LAST=d;buildSettings();}).catch(buildSettings);
 }
 function closeSettings(){document.body.classList.remove('settings-open');}
-document.getElementById('settingsDone').addEventListener('click',closeSettings);
+document.getElementById('settingsBack').addEventListener('click',closeSettings);
 
 /* Generic full-screen sub-page in the Settings visual style (Ethernet, Wi-Fi,
    Volumes, Files…). Content-heavy sections live here instead of the bottom
    sheet. `onMount` runs after the HTML is in the DOM to wire handlers. */
 var subpageScroll=document.getElementById('subpageScroll');
-function openPage(title,html,onMount){
-  document.getElementById('subTitle').textContent=title;
-  document.getElementById('subCrumb').textContent=title;
+function setSubTitle(t){document.getElementById('subTitle').textContent=t;document.getElementById('subCrumb').textContent=t;}
+// A page opened "on top of" the current one (e.g. file preview, launched from
+// the file browser) can set pageBack to a function that redraws what was there
+// instead of the normal full close. (The file browser now manages its own
+// navigation in files.js and no longer uses pageBack.)
+var pageBack=null;
+// opts: {sub:<subtitle html>, back:true} — optional subtitle line under the
+// title and a round back button (design: System page). Both reset per page.
+function setSubSub(html){var e=document.getElementById('subSub');if(!e)return;if(html){e.innerHTML=html;e.hidden=false;}else{e.innerHTML='';e.hidden=true;}}
+function openPage(title,html,onMount,opts){
+  pageBack=null;
+  opts=opts||{};
+  setSubTitle(title);
+  setSubSub(opts.sub||'');
+  var back=opts.back!==false; // default: round Back button; pass {back:false} to get the Done pill instead
+  var b=document.getElementById('subBack');if(b)b.hidden=!back;
+  var dn=document.getElementById('subDone');if(dn)dn.hidden=back;
   subpageScroll.innerHTML=html||'';
   subpageScroll.scrollTop=0;
   document.body.classList.add('subpage-open');
   if(onMount)onMount();
 }
-function closePage(){document.body.classList.remove('subpage-open');}
+function closePage(){
+  if(pageBack){var back=pageBack;pageBack=null;back();return;}
+  document.body.classList.remove('subpage-open');
+}
 document.getElementById('subDone').addEventListener('click',closePage);
+document.getElementById('subBack').addEventListener('click',closePage);
 var TIMEOUTS=[[0,'Never'],[60,'1 min'],[300,'5 min'],[900,'15 min']];
 var LANGS=[['en','English'],['ja','日本語'],['zh','简体中文']];
 var FAN_PRESETS=[['silent','Silent'],['balance','Balanced'],['performance','Performance'],['custom','Custom']];

@@ -427,7 +427,7 @@ async fn post_hotspot(Json(req): Json<HotspotReq>) -> Response {
 // ---- Thunderbolt ---------------------------------------------------------
 
 async fn get_thunderbolt() -> Response {
-    Json(t6_hw_rs::thunderbolt::info()).into_response()
+    Json(t6_hw_rs::thunderbolt::info_full()).into_response()
 }
 
 async fn get_sharing() -> Response {

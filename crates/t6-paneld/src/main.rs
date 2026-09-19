@@ -91,6 +91,22 @@ async fn main() {
         }
         return;
     }
+    // Dev-only: `--fnos-call <method> [json-params]` prints the raw reply.
+    if let Some(i) = std::env::args().position(|a| a == "--fnos-call") {
+        let args: Vec<String> = std::env::args().collect();
+        let method = args.get(i + 1).cloned().unwrap_or_default();
+        let params: serde_json::Value = args.get(i + 2).map(|s| serde_json::from_str(s).expect("bad json")).unwrap_or(serde_json::json!({}));
+        let user = std::env::var("FNOS_USER").unwrap_or_default();
+        let pass = std::env::var("FNOS_PASS").unwrap_or_default();
+        match fnos::FnosClient::login(&user, &pass).await {
+            Ok(c) => match c.request(&method, params).await {
+                Ok(v) => println!("{}", serde_json::to_string_pretty(&v).unwrap()),
+                Err(e) => println!("ERR: {e}"),
+            },
+            Err(e) => println!("LOGIN ERR: {e}"),
+        }
+        return;
+    }
 
     let opts = parse_args();
     // Port of the local shell, reported to the gateway surface so "sign out"

@@ -417,6 +417,11 @@ fn wired_conn() -> Option<(String, String)> {
 
 /// The active NM connection name on a device (e.g. "enp103s0-ovs", or a
 /// Thunderbolt net iface's connection).
+/// Runtime IPv4 address (without prefix) on `dev`, whatever assigned it.
+pub(crate) fn iface_ipv4(dev: &str) -> Option<String> {
+    nmcli_field(dev, "IP4.ADDRESS").into_iter().next().and_then(|a| a.split('/').next().map(|s| s.to_string())).filter(|s| !s.is_empty())
+}
+
 pub(crate) fn device_connection(dev: &str) -> Option<String> {
     run("nmcli", &["-t", "-f", "GENERAL.CONNECTION", "device", "show", dev])?
         .lines()

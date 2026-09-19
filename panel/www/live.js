@@ -186,6 +186,7 @@ function refresh(d){
   if(ht){var h=nw.hotspot||{};ht.className='tile '+(h.active?'on':'off');
     var hs=ht.querySelector('.hotspot-sub');if(hs)hs.textContent=h.active?(h.ssid||'On'):'Off';}
   var tt=document.querySelector('[data-tile="tb4"]');
+  if(window.tbLive)tbLive(d.thunderbolt);
   if(tt){var tb=d.thunderbolt||{},devs=tb.devices||[],pend=devs.filter(function(x){return x.pending;}).length;
     var on=devs.length>0||(tb.net||[]).some(function(x){return x.connected;});
     tt.className='tile '+(on?'on':'off');

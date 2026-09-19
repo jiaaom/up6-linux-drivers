@@ -376,6 +376,12 @@
   .fm-pin.hot{background:oklch(0.74 0.12 62 / .16);border-color:oklch(0.74 0.12 62 / .45)}
   .fm-pin:active{transform:scale(.97)}
   .fm-pin-l{font-size:16.5px;font-weight:500}
+  /* Devices card: partition rows sit under their disk; action pill (Eject / Mount / Connect / Disconnect) */
+  .fm-devsub{padding-left:26px}
+  .fm-devbtn{flex:none;height:36px;padding:0 14px;border-radius:18px;display:flex;align-items:center;
+    font-size:15px;font-weight:500;color:var(--amber);border:0.5px solid oklch(0.74 0.12 62 / .55);background:oklch(0.74 0.12 62 / .1)}
+  .fm-devbtn.warn{color:oklch(0.78 0.14 25);border-color:oklch(0.7 0.17 25 / .55);background:oklch(0.7 0.17 25 / .1)}
+  .fm-devbtn:active{filter:brightness(1.3)}
   .fm-devtag{font-size:12px;font-weight:500;color:var(--amber);border:0.5px solid oklch(0.74 0.12 62 / .5);
     border-radius:8px;padding:1px 6px;margin-left:6px;vertical-align:middle}
 

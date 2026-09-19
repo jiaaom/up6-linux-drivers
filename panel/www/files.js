@@ -36,6 +36,8 @@ var FM_ICON = {
   grid: '<rect x="8" y="8" width="14" height="14" rx="3"/><rect x="26" y="8" width="14" height="14" rx="3"/><rect x="8" y="26" width="14" height="14" rx="3"/><rect x="26" y="26" width="14" height="14" rx="3"/>',
   sort: '<path d="M14 10v28"/><path d="M8 32l6 6 6-6"/><path d="M26 14h14M26 24h10M26 34h6"/>',
   refresh: '<path d="M39 24a15 15 0 1 1-4.4-10.6"/><path d="M40 8v10H30"/>',
+  usb: '<rect x="14" y="6" width="20" height="14" rx="3"/><path d="M18 20v10M30 20v10M12 30h24v10H12z"/><path d="M20 13h8"/>',
+  remote: '<path d="M14 36h20a8 8 0 0 0 1-15.9A11 11 0 0 0 14 22a7 7 0 0 0 0 14z"/><path d="M20 30l4-4 4 4M24 26v10"/>',
   drive: '<rect x="9" y="9" width="30" height="30" rx="2"/><path d="M9 20h30"/><path d="M15 15h4M23 15h3"/>',
   chevron: '<path d="M18 12l12 12-12 12"/>',
   checkCircle: '<circle cx="24" cy="24" r="16"/><path d="M17 24l5 5 10-11"/>',
@@ -82,7 +84,7 @@ var FM = {
   desc: false,        // sort direction
   hidden: false,      // show dotfiles
   showRecent: true,   // landing: show the Recent section
-  reqSeq: 0,          // guards async listing races
+  reqSeq: 0, devSeq: 0,          // guards async listing races
   searchTimer: null,
   searchSeq: 0,
   prevPath: null      // path currently in the Preview overlay
@@ -278,35 +280,121 @@ function fmParentLabel(path) {
   var parent = s[s.length - 1] || '';
   return parent || 'Files';
 }
+/* ---------- Devices & volumes card ----------
+   Local volumes always come from t6-paneld's own statvfs (works signed out).
+   External (USB) drives and fnOS "Remote Mount" connections come from fnOS
+   itself when signed in (api/fnos/externals → stor.listDisk/listRemovable,
+   appcgi.mountmgr.list), which is what enables Eject / Mount / Connect /
+   Disconnect. Signed out, externals fall back to the local lsblk view
+   (browse only). Format is deliberately not offered anywhere. */
+var FM_DEV = { disks: [], remote: [] };
+// Disks ejected from this panel, by USB serial → model. fnOS's Eject is a real
+// safe-removal (media stopped, disk gone from fnOS) meant to be followed by
+// unplugging; for a reader built into the chassis that's impossible, so we keep
+// a Reconnect row (local USB re-enumeration via api/usb/reconnect) until the
+// disk shows up again with media.
+function fmEjectedLoad() { try { return JSON.parse(localStorage.getItem('t6.files.ejected') || '{}') || {}; } catch (e) { return {}; } }
+function fmEjectedSave(m) { try { localStorage.setItem('t6.files.ejected', JSON.stringify(m)); } catch (e) {} }
 function fmLoadDevices() {
-  fetch('api/storage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+  var seq = ++FM.devSeq;
+  var local = fetch('api/storage', { cache: 'no-store' }).then(function (r) { return r.json(); });
+  var ext = fetch('api/fnos/externals', { cache: 'no-store' }).then(function (r) { return r.json(); }).catch(function () { return null; });
+  Promise.all([local, ext]).then(function (res) {
+    if (seq !== FM.devSeq) return; // a newer load superseded this one
+    var d = res[0], x = res[1];
     var box = document.getElementById('fmDevices'); if (!box) return;
+    var live = !!(x && !x.error && Array.isArray(x.disks));
+    FM_DEV = live ? x : { disks: [], remote: [] };
     var rows = [];
     (d.volumes || []).forEach(function (v) {
       var free = (v.total_bytes || 0) - (v.used_bytes || 0);
-      rows.push({ path: v.mount, name: v.name, sub: fmtB(free) + ' free of ' + fmtB(v.total_bytes), icon: 'drive', tag: '' });
+      rows.push({ kind: 'vol', path: v.mount, name: v.name, sub: fmtB(free) + ' free of ' + fmtB(v.total_bytes), icon: 'drive', tag: '' });
     });
-    (d.disks || []).forEach(function (dk) {
-      if (!dk.removable) return;
-      (dk.parts || []).forEach(function (p) {
-        if (!p.mount) return;
-        rows.push({ path: p.mount, name: p.label || dk.model || p.name, sub: fmtB(p.size_bytes) + ' · ' + (p.fstype || 'ext'), icon: 'drive', tag: 'Removable' });
+    if (live) {
+      x.disks.forEach(function (dk) {
+        var n = dk.parts.length, m = dk.parts.filter(function (p) { return p.mounted; }).length;
+        rows.push({ kind: 'disk', disk: dk.name, serial: dk.serial, name: dk.model, icon: 'usb', tag: (dk.interface || 'USB') + (dk.usb_version ? ' ' + dk.usb_version : ''),
+          sub: fmtB(dk.size) + ' · ' + (n ? (n === 1 ? '1 partition' : n + ' partitions') + (m < n ? ' · ' + (n - m) + ' not mounted' : '') : 'no partitions'),
+          btn: dk.mounted ? 'Eject' : 'Mount', act: dk.mounted ? 'eject' : 'mount' });
+        dk.parts.forEach(function (p) {
+          rows.push({ kind: 'part', sub2: true, disk: dk.name, path: p.mounted ? p.path : null, name: p.mount_name || p.name, icon: 'folder',
+            sub: p.mounted ? fmtB(p.frsize) + ' free of ' + fmtB(p.fssize) + (p.fstype ? ' · ' + p.fstype : '') : fmtB(p.size) + (p.fstype ? ' · ' + p.fstype : '') + ' · not mounted' });
+        });
       });
+      x.remote.forEach(function (r) {
+        rows.push({ kind: 'remote', id: r.id, path: r.connected ? r.mount_point : null, name: r.label || r.mount_point || 'Remote mount', icon: 'remote', tag: 'Remote',
+          sub: [r.protocol ? String(r.protocol).toUpperCase() : null, r.host, r.connected ? null : (r.state || 'Disconnected')].filter(Boolean).join(' · '),
+          btn: r.connected ? 'Disconnect' : 'Connect', act: r.connected ? 'disconnect' : 'connect' });
+      });
+    } else {
+      (d.disks || []).forEach(function (dk) {
+        if (!dk.removable) return;
+        (dk.parts || []).forEach(function (p) {
+          if (!p.mount) return;
+          rows.push({ kind: 'part', path: p.mount, name: p.label || dk.model || p.name, sub: fmtB(p.size_bytes) + ' · ' + (p.fstype || 'ext'), icon: 'drive', tag: 'Removable' });
+        });
+      });
+    }
+    var ej = fmEjectedLoad(), ejChanged = false;
+    (d.disks || []).forEach(function (dk) {
+      if (!dk.serial || !(dk.serial in ej)) return;
+      if (dk.size_bytes > 0) { delete ej[dk.serial]; ejChanged = true; return; } // it's back (plugged in or reconnected)
+      rows.push({ kind: 'ejected', serial: dk.serial, name: ej[dk.serial] || dk.model, icon: 'usb', tag: 'Ejected',
+        sub: 'Safe to unplug · or reconnect to use it again', btn: 'Reconnect', act: 'reconnect' });
     });
+    if (ejChanged) fmEjectedSave(ej);
     if (!rows.length) { box.innerHTML = '<div class="setrow"><div class="lbl muted">No mounted volumes</div></div>'; return; }
     box.innerHTML = rows.map(function (r, i) {
+      var tappable = !!r.path;
       return (i ? '<div class="hairrow"></div>' : '') +
-        '<div class="setrow tap fm-dev" data-path="' + esc(r.path) + '" data-name="' + esc(r.name) + '">' +
-        '<div class="lbl" style="display:flex;align-items:center;gap:11px">' + fmSvg(FM_ICON[r.icon], 22, { op: .8 }) +
-        '<span>' + esc(r.name) + (r.tag ? ' <span class="fm-devtag">' + r.tag + '</span>' : '') + '<div class="edesc">' + esc(r.sub) + '</div></span></div>' +
-        '<div class="chev">›</div></div>';
+        '<div class="setrow fm-dev' + (tappable ? ' tap' : '') + (r.sub2 ? ' fm-devsub' : '') + '" data-i="' + i + '">' +
+        '<div class="lbl" style="display:flex;align-items:center;gap:11px">' + fmSvg(FM_ICON[r.icon] || FM_ICON.drive, 22, { op: r.sub2 ? .55 : .8 }) +
+        '<span>' + esc(r.name) + (r.tag ? ' <span class="fm-devtag">' + esc(r.tag) + '</span>' : '') + '<div class="edesc">' + esc(r.sub) + '</div></span></div>' +
+        (r.btn ? '<div class="fm-devbtn' + (r.act === 'eject' || r.act === 'disconnect' ? ' warn' : '') + '" data-act="' + r.act + '">' + r.btn + '</div>' : (tappable ? '<div class="chev">›</div>' : '')) +
+        '</div>';
     }).join('');
-    document.querySelectorAll('#fmDevices .fm-dev').forEach(function (el) {
-      el.addEventListener('click', function () {
-        fmGo({ mode: 'browse', root: 'personal', path: el.dataset.path, title: el.dataset.name });
+    box.querySelectorAll('.fm-dev').forEach(function (el) {
+      var r = rows[+el.dataset.i];
+      var btn = el.querySelector('.fm-devbtn');
+      if (btn) btn.addEventListener('click', function (e) { e.stopPropagation(); fmDevAction(r); });
+      if (r.path) el.addEventListener('click', function () {
+        fmGo({ mode: 'browse', root: 'personal', path: r.path, title: r.name });
       });
     });
   }).catch(function () { var box = document.getElementById('fmDevices'); if (box) box.innerHTML = '<div class="setrow"><div class="lbl muted">Could not read storage.</div></div>'; });
+}
+// Eject / Mount (external disks) and Disconnect / Connect (remote mounts).
+// The two that take something away confirm first; all four go through fnOS's
+// own APIs and then reload the card.
+function fmDevAction(r) {
+  var run = function (url, body, doing, done) {
+    toast(doing);
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (res) { return res.json(); })
+      .then(function (d) {
+        if (d && d.ok) { toast(done); setTimeout(fmLoadDevices, 4000); } // fnOS's own inventory lags a moment behind the kernel
+        else if (fmIsAuthError(d)) { toast('Signed out — sign in again'); if (window.refreshFnos) refreshFnos(); }
+        else { showConfirm('Failed', (d && d.error) || 'fnOS refused the request.', 'OK', false, function () {}); }
+        fmLoadDevices();
+      })
+      .catch(function () { toast('Failed'); fmLoadDevices(); });
+  };
+  if (r.act === 'eject') {
+    showConfirm('Eject ' + r.name + '?', 'Make sure no file transfers are using it. Once ejected it disappears from fnOS until it is unplugged and plugged back in — or reconnected from here.', 'Eject', true,
+      function () {
+        if (r.serial) { var ej = fmEjectedLoad(); ej[r.serial] = r.name; fmEjectedSave(ej); }
+        run('api/fnos/disk/eject', { disk: r.disk }, 'Ejecting…', 'Ejected — safe to unplug');
+      });
+  } else if (r.act === 'reconnect') {
+    run('api/usb/reconnect', { serial: r.serial }, 'Reconnecting…', 'Reconnected');
+  } else if (r.act === 'mount') {
+    run('api/fnos/disk/mount', { disk: r.disk }, 'Mounting…', 'Mounted');
+  } else if (r.act === 'disconnect') {
+    showConfirm('Disconnect ' + r.name + '?', 'Ongoing file tasks on this remote mount will be interrupted. The connection stays saved and can be reconnected here.', 'Disconnect', true,
+      function () { run('api/fnos/remote/disconnect', { name: r.id }, 'Disconnecting…', 'Disconnected'); });
+  } else if (r.act === 'connect') {
+    run('api/fnos/remote/connect', { name: r.id }, 'Connecting…', 'Connected');
+  }
 }
 function fmBindLanding() {
   document.querySelectorAll('#files .fm-pin').forEach(function (el) {

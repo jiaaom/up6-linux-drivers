@@ -230,3 +230,50 @@ pub fn disks() -> Vec<Disk> {
         })
         .collect()
 }
+
+// --- USB re-enumeration (undo of fnOS "Eject") ------------------------------------
+//
+// fnOS's Eject is a real safe-removal: the media is stopped (capacity drops to
+// 0) and the disk vanishes from fnOS's inventory until it is unplugged and
+// plugged back in. For a reader that is built into the chassis (the T6's eMMC
+// slot) nobody can do that, so the panel offers the software equivalent:
+// de-authorize and re-authorize the USB device, which re-enumerates it and lets
+// fnOS auto-mount it again. Only ever applied to USB-transport disks.
+
+/// sysfs directory of the USB device whose descriptor serial is `serial`
+/// (lsblk reports the same string as SERIAL for USB disks, and it survives an
+/// eject, unlike the sdX name).
+pub fn usb_device_by_serial(serial: &str) -> Option<std::path::PathBuf> {
+    if serial.is_empty() || !serial.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return None;
+    }
+    // Entries here are symlinks into /sys/devices; resolve so the path can be
+    // compared with block devices' canonical `device` links.
+    std::fs::read_dir("/sys/bus/usb/devices").ok()?.flatten().map(|e| e.path()).find(|d| {
+        d.join("idVendor").exists() && d.join("authorized").exists()
+            && std::fs::read_to_string(d.join("serial")).map(|s| s.trim() == serial).unwrap_or(false)
+    }).and_then(|d| std::fs::canonicalize(d).ok())
+}
+
+/// Block devices (name, size in bytes) that live under USB device dir `usb`.
+pub fn block_devices_under(usb: &std::path::Path) -> Vec<(String, u64)> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir("/sys/block").ok().into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let Ok(dev) = std::fs::canonicalize(e.path().join("device")) else { continue };
+        if dev.starts_with(usb) {
+            out.push((name.clone(), block_size_bytes(&name)));
+        }
+    }
+    out
+}
+
+/// Current size of a block device in bytes (0 = no media / stopped).
+pub fn block_size_bytes(name: &str) -> u64 {
+    std::fs::read_to_string(format!("/sys/block/{name}/size")).ok()
+        .and_then(|s| s.trim().parse::<u64>().ok()).map(|sectors| sectors * 512).unwrap_or(0)
+}
+
+pub fn usb_set_authorized(dir: &std::path::Path, on: bool) -> Result<(), String> {
+    std::fs::write(dir.join("authorized"), if on { "1" } else { "0" }).map_err(|e| e.to_string())
+}

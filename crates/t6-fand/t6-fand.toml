@@ -20,9 +20,11 @@ failsafe_pwm = 70          # applied when a zone has no readable sensor, and on 
 fan_hwmon = "t6_ec"
 
 # CPU heatsink fan: 8 % ≈ 470 rpm, 25 % ≈ 1450, 50 % ≈ 2520, 100 % ≈ 3400.
+# The Xe tile shares the package, the RAPL envelope and the heatsink but has
+# its own sensor (i915 temp1); the zone follows the hotter of the two.
 [zones.cpu]
 fan = "CPU fan"
-sensors = ["coretemp/Package id 0"]
+sensors = ["coretemp/Package id 0", "i915/temp1"]
 tau_secs = 12
 emergency_temp = 95
 emergency_secs = 10
@@ -33,14 +35,24 @@ ramp_down = 1.5
 min_pwm = 8
 start_pwm = 12
 kick_secs = 3
+# Curves derived from the measured plant (docs/t6-fand-measurements.md,
+# 2026-09-18): package °C ≈ a(duty) + R(duty) × package W, with R falling from
+# 1.16 K/W at 8 % to 0.65 K/W at 100 % and little gained above ~35 %. Each
+# profile is a sustained-temperature cap plus an idle floor; a PL2 burst peaks
+# ~23 °C above the temperature it starts from whatever the fan does, so the
+# idle floor is what limits burst throttling and the cap what limits
+# sustained load. Steady state at 8 / 28 W on the measured plant:
+#   silent      cap 78 °C, idle 8 %:   57 °C @ 470 rpm  /  78 °C @ 1360 rpm
+#   balance     cap 68 °C, idle 8 %:   57 °C @ 470 rpm  /  69 °C @ 1960 rpm
+#   performance cap 60 °C, idle 25 %:  55 °C @ 1490 rpm /  62 °C @ 2980 rpm
 [zones.cpu.curves]
-silent      = [[50, 0], [55, 8], [70, 15], [80, 30], [88, 60], [95, 100]]
-balance     = [[45, 0], [50, 8], [65, 20], [75, 35], [85, 60], [92, 100]]
-performance = [[35, 10], [50, 25], [65, 50], [80, 100]]
+silent      = [[50, 0], [54, 8], [70, 8], [75, 14], [78, 24], [84, 50], [92, 100]]
+balance     = [[46, 0], [50, 8], [62, 8], [66, 18], [68, 30], [71, 42], [78, 70], [88, 100]]
+performance = [[40, 25], [55, 25], [58, 32], [60, 45], [62, 65], [66, 100]]
 
 # Small fan over NVMe bays 1–2: 10 % ≈ 1050 rpm, 25 % ≈ 2700, 50 % ≈ 4640, 100 % ≈ 6400.
 # Bays are resolved through their PCIe root ports; empty bays are ignored.
-custom      = [[45, 0], [50, 8], [65, 20], [75, 35], [85, 60], [92, 100]]
+custom      = [[46, 0], [50, 8], [62, 8], [66, 18], [68, 30], [71, 42], [78, 70], [88, 100]]
 [zones.ssd12]
 fan = "SSD bay 1-2 fan"
 sensors = ["bay/1", "bay/2"]

@@ -191,6 +191,7 @@
     background:oklch(0.13 0.03 252 / .96);opacity:0;pointer-events:none;transition:opacity .26s}
   #ethedit.on{opacity:1;pointer-events:auto}
   .seg{display:flex;gap:5px;background:oklch(1 0 0 / .06);border-radius:12px;padding:4px}
+  .seg-opt[hidden]{display:none}
   .seg-opt{flex:1;height:48px;display:flex;align-items:center;justify-content:center;border-radius:9px;
     font-size:16px;color:oklch(0.97 0.006 252 / .6);transition:background .15s,color .15s}
   .seg-opt.on{background:var(--amber);color:oklch(0.2 0.04 62);font-weight:600}

@@ -215,19 +215,27 @@ fn arp_peer(iface: &str) -> Option<String> {
 pub fn info_full() -> Thunderbolt {
     let mut t = info();
     for n in t.net.iter_mut() {
-        if let Some(p) = n.peer.as_mut() {
-            p.host = avahi_host(&n.iface, &p.ip);
+        // ARP only knows the peer once we've talked to it; mDNS hears the peer
+        // advertise itself right away, so it fills in both the hostname and,
+        // when ARP is still empty, the address.
+        match n.peer.as_mut() {
+            Some(p) => p.host = avahi_peer(&n.iface, Some(&p.ip)).map(|(h, _)| h),
+            None => n.peer = avahi_peer(&n.iface, None).map(|(h, ip)| TbPeer { ip, host: Some(h) }),
         }
     }
     t
 }
 
-fn avahi_host(iface: &str, ip: &str) -> Option<String> {
+/// (hostname, IPv4) of a host seen by avahi on `iface`, from its cache. With
+/// `ip` given, only that host; otherwise the first one (a host-to-host link
+/// has exactly one peer).
+fn avahi_peer(iface: &str, ip: Option<&str>) -> Option<(String, String)> {
     let o = Command::new("avahi-browse").args(["-arpc"]).output().ok()?;
     // Resolved lines: =;iface;proto;name;type;domain;hostname;address;port;txt
     String::from_utf8_lossy(&o.stdout).lines().find_map(|l| {
         let f: Vec<&str> = l.split(';').collect();
-        (f.len() >= 8 && f[0] == "=" && f[1] == iface && f[7] == ip).then(|| f[6].to_string())
+        (f.len() >= 8 && f[0] == "=" && f[1] == iface && f[2] == "IPv4" && ip.map_or(true, |x| f[7] == x))
+            .then(|| (f[6].to_string(), f[7].to_string()))
     })
 }
 

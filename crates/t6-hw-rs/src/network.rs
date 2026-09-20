@@ -458,9 +458,11 @@ pub fn ipv4_config(conn: &str) -> Ipv4Cfg {
     }
 }
 
-/// Set a connection's IPv4 config and re-activate it. `method` is "auto" (DHCP)
-/// or "manual" (static; `address` CIDR required, `gateway` optional). `dns` (may
-/// be empty) applies in both modes — with DHCP a non-empty list overrides leases.
+/// Set a connection's IPv4 config and re-activate it. `method` is "auto" (DHCP),
+/// "manual" (static; `address` CIDR required, `gateway` optional) or
+/// "link-local" (169.254/16 auto-address — the right choice for a host-to-host
+/// Thunderbolt link, which has no DHCP server). `dns` (may be empty) applies to
+/// auto and manual — with DHCP a non-empty list overrides leases.
 pub fn set_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
     let dns_joined = dns.join(",");
     let mut args: Vec<String> = vec!["connection".into(), "modify".into(), conn.into()];
@@ -480,7 +482,13 @@ pub fn set_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: O
             set("ipv4.gateway", gateway.unwrap_or(""));
             set("ipv4.dns", &dns_joined);
         }
-        other => return Err(format!("invalid method {other:?} (want auto|manual)")),
+        "link-local" => {
+            set("ipv4.method", "link-local");
+            set("ipv4.addresses", "");
+            set("ipv4.gateway", "");
+            set("ipv4.dns", "");
+        }
+        other => return Err(format!("invalid method {other:?} (want auto|manual|link-local)")),
     }
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     nmcli_ok(&argv)?;

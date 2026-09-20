@@ -16,6 +16,7 @@ function ethSetMode(m){
   document.querySelectorAll('#ethMode .seg-opt').forEach(function(o){o.classList.toggle('on',o.dataset.m===m);});
   document.getElementById('ethMode').dataset.m=m;
   document.getElementById('ethManual').hidden=(m!=='manual');
+  document.getElementById('ethDns').hidden=(m==='link-local');
 }
 // Generalized IPv4 editor (shared by Ethernet and Thunderbolt-net). The caller
 // supplies where to read/write and any extra body fields (e.g. the TB conn).
@@ -24,7 +25,9 @@ function ipv4Open(ctx){
   ipv4Ctx=ctx;
   document.getElementById('ipv4Title').textContent=ctx.title;
   fetch(ctx.getUrl,{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
-    ethSetMode(c.method==='manual'?'manual':'auto');
+    // Link-local is only offered where it makes sense (a host-to-host TB link).
+    document.getElementById('ethLL').hidden=!ctx.linkLocal;
+    ethSetMode(c.method==='manual'?'manual':(c.method==='link-local'&&ctx.linkLocal)?'link-local':'auto');
     var a=(c.address||'').split('/');
     document.getElementById('ethAddr').value=a[0]||'';
     document.getElementById('ethPrefix').value=a[1]||'24';
@@ -35,7 +38,7 @@ function ipv4Open(ctx){
   }).catch(function(){toast('Could not read '+ctx.title);});
 }
 function ethEdit(){ ipv4Open({title:'Ethernet IPv4',getUrl:'api/network/ethernet',postUrl:'api/network/ethernet',extra:{}}); }
-function tbNetEdit(conn){ ipv4Open({title:'Thunderbolt IPv4',getUrl:'api/thunderbolt/net?conn='+encodeURIComponent(conn),postUrl:'api/thunderbolt/net',extra:{conn:conn}}); }
+function tbNetEdit(conn){ ipv4Open({title:'Thunderbolt IPv4',getUrl:'api/thunderbolt/net?conn='+encodeURIComponent(conn),postUrl:'api/thunderbolt/net',extra:{conn:conn},linkLocal:true}); }
 function hideEthEdit(){document.getElementById('ethedit').classList.remove('on');}
 
 /* ---------- Thunderbolt page (full sub-page; design "Front Panel Thunderbolt" 8a–8e) ----------
@@ -65,7 +68,7 @@ function tbReload(){
 // What would change the page layout (as opposed to just the rate line).
 function tbShapeKey(tb){
   return JSON.stringify([(tb.devices||[]).map(function(d){return [d.uuid,d.pending,d.stored,d.link];}),
-    (tb.net||[]).map(function(n){return [n.iface,n.connected,n.ip,n.mtu,n.peer&&n.peer.ip];})]);
+    (tb.net||[]).map(function(n){return [n.iface,n.connected,n.ip,n.mtu,n.ipv4&&n.ipv4.method];})]);
 }
 function tbDevSub(dv){
   var kind=dv.host?'computer':(dv.generation?'TB'+dv.generation+' device':'device');
@@ -211,7 +214,7 @@ function showSharing(){
     err.hidden=true; toast('Applying…');
     fetch(ipv4Ctx.postUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
-      .then(function(){toast('Updated');hideEthEdit();
+      .then(function(){toast('Updated');hideEthEdit();if(window.tbOnPage&&tbOnPage())setTimeout(tbReload,1500);
         setTimeout(function(){fetch('api/panel',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){LAST=d;refresh(d);
           if(document.body.classList.contains('subpage-open'))showEthDetail(); else closeDetail();}).catch(function(){});},1400);})
       .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});

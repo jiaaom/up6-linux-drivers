@@ -183,7 +183,7 @@ function fmListHtml(files, f) {
   var selecting = fmSelecting();
   return '<div class="fm-list">' + files.map(function (e) {
     var cat = fmCat(e.name, e.dir);
-    var ic = fmSvg(FM_ICON[cat], 26, { op: e.dir ? .9 : .6, stroke: e.dir ? 'var(--amber2)' : 'currentColor', flex: true });
+    var ic = fmSvg(FM_ICON[cat], 26, { op: e.dir ? .9 : .6, stroke: e.dir ? 'var(--accent-text)' : 'currentColor', flex: true });
     var noLink = e.noLink, p = fmPathFor(e, f), on = selecting && !!FM.sel[p];
     return '<div class="fm-row' + (noLink ? ' nolink' : '') + (on ? ' sel' : '') + '" data-path="' + esc(p) + '" data-name="' + esc(e.name) + '" data-dir="' + (e.dir ? 1 : 0) + '">' +
       ic + '<div class="fm-info"><div class="fm-name">' + esc(e.name) + '</div><div class="fm-meta">' + esc(fmRowMeta(e)) + '</div></div>' +
@@ -197,7 +197,7 @@ function fmGridHtml(files, f) {
     var badge = e.dir ? '' : (fmExt(e.name).toUpperCase() || 'FILE');
     var p = fmPathFor(e, f), on = selecting && !!FM.sel[p];
     var tile = '<div class="fm-gtile"><div class="fm-gthumb' + (e.dir ? ' dir' : '') + '">' +
-      fmSvg(FM_ICON[cat], e.dir ? 46 : 40, { op: e.dir ? .85 : .3, stroke: e.dir ? 'var(--amber2)' : 'currentColor', sw: e.dir ? 3 : 3.2 }) +
+      fmSvg(FM_ICON[cat], e.dir ? 46 : 40, { op: e.dir ? .85 : .3, stroke: e.dir ? 'var(--accent-text)' : 'currentColor', sw: e.dir ? 3 : 3.2 }) +
       (badge ? '<div class="fm-gbadge">' + esc(badge) + '</div>' : '') +
       (selecting ? '<span class="fm-gcheck">' + fmCheckHtml(on) + '</span>' : '') + '</div>' +
       '<div class="fm-gname">' + esc(e.name) + '</div><div class="fm-gmeta">' + esc(e.dir ? (e.mtim ? fmDate(e.mtim) : 'Folder') : (e.size != null ? fmtB(e.size) : '')) + '</div></div>';

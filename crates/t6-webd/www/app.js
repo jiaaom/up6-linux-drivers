@@ -58,7 +58,7 @@ $("#tabs").addEventListener("click", (e) => {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
   document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== btn.dataset.tab));
   if (btn.dataset.tab === "fans") loadCurves();
-  if (btn.dataset.tab === "dashboard") loadSystem();
+  if (btn.dataset.tab === "dashboard") { loadSystem(); loadHealth(); }
 });
 
 // ---- dashboard ------------------------------------------------------------
@@ -643,8 +643,83 @@ async function loadSystem() {
 
 // Refresh the software card at most every 15 s from the (recovering) poll.
 function maybeLoadSystem() {
-  if (Date.now() - lastSystemLoad > 15000) loadSystem();
+  if (Date.now() - lastSystemLoad > 15000) { loadSystem(); loadHealth(); }
 }
+
+// ---- drivers & services health --------------------------------------------
+
+let healthTimer = null;
+let repairRequested = false; // show the log of the run we started as it streams in
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+async function loadHealth() {
+  clearTimeout(healthTimer);
+  let h;
+  try { h = await api("health"); } catch (e) { return; }
+  const card = $("#health");
+  card.hidden = false;
+  const running = h.repair.running;
+  const last = h.repair.last;
+  const failed = !running && last && last.ok === false;
+  card.classList.toggle("bad", h.problems.length > 0 || failed);
+  card.classList.toggle("ok", !h.problems.length && !running && !failed);
+  $("#health-kernel").textContent = `kernel ${h.kernel}`;
+
+  let status;
+  if (running) status = "Repairing \u2014 building and loading the drivers (about 30 s)\u2026";
+  else if (h.problems.length) status = "Problems detected";
+  else status = "All drivers and services are running";
+  $("#health-status").textContent = status;
+  // Messages may quote a command in backticks.
+  $("#health-problems").innerHTML = h.problems
+    .map((p) => `<li>${escapeHtml(p).replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`).join("");
+
+  const actions = $("#health-actions");
+  actions.hidden = !(h.problems.length || running);
+  const btn = $("#health-repair");
+  btn.hidden = !h.repair.available;
+  btn.disabled = !state.admin || !h.can_repair;
+  let note = "";
+  if (!h.repair.available) note = "Update the T6 Drivers package to repair from here.";
+  else if (!state.admin) note = "administrator required";
+  else if (h.dpkg_busy) note = "A system update is in progress; repair once it has finished.";
+  else if (h.modules.some((m) => !m.built) && !h.headers) note = "Install the kernel headers first.";
+  $("#health-note").textContent = running ? "" : note;
+
+  const wrap = $("#health-log-wrap");
+  wrap.hidden = !last || !last.log.length;
+  if (last) {
+    const when = last.time_us ? new Date(last.time_us / 1000).toLocaleString() : "";
+    const outcome = running ? "running" : last.ok === true ? "succeeded" : last.ok === false ? "failed" : "";
+    $("#health-log-title").textContent = `Last repair${outcome ? " " + outcome : ""}${when ? " \u00b7 " + when : ""}`;
+    $("#health-log").textContent = last.log.join("\n");
+    if (running || (repairRequested && failed)) wrap.open = true;
+  }
+  if (!running && repairRequested) {
+    repairRequested = false;
+    notice(failed ? "Driver repair failed; see its log below." : "Drivers repaired.", failed ? "error" : "");
+    loadSystem();
+  }
+  if (running) healthTimer = setTimeout(loadHealth, 2000);
+}
+
+$("#health-repair").addEventListener("click", async () => {
+  const btn = $("#health-repair");
+  btn.disabled = true;
+  try {
+    await api("health/repair", { method: "POST" });
+    repairRequested = true;
+    notice("");
+    // systemd needs a moment to report the unit as activating.
+    setTimeout(loadHealth, 500);
+  } catch (err) {
+    notice(`Repair: ${err.message}`, "error");
+    loadHealth();
+  }
+});
 
 // ---- fan curve editor (custom profile) ------------------------------------
 

@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Front Panel"
 desc="Front touch-screen app for the UnifyDrive UP6 / ZSpace T6: dashboard, screen and network info, device settings. Requires T6 Control Center."
-changelog="0.2.0: FygoOS sign-in; file manager (browse, search, preview, manage); Devices & volumes card; Storage page resolves pool and array members; Thunderbolt page redesigned; notification center."
+changelog="0.2.1: dark / light theme (Settings), kept across restarts and applied to the file preview."
 
 [entry]
 title="T6 Front Panel"

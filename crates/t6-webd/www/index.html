@@ -23,6 +23,19 @@
     <p class="notice" id="notice" hidden></p>
 
     <section id="dashboard" class="panel">
+      <div class="card health" id="health" hidden>
+        <div class="title"><span>Drivers &amp; services</span><span class="muted" id="health-kernel"></span></div>
+        <div class="health-status" id="health-status"></div>
+        <ul class="health-problems" id="health-problems"></ul>
+        <div class="actions" id="health-actions" hidden>
+          <button class="primary" id="health-repair">Repair drivers</button>
+          <span class="muted" id="health-note"></span>
+        </div>
+        <details class="advanced" id="health-log-wrap" hidden>
+          <summary id="health-log-title">Last repair</summary>
+          <pre class="log" id="health-log"></pre>
+        </details>
+      </div>
       <div class="row">
         <h2>Fans</h2>
         <span class="muted" id="active-profile"></span>

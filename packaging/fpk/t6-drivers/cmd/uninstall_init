@@ -2,5 +2,6 @@
 # Unload the modules and remove them from DKMS while the sources still exist.
 . "$(dirname "$0")/common"
 
+remove_units
 run_installer --remove
 exit 0

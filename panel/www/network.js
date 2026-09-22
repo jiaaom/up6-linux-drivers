@@ -108,8 +108,8 @@ function tbNetCard(nif){
     '</div>';
 }
 function tbRateHtml(rx,tx){
-  function one(a,v){var p=v==null?['—','']:fmtRateParts(v);return '<div class="tb-r"><span class="arr">'+a+'</span><span class="num">'+p[0]+'</span><span class="unit">'+p[1]+'</span></div>';}
-  return one('↓',rx)+one('↑',tx);
+  function one(cls,a,v){var p=v==null?['—','']:fmtRateParts(v);return '<div class="tb-r '+cls+'"><span class="arr">'+a+'</span><span class="num">'+p[0]+'</span><span class="unit">'+p[1]+'</span></div>';}
+  return one('dn','↓',rx)+one('up','↑',tx);
 }
 function fmtRateParts(bytesPerSec){var b=Math.max(0,bytesPerSec*8);if(b>=1e9)return [(b/1e9).toFixed(b>=1e10?0:1),'Gb/s'];if(b>=1e6)return [(b/1e6).toFixed(0),'Mb/s'];if(b>=1e3)return [(b/1e3).toFixed(0),'kb/s'];return ['0','b/s'];}
 function renderTb(tb){
@@ -258,7 +258,7 @@ function wifiRender(){
       '<div class="wtoggle'+(on?' on':'')+'" id="wifiToggle"><div class="knob"></div></div></div>';
   var connCard=connected?
     '<div class="wifi-conn" id="wifiConnCard">'+
-      '<div class="wifi-conn-row">'+wifiArcs(w.signal,'oklch(0.82 0.11 62)')+
+      '<div class="wifi-conn-row">'+wifiArcs(w.signal,'var(--accent-text)')+
         '<div class="wifi-conn-info"><div class="wifi-conn-name">'+esc(w.ssid)+'</div>'+
         '<div class="wifi-conn-ip">'+esc(w.ip||'—')+(w.prefix!=null?' · DHCP':'')+'</div></div>'+WIFI_CHEV+'</div>'+
       '<div class="wifi-chips">'+

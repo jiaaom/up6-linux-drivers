@@ -220,7 +220,7 @@ static int __init t6_platform_init(void)
 	t6 = priv;
 	ret = register_reboot_notifier(&t6_reboot_nb);
 	if (ret)
-		goto err_clear;
+		goto err_charge;
 	if (t6_host_control) {
 		ret = t6_take_fan_control(priv);
 		if (ret)
@@ -236,8 +236,9 @@ static int __init t6_platform_init(void)
 
 err_notifier:
 	unregister_reboot_notifier(&t6_reboot_nb);
-err_clear:
+err_charge:
 	t6 = NULL;
+	t6_charge_unregister(priv);
 err_unregister:
 	platform_device_unregister(priv->pdev);
 err_free:
@@ -269,4 +270,4 @@ MODULE_DESCRIPTION("ZSpace T6 EC platform driver");
 MODULE_AUTHOR("T6 driver project");
 MODULE_LICENSE("GPL");
 MODULE_SOFTDEP("pre: pinctrl_meteorlake");
-MODULE_VERSION("0.9.8");
+MODULE_VERSION("0.9.11");

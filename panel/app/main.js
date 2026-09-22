@@ -79,12 +79,33 @@ async function ensurePreviewCookie() {
 // file-listing page underneath is never touched while Preview is open, so
 // closing it is an instant bounds change, not a reload/refetch of the folder.
 let previewView = null;
+// Renderer-chosen colour theme, mirrored here so the window/preview backgrounds
+// and the Preview app's own ?theme= match. Defaults to dark like theme.js does.
+const THEME_BG = { dark: '#0d1420', light: '#e2ecf7' };
+// Seed from t6-paneld's own settings file (the source of truth) so a cold start
+// in light mode doesn't flash the dark window background before the renderer
+// has loaded and reported back through theme:set.
+let theme = (() => {
+  try {
+    const t = JSON.parse(fs.readFileSync('/var/lib/t6-paneld/settings.json', 'utf8')).theme;
+    return t === 'light' ? 'light' : 'dark';
+  } catch (e) { return 'dark'; }
+})();
+let themeBg = THEME_BG[theme];
+let mainWindow = null;
+ipcMain.handle('theme:set', async (event, { theme: t, bg }) => {
+  theme = t === 'light' ? 'light' : 'dark';
+  if (bg) themeBg = bg;
+  if (mainWindow) mainWindow.setBackgroundColor(themeBg);
+  if (previewView) previewView.setBackgroundColor(themeBg);
+  return { ok: true };
+});
 ipcMain.handle('preview:open', async (event, { path, bounds }) => {
   if (!previewView) return { ok: false, reason: 'no window' };
   previewView.setBounds(bounds);
   previewView.setVisible(true); // show immediately (themed bg) while it loads
   try { await ensurePreviewCookie(); } catch (e) { /* best-effort; the preview app surfaces its own auth error if this fails */ }
-  previewView.webContents.loadURL(`${FNOS_ORIGIN}/app/trim-preview/?path=${encodeURIComponent(path)}&theme=dark`);
+  previewView.webContents.loadURL(`${FNOS_ORIGIN}/app/trim-preview/?path=${encodeURIComponent(path)}&theme=${theme}`);
   return { ok: true };
 });
 ipcMain.handle('preview:close', async () => {
@@ -104,13 +125,14 @@ function createWindow() {
     fullscreen: !windowed,
     frame: windowed,
     kiosk: !windowed,
-    backgroundColor: '#0d1420',
+    backgroundColor: themeBg,
     webPreferences: {
       preload: `${__dirname}/preload.js`,
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  mainWindow = win;
   win.loadURL(PANEL_URL);
   // No more Preview-toolbar geometry hack here: the weston compositor scale
   // (panel/app/weston.ini) plus a genuinely responsive panel UI (no more fixed
@@ -121,15 +143,21 @@ function createWindow() {
   previewView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  previewView.setBackgroundColor('#0d1420'); // matches --bg; avoids a white flash while loading
+  previewView.setBackgroundColor(themeBg); // matches --bg; avoids a flash of the wrong theme while loading
   win.contentView.addChildView(previewView);
   previewView.setVisible(false); // hidden until preview:open
 
   // On-panel verification: screenshot once after load, but keep running so the
   // app stays on the physical screen for interactive testing.
+  // PANEL_SHOT_JS optionally runs a snippet first (e.g. openSettings()) so a
+  // screenshot can target a sub-page, not just the home screen.
   if (process.env.PANEL_SHOT) {
     win.webContents.once('did-finish-load', async () => {
       await new Promise((r) => setTimeout(r, 4000));
+      if (process.env.PANEL_SHOT_JS) {
+        try { await win.webContents.executeJavaScript(process.env.PANEL_SHOT_JS); } catch (e) { console.error('PANEL_SHOT_JS', e); }
+        await new Promise((r) => setTimeout(r, 2500));
+      }
       fs.writeFileSync(process.env.PANEL_SHOT, (await win.webContents.capturePage()).toPNG());
       console.log('PANEL_SHOT written');
     });

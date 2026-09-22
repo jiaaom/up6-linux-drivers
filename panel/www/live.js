@@ -161,6 +161,10 @@ function refresh(d){
   LAST=d;
   if(!idleArmed){idleArmed=true;armIdle();} // start the idle timer once data exists
   if(!layoutApplied&&d.dashboard){layoutApplied=true;applyLayout(d.dashboard);homeCacheSave({dashboard:d.dashboard});} // restore saved widget layout
+  // settings.json is the source of truth for the theme; theme.js has already
+  // painted from the localStorage echo, so this only corrects a disagreement
+  // (fresh Electron profile, or the theme changed from another client).
+  if(d.theme&&d.theme!==theme){applyTheme(d.theme);try{localStorage.setItem('t6.theme',d.theme);}catch(e){}}
   setAccount(d.session);
   if(d.host&&d.host.name){setText('#home .hostname',d.host.name);setText('#edit .hostname',d.host.name);}
   HW_STATUS=d.status||null; renderStatusBanner();
@@ -168,7 +172,7 @@ function refresh(d){
   setText('.f-cpu',sys.cpu_c);setText('.f-gpu',sys.gpu_c);setText('.f-mem',sys.mem_pct);setText('.f-drives',sys.drives_c);
   var fl=document.querySelector('.fanlist');
   if(fl&&Array.isArray(sys.fans)&&sys.fans.length){
-    fl.innerHTML=sys.fans.map(function(f){return '<div style="flex:1;background:oklch(1 0 0 / .05);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">'+shortFan(f.name)+'</div><div style="font-size:18px;font-weight:500">'+(f.rpm!=null?f.rpm:'—')+'</div></div>';}).join('');
+    fl.innerHTML=sys.fans.map(function(f){return '<div style="flex:1;background:var(--fill-1);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">'+shortFan(f.name)+'</div><div style="font-size:18px;font-weight:500">'+(f.rpm!=null?f.rpm:'—')+'</div></div>';}).join('');
   }
   var bf=document.querySelector('#home .bat-fill');
   if(bf&&d.battery&&d.battery.capacity!=null)bf.style.width=Math.max(6,Math.min(100,d.battery.capacity))+'%';
@@ -205,7 +209,7 @@ function refresh(d){
         netHist.push(rxR+txR);if(netHist.length>26)netHist.shift();
         var nb=document.querySelector('.netbars');
         if(nb){var mx=Math.max.apply(null,netHist.concat([1]));
-          nb.innerHTML=netHist.map(function(v){var h=Math.max(3,Math.round(v/mx*100));return '<div style="flex:1;background:oklch(0.74 0.12 62 / .5);border-radius:2.5px;height:'+h+'%"></div>';}).join('');}
+          nb.innerHTML=netHist.map(function(v){var h=Math.max(3,Math.round(v/mx*100));return '<div style="flex:1;background:var(--accent);opacity:.6;border-radius:2.5px;height:'+h+'%"></div>';}).join('');}
       }}
     prevNet={rx:d.net.rx_bytes,tx:d.net.tx_bytes,t:now};}
 }

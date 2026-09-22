@@ -98,6 +98,8 @@ pub fn build() -> Value {
             "order": set.dashboard_order,
             "hidden": set.dashboard_hidden,
         },
+        // Colour theme; empty/unset means dark (theme.js falls back the same way).
+        "theme": if set.theme.is_empty() { "dark".to_string() } else { set.theme.clone() },
         // No active FygoOS session yet — the account chip shows "Sign in".
         "session": Value::Null,
         "system": {

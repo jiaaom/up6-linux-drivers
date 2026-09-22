@@ -63,6 +63,7 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
         .route(&p("/api/display/power"), put(put_power))
         .route(&p("/api/settings/screen-timeout"), put(put_screen_timeout))
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
+        .route(&p("/api/settings/theme"), put(put_theme))
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/hwinfo"), get(get_hwinfo))
         // Local resource monitor (CPU/mem/GPU/NPU/disks/procs) — sysfs+procfs, no login.

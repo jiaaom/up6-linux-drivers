@@ -11,6 +11,7 @@
 mod api;
 mod fand;
 mod gateway;
+mod health;
 mod ledd;
 mod www;
 

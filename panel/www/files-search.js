@@ -69,7 +69,7 @@ function fmPaintSearch(files, capped, q) {
     var loc = e.loc ? fmBase(e.loc) || e.loc : '';
     var meta = (loc ? loc : '') + (e.dir ? '' : (e.size != null ? ' · ' + fmtB(e.size) : ''));
     return '<div class="fm-row" data-path="' + esc(e.path || e.name) + '" data-name="' + esc(e.name) + '" data-dir="' + (e.dir ? 1 : 0) + '" data-loc="' + esc(e.loc || '') + '">' +
-      fmSvg(FM_ICON[cat], 26, { op: e.dir ? .9 : .6, stroke: e.dir ? 'var(--amber2)' : 'currentColor', flex: true }) +
+      fmSvg(FM_ICON[cat], 26, { op: e.dir ? .9 : .6, stroke: e.dir ? 'var(--accent-text)' : 'currentColor', flex: true }) +
       '<div class="fm-info"><div class="fm-name">' + esc(e.name) + '</div><div class="fm-meta">' + esc(meta) + '</div></div>' +
       (e.dir ? '<span class="fm-chev">›</span>' : '') + '</div>';
   }).join('');

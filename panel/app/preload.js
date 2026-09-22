@@ -12,3 +12,12 @@ contextBridge.exposeInMainWorld('previewBridge', {
   open: (path, bounds) => ipcRenderer.invoke('preview:open', { path, bounds }),
   close: () => ipcRenderer.invoke('preview:close'),
 });
+
+// Colour theme (see www/theme.js). The renderer owns the choice; main needs it
+// for the two surfaces the renderer can't paint: the BrowserWindow's own
+// background (visible on a scroll overshoot / before first paint) and the
+// native Preview view, which is a separate web contents and takes the theme as
+// a query parameter of fnOS's trim-preview app.
+contextBridge.exposeInMainWorld('themeBridge', {
+  set: (theme, bg) => ipcRenderer.invoke('theme:set', { theme, bg }),
+});

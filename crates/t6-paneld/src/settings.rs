@@ -21,6 +21,9 @@ pub struct Settings {
     /// UI language code, e.g. "en", "ja", "zh". Empty = default (en).
     #[serde(default)]
     pub language: String,
+    /// Panel colour theme: "dark" (default) or "light". Empty = dark.
+    #[serde(default)]
+    pub theme: String,
 }
 
 pub fn load() -> Settings {
@@ -55,6 +58,17 @@ pub fn set_dashboard(order: Vec<String>, hidden: Vec<String>) -> Result<Settings
 pub fn set_language(code: String) -> Result<Settings, String> {
     let mut s = load();
     s.language = code;
+    save(&s)?;
+    Ok(s)
+}
+
+/// Persist the panel colour theme ("dark" | "light").
+pub fn set_theme(theme: String) -> Result<Settings, String> {
+    if theme != "dark" && theme != "light" {
+        return Err(format!("invalid theme {theme:?} (want dark|light)"));
+    }
+    let mut s = load();
+    s.theme = theme;
     save(&s)?;
     Ok(s)
 }

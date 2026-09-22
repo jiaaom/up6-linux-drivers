@@ -88,6 +88,18 @@ pub(super) async fn put_language(Json(req): Json<LanguageReq>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct ThemeReq {
+    theme: String,
+}
+
+pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
+    match crate::settings::set_theme(req.theme) {
+        Ok(s) => Json(serde_json::json!({ "theme": s.theme })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
 pub(super) async fn get_hwinfo() -> Json<t6_hw_rs::hwinfo::HwInfo> {
     Json(t6_hw_rs::hwinfo::info())
 }

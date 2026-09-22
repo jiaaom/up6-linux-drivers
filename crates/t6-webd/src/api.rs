@@ -89,6 +89,8 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/beep"), axum::routing::post(post_beep))
         .route(&p("/api/beep/event"), axum::routing::put(put_beep_event))
         .route(&p("/api/system"), get(get_system))
+        .route(&p("/api/health"), get(get_health))
+        .route(&p("/api/health/repair"), axum::routing::post(post_repair))
 }
 
 type ApiResult = Result<Json<serde_json::Value>, ApiError>;
@@ -339,6 +341,23 @@ async fn get_system(State(s): State<AppState>) -> Json<serde_json::Value> {
             "t6-ledd": s.inner.ledd.status().is_some(),
         },
     }))
+}
+
+async fn get_health() -> ApiResult {
+    let h = tokio::task::spawn_blocking(crate::health::Health::collect)
+        .await
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!(h)))
+}
+
+async fn post_repair(State(s): State<AppState>, headers: HeaderMap) -> ApiResult {
+    let user = require_admin(&s, &headers)?;
+    tokio::task::spawn_blocking(crate::health::start_repair)
+        .await
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| ApiError(StatusCode::CONFLICT, e))?;
+    println!("driver repair started by {}", user.username.as_deref().unwrap_or("?"));
+    Ok(Json(json!({ "started": true })))
 }
 
 #[derive(Deserialize)]

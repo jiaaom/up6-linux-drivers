@@ -14,7 +14,7 @@ function notifRelTime(sec){
 }
 // level 0 = info, 1 = warning, >=2 = critical (fnOS uses 0/1 today; guard higher).
 function notifDot(level){
-  var c=level>=2?'oklch(0.63 0.21 25)':(level>=1?'var(--amber)':'oklch(0.7 0.05 252 / .5)');
+  var c=level>=2?'var(--danger)':(level>=1?'var(--warn)':'var(--ink-5)');
   return '<span class="ndot" style="background:'+c+'"></span>';
 }
 

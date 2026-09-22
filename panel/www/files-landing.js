@@ -13,7 +13,7 @@ function fmRenderLanding() {
     { root: 'fav', label: 'Favorites', icon: 'fav' }
   ].map(function (s) {
     return '<div class="fm-pin' + (s.hot ? ' hot' : '') + '" data-root="' + s.root + '">' +
-      fmSvg(FM_ICON[s.icon], 48, { op: s.hot ? 1 : .85, stroke: s.hot ? 'var(--amber)' : 'currentColor', sw: 3 }) +
+      fmSvg(FM_ICON[s.icon], 48, { op: s.hot ? 1 : .85, stroke: s.hot ? 'var(--accent-text)' : 'currentColor', sw: 3 }) +
       '<div class="fm-pin-l">' + s.label + '</div></div>';
   }).join('');
 
@@ -41,7 +41,7 @@ function fmLoadRecents() {
       var nm = fmBase(r.path), isDir = r.dir === 1 || r.dir === true;
       var when = r.datetime || r.mtim;
       return '<div class="fm-row fm-recent" data-path="' + esc(r.path) + '" data-name="' + esc(nm) + '" data-dir="' + (isDir ? 1 : 0) + '">' +
-        fmSvg(FM_ICON[isDir ? 'folder' : fmCat(nm, false)], 26, { op: isDir ? .9 : .6, stroke: isDir ? 'var(--amber2)' : 'currentColor', flex: true }) +
+        fmSvg(FM_ICON[isDir ? 'folder' : fmCat(nm, false)], 26, { op: isDir ? .9 : .6, stroke: isDir ? 'var(--accent-text)' : 'currentColor', flex: true }) +
         '<div class="fm-info"><div class="fm-name">' + esc(nm) + '</div><div class="fm-meta">' + esc(fmParentLabel(r.path) + (when ? ' · ' + fmRelTime(when * 1000) : '')) + '</div></div></div>';
     }).join('');
     wrap.innerHTML = '<div class="fm-sec">Recent</div><div class="fm-list">' + rows + '</div>';

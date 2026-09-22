@@ -4,10 +4,19 @@
 #   sudo ./install-dkms.sh            install/upgrade both packages for the running kernel
 #   sudo ./install-dkms.sh --remove   remove both packages and their boot-time config
 #   sudo ./install-dkms.sh --no-load  install without loading the modules right away
+#   sudo ./install-dkms.sh --repair   build whatever is missing for the running kernel,
+#                                     load the modules and restart T6 services that are down
+#   sudo ./install-dkms.sh --repair --boot
+#                                     same, from t6-drivers-check.service at boot: the T6
+#                                     services are ordered after it, so none are restarted
 #
 # Each package directory must contain a dkms.conf with PACKAGE_NAME and
 # PACKAGE_VERSION; everything else is derived from it. Older versions of the
 # same package are removed first, so re-running after a version bump upgrades.
+#
+# --repair exits 3 when the kernel headers are missing and 4 while dpkg is
+# busy (a system update may be installing the kernel right now); nothing is
+# changed in either case.
 
 set -euo pipefail
 
@@ -17,6 +26,13 @@ PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
 # under ../kernel/ in the source tree.
 if [ -d "$SCRIPT_DIR/${PACKAGES[0]}" ]; then PKG_ROOT=$SCRIPT_DIR; else PKG_ROOT=$SCRIPT_DIR/../kernel; fi
 MODULES_LOAD_CONF=/etc/modules-load.d/t6-platform.conf
+MODULES=(t6_platform ft8722_ts)
+# Services that use the modules, restarted by --repair when a module was
+# (re)loaded or the service is down. Missing ones are skipped.
+T6_SERVICES=(t6-fand t6-ledd t6-paneld t6-panel-kiosk)
+# Serialises every run: the boot check, a repair from the web UI and the
+# App Center install/upgrade/uninstall callbacks.
+LOCK_FILE=/run/lock/t6-drivers.lock
 
 LOG=$(mktemp -t install-dkms.XXXXXX)
 trap 'rm -f "$LOG"' EXIT
@@ -45,6 +61,24 @@ module_loaded() { [ -d "/sys/module/$1" ]; }
 unload_module() {
     module_loaded "$1" || return 0
     rmmod "$1" || die "cannot unload $1"
+}
+
+# Wait for any other run of this script to finish.
+take_lock() {
+    exec 9>"$LOCK_FILE"
+    flock 9 || die "cannot lock $LOCK_FILE"
+}
+
+# dpkg holds POSIX locks on these while it installs packages (including the
+# kernel image/headers, whose hooks run DKMS themselves).
+dpkg_busy() {
+    local f ino
+    for f in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock; do
+        [ -e "$f" ] || continue
+        ino=$(stat -c %i "$f")
+        grep -q ":$ino " /proc/locks && return 0
+    done
+    return 1
 }
 
 require_root() {
@@ -101,7 +135,7 @@ install_boot_config() {
 
 load_modules() {
     local m
-    for m in t6_platform ft8722_ts; do
+    for m in "${MODULES[@]}"; do
         unload_module "$m"
         modprobe "$m" || die "cannot load $m (see dmesg)"
     done
@@ -129,6 +163,71 @@ do_install() {
     dkms status | grep -E "^($(IFS='|'; echo "${names[*]}"))/" || true
 }
 
+# Captured first: with pipefail, `dkms ... | grep -q` fails whenever grep
+# exits early and dkms gets SIGPIPE.
+dkms_status() { dkms status "$@" 2>/dev/null || true; }
+
+# "name/ver, kver, arch: installed" once a package is built for a kernel.
+built_for_kernel() {
+    local out
+    out=$(dkms_status "$1" -k "$2")
+    [[ $out == *": installed"* ]]
+}
+
+registered() { [ -n "$(dkms_status "$1")" ]; }
+
+restart_services() {
+    local reloaded=$1 s
+    for s in "${T6_SERVICES[@]}"; do
+        systemctl is-enabled --quiet "$s" 2>/dev/null || continue
+        if [ "$reloaded" = yes ] || ! systemctl is-active --quiet "$s"; then
+            log "restarting $s"
+            systemctl reset-failed "$s" 2>/dev/null || true
+            systemctl restart "$s" || log "warning: $s failed to start (journalctl -u $s)"
+        fi
+    done
+}
+
+# Kernel updates on fnOS install the image before the headers, and the
+# headers package runs no hooks, so DKMS never builds for the new kernel.
+# Build only what is missing for the running one; a package whose sources
+# are gone from /usr/src is reinstalled from this directory.
+do_repair() {
+    local boot=$1 kver dir name ver m reloaded=no
+    kver=$(uname -r)
+    command -v dkms >/dev/null || die "dkms is not installed (apt install dkms)"
+    if [ ! -e "/lib/modules/$kver/build/include" ]; then
+        printf 'error: kernel headers for %s are missing; install them with: apt install linux-headers-%s\n' "$kver" "$kver" >&2
+        exit 3
+    fi
+    if [ "$boot" = no ] && dpkg_busy; then
+        printf 'error: a system update is in progress; try again once it has finished\n' >&2
+        exit 4
+    fi
+    for dir in "${PACKAGES[@]}"; do
+        [ -f "$PKG_ROOT/$dir/dkms.conf" ] || die "missing $PKG_ROOT/$dir/dkms.conf"
+        name=$(conf_value "$PKG_ROOT/$dir" PACKAGE_NAME)
+        ver=$(conf_value "$PKG_ROOT/$dir" PACKAGE_VERSION)
+        if built_for_kernel "$name/$ver" "$kver"; then
+            log "$name/$ver is built for $kver"
+        elif [ -f "/usr/src/$name-$ver/dkms.conf" ] && registered "$name/$ver"; then
+            log "building $name/$ver for $kver"
+            dkms_step install "$name/$ver" -k "$kver"
+        else
+            install_package "$PKG_ROOT/$dir"
+        fi
+    done
+    install_boot_config
+    for m in "${MODULES[@]}"; do
+        module_loaded "$m" && continue
+        log "loading $m"
+        modprobe "$m" || die "cannot load $m (see dmesg)"
+        reloaded=yes
+    done
+    [ "$boot" = yes ] || restart_services "$reloaded"
+    log "done"
+}
+
 do_remove() {
     local m dir name
     for m in ft8722_ts t6_platform; do
@@ -143,19 +242,23 @@ do_remove() {
 }
 
 main() {
-    local action=install load=yes
+    local action=install load=yes boot=no
     while [ $# -gt 0 ]; do
         case $1 in
             --remove)  action=remove ;;
+            --repair)  action=repair ;;
+            --boot)    boot=yes ;;
             --no-load) load=no ;;
-            -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+            -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
             *) die "unknown option: $1" ;;
         esac
         shift
     done
     require_root "$@"
+    take_lock
     case $action in
         install) do_install "$load" ;;
+        repair)  do_repair "$boot" ;;
         remove)  do_remove ;;
     esac
 }

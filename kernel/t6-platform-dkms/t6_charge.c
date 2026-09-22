@@ -261,13 +261,18 @@ int t6_charge_register(struct t6_platform *priv)
 	if (ret)
 		return ret;
 
-	ret = devm_battery_hook_register(&priv->pdev->dev, &t6_charge_hook);
-	if (ret)
-		return ret;
+	/*
+	 * Not devm: the attributes must be gone before t6_charge_unregister()
+	 * hands the pack back to the EC and clears t6_chg, while devres would
+	 * remove them only later, from platform_device_unregister().
+	 */
+	battery_hook_register(&t6_charge_hook);
 	priv->charge_psy_nb.notifier_call = t6_charge_psy_notify;
 	ret = power_supply_reg_notifier(&priv->charge_psy_nb);
-	if (ret)
+	if (ret) {
+		battery_hook_unregister(&t6_charge_hook);
 		return ret;
+	}
 
 	if (t6_charge_end_default != 100 || t6_charge_start_default != 0) {
 		ret = t6_charge_set_thresholds(priv, t6_charge_start_default,
@@ -282,6 +287,12 @@ int t6_charge_register(struct t6_platform *priv)
 
 void t6_charge_unregister(struct t6_platform *priv)
 {
+	/*
+	 * Remove the threshold attributes first; this waits for readers and
+	 * writers already inside them. A read racing module unload used to
+	 * find t6_chg NULL, and the resulting oops left rmmod stuck forever.
+	 */
+	battery_hook_unregister(&t6_charge_hook);
 	power_supply_unreg_notifier(&priv->charge_psy_nb);
 	t6_charge_release(priv);
 	cancel_delayed_work_sync(&priv->charge_work);

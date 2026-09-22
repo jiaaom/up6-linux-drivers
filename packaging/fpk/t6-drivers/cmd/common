@@ -14,3 +14,49 @@ run_installer() {
         fail "T6 drivers: install-dkms.sh $* failed: $(printf '%s\n' "$out" | tail -n 5)"
     fi
 }
+
+# Two units run install-dkms.sh --repair (see its header):
+#  - t6-drivers-check runs at every boot, before the T6 services, and builds
+#    the modules when a kernel update left the new kernel without them.
+#  - t6-drivers-repair is started on demand by the T6 Control Center. It has
+#    no ordering against the services because it restarts them itself.
+# Both take the script's lock, so they never overlap each other or an
+# App Center install/upgrade.
+CHECK_UNIT=t6-drivers-check
+REPAIR_UNIT=t6-drivers-repair
+T6_SERVICES="t6-fand.service t6-ledd.service t6-paneld.service t6-panel-kiosk.service t6-webd.service"
+
+install_units() {
+    cat > "/etc/systemd/system/$CHECK_UNIT.service" <<UNIT
+[Unit]
+Description=T6 drivers: build missing DKMS modules for the running kernel
+After=local-fs.target systemd-modules-load.service
+Before=$T6_SERVICES
+
+[Service]
+Type=oneshot
+ExecStart=$TRIM_APPDEST/install-dkms.sh --repair --boot
+# A build takes ~30 s; the EC keeps the fans on its own curve meanwhile.
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    cat > "/etc/systemd/system/$REPAIR_UNIT.service" <<UNIT
+[Unit]
+Description=T6 drivers: rebuild and reload DKMS modules, restart T6 services
+
+[Service]
+Type=oneshot
+ExecStart=$TRIM_APPDEST/install-dkms.sh --repair
+TimeoutStartSec=10min
+UNIT
+    systemctl daemon-reload
+    systemctl enable "$CHECK_UNIT" >/dev/null 2>&1
+}
+
+remove_units() {
+    systemctl disable "$CHECK_UNIT" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$CHECK_UNIT.service" "/etc/systemd/system/$REPAIR_UNIT.service"
+    systemctl daemon-reload
+}

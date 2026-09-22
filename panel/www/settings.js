@@ -62,6 +62,10 @@ function buildSettings(){
       '<div class="setrow"><div class="lbl">Screen Timeout</div></div>'+
       '<div class="seg" id="timeoutSeg">'+seg+'</div>'+
     '</div></div>'+
+    '<div class="setgroup"><div class="setlabel">Appearance</div><div class="card">'+
+      '<div class="setrow"><div class="lbl">Theme</div></div>'+
+      '<div class="seg" id="themeSeg">'+THEMES.map(function(t){return '<div class="segopt'+(t===theme?' on':'')+'" data-th="'+t+'">'+(t==='dark'?'Dark':'Light')+'</div>';}).join('')+'</div>'+
+    '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Hardware</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Device indicator lights</div><div class="etoggle'+(ledsOn?' on':'')+'" id="ledToggle"><div class="knob"></div></div></div>'+
       '<div class="hairrow"></div>'+
@@ -92,6 +96,14 @@ function buildSettings(){
       '<div class="setrow tap" id="shutdownRow"><div class="lbl danger">Shut Down</div><div class="chev">›</div></div>'+
     '</div></div>';
   initSlider(bri);
+  // Theme: applies instantly, then persists device-side (see theme.js).
+  document.querySelectorAll('#themeSeg .segopt').forEach(function(o){
+    o.addEventListener('click',function(){
+      document.querySelectorAll('#themeSeg .segopt').forEach(function(x){x.classList.remove('on');});
+      o.classList.add('on');
+      setTheme(o.dataset.th);
+    });
+  });
   // Device indicator lights -> t6-ledd night mode (off = lights stay dark)
   document.getElementById('ledToggle').addEventListener('click',function(){
     var nowOn=!this.classList.contains('on');this.classList.toggle('on',nowOn);

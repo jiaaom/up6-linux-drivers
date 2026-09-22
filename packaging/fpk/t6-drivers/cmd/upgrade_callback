@@ -3,4 +3,5 @@
 . "$(dirname "$0")/common"
 
 run_installer
+install_units
 exit 0

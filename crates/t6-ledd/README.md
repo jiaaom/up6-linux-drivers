@@ -31,7 +31,7 @@ beeper. Rust, no runtime dependencies.
 
 ```
 cargo build --release
-sudo install -m 755 target/release/t6-ledd /usr/sbin/t6-ledd
+sudo install -m 755 ../target/release/t6-ledd /usr/sbin/t6-ledd
 sudo install -m 644 t6-ledd.toml /etc/t6-ledd.toml
 sudo install -m 644 t6-ledd.service /etc/systemd/system/t6-ledd.service
 sudo systemctl daemon-reload && sudo systemctl enable --now t6-ledd

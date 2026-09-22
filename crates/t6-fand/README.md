@@ -35,7 +35,7 @@ temperature curves.
 
 ```
 cargo build --release
-sudo install -m 755 target/release/t6-fand /usr/sbin/t6-fand
+sudo install -m 755 ../target/release/t6-fand /usr/sbin/t6-fand
 sudo install -m 644 t6-fand.toml /etc/t6-fand.toml
 sudo install -m 644 t6-fand.service /etc/systemd/system/t6-fand.service
 sudo systemctl daemon-reload && sudo systemctl enable --now t6-fand

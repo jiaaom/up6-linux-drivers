@@ -414,9 +414,55 @@ pub async fn do_login(user: &str, password: &str) -> Result<Value, String> {
 
 /// Non-secret sign-in status (and whether a persisted ticket exists to resume).
 pub async fn status() -> Value {
+    auto_sign_in().await;
+    let auto = crate::autologin::meta().map(|m| json!({ "user": m.user }));
     match &*cell().lock().await {
-        Some(c) => json!({ "signedIn": true, "uid": c.session.uid, "admin": c.session.admin, "username": c.session.username }),
-        None => json!({ "signedIn": false, "canResume": load_persisted().is_some() }),
+        Some(c) => json!({ "signedIn": true, "uid": c.session.uid, "admin": c.session.admin, "username": c.session.username, "autoLogin": auto }),
+        None => json!({ "signedIn": false, "canResume": load_persisted().is_some(), "autoLogin": auto }),
+    }
+}
+
+/// Sign in, and remember (seal) or forget the credentials for automatic
+/// sign-in. A sign-in without "remember" also drops any older remembered one.
+pub async fn login_remember(user: &str, password: &str, remember: bool) -> Result<Value, String> {
+    let mut v = do_login(user, password).await?;
+    if remember {
+        match crate::autologin::save(user, password) {
+            Ok(m) => v["autoLogin"] = json!({ "user": m.user }),
+            Err(e) => v["autoLoginError"] = json!(e),
+        }
+    } else {
+        crate::autologin::clear();
+    }
+    Ok(v)
+}
+
+/// If signed out but credentials are remembered, sign in with them. One
+/// attempt at a time, and after a failure (e.g. fnOS still starting at boot)
+/// wait 30 s before trying again. A rejected password (changed in fnOS) drops
+/// the remembered credentials so the panel asks again.
+pub async fn auto_sign_in() -> bool {
+    static GATE: OnceLock<Mutex<Option<std::time::Instant>>> = OnceLock::new();
+    let mut last_fail = GATE.get_or_init(|| Mutex::new(None)).lock().await;
+    if cell().lock().await.is_some() {
+        return true;
+    }
+    if last_fail.is_some_and(|t| t.elapsed() < Duration::from_secs(30)) {
+        return false;
+    }
+    let Some((user, password)) = crate::autologin::load() else { return false };
+    match do_login(&user, &password).await {
+        Ok(_) => {
+            *last_fail = None;
+            true
+        }
+        Err(e) => {
+            if e.starts_with("login rejected") {
+                crate::autologin::clear();
+            }
+            *last_fail = Some(std::time::Instant::now());
+            false
+        }
     }
 }
 
@@ -431,25 +477,34 @@ pub async fn status() -> Value {
 /// timeout), stalling folder listings. Cloning out first lets them run in
 /// parallel.
 pub async fn call(req: &str, params: Value) -> Result<Value, String> {
-    let client = {
-        let guard = cell().lock().await;
-        guard.as_ref().ok_or("not signed in to fnOS")?.clone()
-    };
-    let resp = client.request(req, params).await?;
-    if is_session_expired(&resp) {
+    for attempt in 0..2 {
+        let client = current_client().await?;
+        let resp = client.request(req, params.clone()).await?;
+        if !is_session_expired(&resp) {
+            return Ok(resp);
+        }
         invalidate_session().await;
-        return Err(SESSION_EXPIRED.to_string());
+        if attempt == 0 && auto_sign_in().await {
+            continue; // signed back in with the remembered credentials: retry once
+        }
+        break;
     }
-    Ok(resp)
+    Err(SESSION_EXPIRED.to_string())
+}
+
+/// The live session's client, signing in automatically first if possible.
+async fn current_client() -> Result<FnosClient, String> {
+    if let Some(c) = cell().lock().await.as_ref() {
+        return Ok(c.clone());
+    }
+    auto_sign_in().await;
+    cell().lock().await.as_ref().cloned().ok_or_else(|| "not signed in to fnOS".to_string())
 }
 
 /// Streaming variant of [`call`] — see [`FnosClient::request_stream`]. Returns
 /// every frame collected within `budget`.
 pub async fn call_stream(req: &str, params: Value, budget: Duration) -> Result<Vec<Value>, String> {
-    let client = {
-        let guard = cell().lock().await;
-        guard.as_ref().ok_or("not signed in to fnOS")?.clone()
-    };
+    let client = current_client().await?;
     let frames = client.request_stream(req, params, budget).await?;
     if frames.iter().any(is_session_expired) {
         invalidate_session().await;
@@ -495,4 +550,5 @@ pub async fn logout() {
     }
     *guard = None;
     let _ = std::fs::remove_file(SESSION_FILE);
+    crate::autologin::clear();
 }

@@ -4,6 +4,7 @@ var loginEl=document.getElementById('login');
 function showLogin(){
   document.getElementById('loginErr').hidden=true;
   document.getElementById('loginUser').value='';document.getElementById('loginPass').value='';
+  document.getElementById('loginRemember').classList.remove('on'); // opt-in every time
   loginEl.classList.add('on');
   setTimeout(function(){document.getElementById('loginUser').focus();},120);
 }
@@ -13,15 +14,18 @@ function submitLogin(){
   var err=document.getElementById('loginErr'),btn=document.getElementById('loginSubmit');
   if(!u||!p){err.textContent='Enter your username and password.';err.hidden=false;return;}
   err.hidden=true;btn.classList.add('busy');btn.textContent='Signing in…';
-  fetch('api/fnos/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:u,password:p})})
+  fetch('api/fnos/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:u,password:p,remember:document.getElementById('loginRemember').classList.contains('on')})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
     .then(function(res){
       btn.classList.remove('busy');btn.textContent='Sign in';
-      if(res.ok&&res.j&&res.j.signedIn){hideLogin();fnosUser={username:res.j.username,uid:res.j.uid,admin:res.j.admin};setAccount();refreshNotifications(true);toast('Signed in');}
+      if(res.ok&&res.j&&res.j.signedIn){hideLogin();fnosUser={username:res.j.username,uid:res.j.uid,admin:res.j.admin};setAccount();refreshNotifications(true);
+        var al=res.j.autoLogin;
+        toast(al?'Signed in · auto sign-in on':res.j.autoLoginError?'Signed in · could not save auto sign-in':'Signed in');}
       else{err.textContent=(res.j&&res.j.error)||'Sign in failed.';err.hidden=false;}
     }).catch(function(){btn.classList.remove('busy');btn.textContent='Sign in';err.textContent='Sign in failed.';err.hidden=false;});
 }
 document.getElementById('loginCancel').addEventListener('click',hideLogin);
+document.getElementById('loginRemember').addEventListener('click',function(){this.classList.toggle('on');});
 document.getElementById('loginSubmit').addEventListener('click',submitLogin);
 document.getElementById('loginPass').addEventListener('keydown',function(e){if(e.key==='Enter')submitLogin();});
 document.getElementById('loginUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('loginPass').focus();});

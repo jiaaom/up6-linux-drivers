@@ -34,7 +34,7 @@ function fmSearchFolderPath() {
 function fmDoSearch() {
   var f = FM.cur;
   var q = (f.q || '').trim();
-  if (q.length < 2) { fmSetScroll('<div class="wifi-empty">' + (q ? 'Keep typing…' : 'Type to search this NAS.') + '</div>'); return; }
+  if (q.length < 2) { fmSetScroll('<div class="wifi-empty">' + (q ? 'Keep typing…' : 'Type to search.') + '</div>'); return; }
   var seq = ++FM.searchSeq;
   fmSetScroll('<div class="wifi-empty">Searching…</div>');
   // Favorites: filter the flat fav list client-side (no walk needed).

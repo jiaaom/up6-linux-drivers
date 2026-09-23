@@ -101,7 +101,7 @@ function tbNetCard(nif){
   return '<div class="card tb-card">'+
     '<div class="tb-hero"><div class="tb-rate" data-tbrate="'+esc(nif.iface)+'">'+tbRateHtml(null,null)+'</div><div class="tb-live">live · updates every 2 s</div></div>'+
     '<div class="tb-kv"><div class="tb-k">Interface</div><div class="tb-v mono"><i class="tb-dot'+(nif.connected?' on':'')+'"></i>'+esc(nif.iface)+'</div></div>'+
-    '<div class="tb-kv"><div class="tb-k">This NAS</div><div class="tb-v mono">'+esc(nif.ip||'no address')+(nif.ip&&method==='link-local'?' <span class="tb-tag">link-local</span>':'')+'</div></div>'+
+    '<div class="tb-kv"><div class="tb-k">This machine</div><div class="tb-v mono">'+esc(nif.ip||'no address')+(nif.ip&&method==='link-local'?' <span class="tb-tag">link-local</span>':'')+'</div></div>'+
     '<div class="tb-kv" style="align-items:baseline"><div class="tb-k">Peer</div><div style="text-align:right">'+peer+'</div></div>'+
     (nif.mtu?'<div class="tb-kv"><div class="tb-k">MTU</div><div class="tb-v mono">'+nif.mtu+(nif.mtu>=9000?' <span class="tb-tag">jumbo</span>':'')+'</div></div>':'')+
     (nif.conn?'<div class="tb-kv tap tb-netcfg" data-c="'+esc(nif.conn)+'"><div class="tb-k">Configure IPv4</div><div class="tb-v">'+mlabel+'</div>'+TB_ICON.chev+'</div>':'')+

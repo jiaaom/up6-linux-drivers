@@ -7,9 +7,10 @@ var META={
   filemgr:{title:'File Manager',desc:'Personal · Team · Trash · Favorites'},
   notif:{title:'Notifications',desc:'System alerts & activity'},
   net:{title:'Network traffic',desc:'Live throughput graph'},
+  fw:{title:'Firmware',desc:'Installed version · update check'},
 };
-var order=['storage','system','conn','filemgr','notif','net'];
-var visible={storage:1,system:1,conn:1,filemgr:1,notif:1,net:1};
+var order=['filemgr','storage','conn','system','fw','net','notif'];
+var visible={storage:1,system:1,conn:1,filemgr:1,notif:1,net:1,fw:1};
 
 var CONTENT={
   storage:`<div class="card" data-tile="storage">
@@ -60,6 +61,9 @@ var CONTENT={
         <div style="display:flex;align-items:center;gap:9px"><span class="notif-badge" style="display:none"></span><span style="font-size:17px;opacity:.4">›</span></div>
       </div>
       <div class="notif-preview" style="margin-top:13px"><div class="notif-empty muted2" style="font-size:15px">Loading…</div></div></div>`,
+  fw:`<div class="fwbanner"><div class="fwdot"></div>
+      <div style="flex:1"><div id="fwTitle" style="font-size:16.5px;font-weight:500"></div><div id="fwSub" style="font-size:15.5px" class="muted"></div></div>
+      <div style="font-size:18px;opacity:.45">›</div></div>`,
   net:`<div class="card"><div class="row-sb"><div style="font-size:16px" class="muted">Network traffic</div><div style="font-size:15px" class="muted2">last 60 s</div></div>
       <div class="netbars" style="display:flex;align-items:flex-end;gap:3.5px;height:75px;margin-top:12px"></div>
       <div class="row-sb" style="margin-top:10px"><span style="font-size:15.5px" class="muted net-dn">↓ —</span><span style="font-size:15.5px" class="muted net-up">↑ —</span></div></div>`,
@@ -71,14 +75,9 @@ function renderHome(){
   order.forEach(function(id){
     if(!visible[id])return;
     var el=document.createElement('div');el.className='widget';el.dataset.id=id;el.innerHTML=CONTENT[id];
+    if(id==='fw'){el.id='fwWidget';el.style.display='none';el.addEventListener('click',showFirmware);} // shown once the check answers (applyFw)
     homeScroll.appendChild(el);
   });
-  var fw=document.createElement('div');fw.className='widget';fw.id='fwWidget';fw.style.display='none';
-  fw.innerHTML=`<div class="fwbanner"><div class="fwdot"></div>
-      <div style="flex:1"><div id="fwTitle" style="font-size:16.5px;font-weight:500"></div><div id="fwSub" style="font-size:15.5px" class="muted"></div></div>
-      <div style="font-size:18px;opacity:.45">›</div></div>`;
-  fw.addEventListener('click',showFirmware);
-  homeScroll.appendChild(fw);
   bindTiles();
   checkFirmware();
   if(window.paintHomeCached)paintHomeCached(); // storage card from live/cached data, not an empty shell until the next poll

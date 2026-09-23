@@ -82,7 +82,7 @@ const I18N = {
     colorCorrectionHint: "Fixes washed-out colors and clipped highlights. The screen restarts for a few seconds.",
     actions: "Actions",
     restartPanel: "Restart panel app",
-    restartPanelHint: "For a frozen or misbehaving panel, without rebooting the NAS.",
+    restartPanelHint: "For a frozen or misbehaving panel, without rebooting the OS.",
     restart: "Restart",
     cancel: "Cancel",
     confirm: "OK",

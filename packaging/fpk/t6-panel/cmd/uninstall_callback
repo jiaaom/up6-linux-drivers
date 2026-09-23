@@ -1,2 +1,4 @@
 #!/bin/bash
+. "$(dirname "$0")/common"
+remove_settings
 exit 0

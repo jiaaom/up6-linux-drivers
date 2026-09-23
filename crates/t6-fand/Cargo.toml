@@ -2,7 +2,7 @@
 name = "t6-fand"
 version = "0.1.0"
 edition = "2021"
-description = "Fan policy daemon for the ZSpace T6 NAS (hwmon-based)"
+description = "Fan policy daemon for the ZSpace T6 (hwmon-based)"
 license = "GPL-2.0"
 
 [dependencies]

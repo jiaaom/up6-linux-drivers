@@ -2,7 +2,7 @@
 name = "t6-ledd"
 version = "0.1.0"
 edition = "2021"
-description = "Indicator daemon for the ZSpace T6 NAS: LEDs, night mode, beeper"
+description = "Indicator daemon for UnifyDrive UP6/T6: LEDs, beeper"
 license = "GPL-2.0"
 
 [dependencies]

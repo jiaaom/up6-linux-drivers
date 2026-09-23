@@ -1,4 +1,4 @@
-//! t6-ledd: indicator daemon for the ZSpace T6 NAS.
+//! t6-ledd: indicator daemon for UnifyDrive UP6/T6.
 //!
 //! Single owner of the `t6:*` LEDs and the beeper. Every LED is either in
 //! `auto` mode (a rule evaluated every cycle) or `manual` (a fixed colour);

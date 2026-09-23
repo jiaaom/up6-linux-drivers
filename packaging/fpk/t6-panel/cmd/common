@@ -43,11 +43,20 @@ UNIT
 
 remove_paneld() {
     systemctl disable --now "$PANELD_UNIT" >/dev/null 2>&1 || true
+    systemctl reset-failed "$PANELD_UNIT" >/dev/null 2>&1 || true  # a stopped Electron/daemon can read as "failed"
     rm -f "$PANELD_UNIT_FILE" "$TRIM_APPDEST/app.sock"
-    case "${wizard_remove_settings:-false}" in
-        true|1|yes|on) rm -rf /var/lib/t6-paneld ;;
-    esac
     systemctl daemon-reload
+}
+
+# Uninstall wizard: "also remove settings" (dashboard, theme, colour
+# correction, kiosk profile, remembered fnOS sign-in). Runs from
+# uninstall_callback, where the App Center passes wizard values; the value is
+# logged (`journalctl -t t6-panel`).
+remove_settings() {
+    logger -t t6-panel "uninstall: wizard_settings=${wizard_settings:-<unset>}"
+    case "${wizard_settings:-keep}" in
+        remove) rm -rf /var/lib/t6-paneld && logger -t t6-panel "uninstall: removed /var/lib/t6-paneld" ;;
+    esac
 }
 
 start_paneld() {
@@ -117,6 +126,7 @@ UNIT
 
 remove_kiosk() {
     systemctl disable --now "$KIOSK_UNIT" >/dev/null 2>&1 || true
+    systemctl reset-failed "$KIOSK_UNIT" >/dev/null 2>&1 || true  # a stopped Electron/daemon can read as "failed"
     rm -f "$KIOSK_UNIT_FILE"
     systemctl daemon-reload
 }

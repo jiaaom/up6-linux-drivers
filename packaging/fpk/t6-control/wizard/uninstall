@@ -7,10 +7,20 @@
         "helpText": "The fan and LED daemons are removed with the app. The drivers (T6 Drivers) stay installed."
       },
       {
-        "type": "switch",
-        "field": "wizard_remove_settings",
-        "label": "Also remove fan curves, LED and charge settings",
-        "initValue": "false"
+        "type": "radio",
+        "field": "wizard_settings",
+        "label": "Settings",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "Keep fan curves, LED and charge settings",
+            "value": "keep"
+          },
+          {
+            "label": "Remove fan curves, LED and charge settings",
+            "value": "remove"
+          }
+        ]
       }
     ]
   }

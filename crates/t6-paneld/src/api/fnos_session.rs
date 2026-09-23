@@ -7,12 +7,15 @@ use serde::Deserialize;
 pub(super) struct FnosLogin {
     user: String,
     password: String,
+    /// "Sign in automatically": seal the credentials (see crate::autologin).
+    #[serde(default)]
+    remember: bool,
 }
 
 /// Sign in to fnOS (native WS client). The password is used transiently for the
 /// handshake and never stored; only the resume ticket is persisted.
 pub(super) async fn post_fnos_login(Json(b): Json<FnosLogin>) -> Response {
-    match crate::fnos::do_login(&b.user, &b.password).await {
+    match crate::fnos::login_remember(&b.user, &b.password, b.remember).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": e }))).into_response(),
     }

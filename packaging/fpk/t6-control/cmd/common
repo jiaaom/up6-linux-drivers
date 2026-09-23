@@ -39,15 +39,26 @@ remove_daemons() {
     local d
     for d in "${DAEMONS[@]}"; do
         systemctl disable --now "$d" >/dev/null 2>&1 || true
+        systemctl reset-failed "$d" >/dev/null 2>&1 || true  # a stopped Electron/daemon can read as "failed"
         rm -f "/etc/systemd/system/$d.service" "/usr/sbin/$d"
-        case "${wizard_remove_settings:-false}" in
-            true|1|yes|on) rm -f "/etc/$d.toml" ;;
-        esac
     done
-    case "${wizard_remove_settings:-false}" in
-        true|1|yes|on) rm -f /etc/t6-display.conf ;;
-    esac
     systemctl daemon-reload
+}
+
+# Uninstall wizard: "also remove settings". The App Center hands wizard values
+# to uninstall_callback (not uninstall_init), so this runs from there. Log the
+# value received so a surprise can be checked with `journalctl -t t6-control`.
+remove_settings() {
+    logger -t t6-control "uninstall: wizard_settings=${wizard_settings:-<unset>}"
+    case "${wizard_settings:-keep}" in
+        remove) ;;
+        *) return 0 ;;
+    esac
+    local d
+    for d in "${DAEMONS[@]}"; do rm -f "/etc/$d.toml"; done
+    # backlight settings and the battery charge band (both written by t6-webd)
+    rm -f /etc/t6-display.conf /etc/modprobe.d/t6-platform.conf
+    logger -t t6-control "uninstall: removed fan, LED, display and charge settings"
 }
 
 # Generate the unit from the package paths and enable it.
@@ -78,6 +89,7 @@ EOF
 
 remove_webd() {
     systemctl disable --now "$WEBD_UNIT" >/dev/null 2>&1 || true
+    systemctl reset-failed "$WEBD_UNIT" >/dev/null 2>&1 || true  # a stopped Electron/daemon can read as "failed"
     rm -f "$WEBD_UNIT_FILE" "$TRIM_APPDEST/app.sock"
     systemctl daemon-reload
 }

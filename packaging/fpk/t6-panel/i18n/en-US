@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Front Panel"
 desc="Front touch-screen app for the UnifyDrive UP6 / ZSpace T6: dashboard, screen and network info, device settings. Requires T6 Control Center."
-changelog="0.2.6: package renamed from t6panel to t6-panel (uninstall the old one first; settings are kept); page assets are versioned so the fnOS mobile app never shows a stale admin page. 0.2.5: admin page defaults to English and no longer hangs on “Loading”. 0.2.3: admin page in the fnOS desktop (turn the front-panel app on/off, screen brightness and power, color correction, restart); color correction for the washed-out screen; clearer contrast in light mode; screen wakes when the backlight was turned off elsewhere."
+changelog="1.0.1: “Also remove settings” on uninstall now works (layout, theme, colour correction, saved sign-in). 1.0.0: first stable release. 0.2.7: optional “Sign in automatically” (fnOS password sealed on the device, forgotten on sign-out); Firmware is its own home widget; new default home order (Files, Storage, connectivity, System, Firmware, Network, Notifications); drag a whole row to reorder in Edit. 0.2.6: package renamed from t6panel to t6-panel (uninstall the old one first; settings are kept); page assets are versioned so the fnOS mobile app never shows a stale admin page. 0.2.5: admin page defaults to English and no longer hangs on “Loading”. 0.2.3: admin page in the fnOS desktop (turn the front-panel app on/off, screen brightness and power, color correction, restart); color correction for the washed-out screen; clearer contrast in light mode; screen wakes when the backlight was turned off elsewhere."
 
 [entry]
 title="T6 Front Panel"

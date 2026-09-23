@@ -1,37 +1,56 @@
 // Live data: /api/panel poll + refresh, tile bindings, formatters, toast, account tap.
-/* ---------- edit-list drag-to-reorder (handle only) ---------- */
+/* ---------- edit-list drag-to-reorder ----------
+   Drag a row from anywhere on it (the handle still works), except the enable
+   toggle, which only toggles. To keep the list scrollable, a press elsewhere on
+   the row picks it up once the finger moves 6 px when the list fits on screen,
+   or after a 250 ms hold when it scrolls; the handle picks it up at once. */
 (function(){
-  var drag=null,ph=null,startY=0,baseTop=0;
+  var drag=null,ph=null,startY=0,pend=null;
   function pt(e){return e.touches?e.touches[0]:e;}
-  function down(e){
-    var h=e.target.closest('.ehandle');if(!h)return;
-    var row=h.closest('.erow');
-    // No more #device transform-scale to compensate for (see shell.js) — pointer
-    // coordinates and the dragged row's own coordinate space are 1:1 now.
-    drag=row;startY=pt(e).clientY;
-    var r=row.getBoundingClientRect();baseTop=r.top;
+  function scrollable(){return editScroll.scrollHeight>editScroll.clientHeight+1;}
+  function begin(row,y){
+    drag=row;startY=y;
     ph=document.createElement('div');ph.className='erow ghost';ph.style.height=row.offsetHeight+'px';ph.style.margin=getComputedStyle(row).marginTop+' 0 0';
     row.parentNode.insertBefore(ph,row.nextSibling);
     row.style.width=row.offsetWidth+'px';row.style.position='relative';row.classList.add('dragging');
-    e.preventDefault();
+  }
+  function cancelPending(){if(pend){clearTimeout(pend.timer);pend=null;}}
+  function down(e){
+    var row=e.target.closest('.erow');if(!row||row.classList.contains('ghost'))return;
+    if(e.target.closest('.etoggle'))return;            // the toggle only toggles
+    var y=pt(e).clientY;
+    if(e.target.closest('.ehandle')){begin(row,y);e.preventDefault();return;}
+    pend={row:row,y:y,hold:scrollable(),timer:0};
+    if(pend.hold)pend.timer=setTimeout(function(){if(pend){var p=pend;pend=null;begin(p.row,p.y);}},250);
   }
   function move(e){
-    if(!drag)return;var off=pt(e).clientY-startY;drag.style.transform='translateY('+off+'px)';
-    var mid=pt(e).clientY;
-    var sibs=[].slice.call(editScroll.querySelectorAll('.erow:not(.dragging)'));
-    for(var i=0;i<sibs.length;i++){var s=sibs[i],r=s.getBoundingClientRect();
-      if(mid<r.top+r.height/2){editScroll.insertBefore(ph,s);return;}}
+    var y=pt(e).clientY;
+    if(pend){
+      if(Math.abs(y-pend.y)>6){
+        if(pend.hold)cancelPending();                    // moved before the hold: it's a scroll
+        else{var p=pend;pend=null;begin(p.row,p.y);}
+      }
+      if(pend||!drag)return;
+    }
+    if(!drag)return;
+    e.preventDefault();
+    drag.style.transform='translateY('+(y-startY)+'px)';
+    var sibs=[].slice.call(editScroll.querySelectorAll('.erow:not(.dragging):not(.ghost)'));
+    for(var i=0;i<sibs.length;i++){var r=sibs[i].getBoundingClientRect();
+      if(y<r.top+r.height/2){editScroll.insertBefore(ph,sibs[i]);return;}}
     var addRow=editScroll.querySelector('.addrow');editScroll.insertBefore(ph,addRow);
   }
   function up(){
+    cancelPending();
     if(!drag)return;editScroll.insertBefore(drag,ph);ph.remove();
     drag.classList.remove('dragging');drag.style.transform='';drag.style.width='';drag.style.position='';
     order=[].slice.call(editScroll.querySelectorAll('.erow')).map(function(w){return w.dataset.id;});
     drag=null;ph=null;
   }
-  editScroll.addEventListener('touchstart',down,{passive:false});
+  editScroll.addEventListener('touchstart',down,{passive:true});
   editScroll.addEventListener('touchmove',move,{passive:false});
   editScroll.addEventListener('touchend',up);
+  editScroll.addEventListener('touchcancel',up);
   editScroll.addEventListener('mousedown',down);
   addEventListener('mousemove',move);addEventListener('mouseup',up);
 })();
@@ -71,6 +90,9 @@ function applyLayout(dash){
   if(!dash||!dash.order||!dash.order.length)return;
   var all=Object.keys(META);
   var saved=dash.order.filter(function(id){return all.indexOf(id)>=0;});
+  // Firmware used to be pinned above Notifications outside the widget list;
+  // layouts saved before it became a widget get it back in that spot.
+  if(saved.indexOf('fw')<0){var ni=saved.indexOf('notif');if(ni>=0)saved.splice(ni,0,'fw');}
   all.forEach(function(id){if(saved.indexOf(id)<0)saved.push(id);}); // append any new widgets
   var hidden=dash.hidden||[],vis={};
   all.forEach(function(id){vis[id]=hidden.indexOf(id)<0?1:0;});

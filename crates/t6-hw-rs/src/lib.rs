@@ -1,4 +1,4 @@
-//! t6-hw-rs: userspace hardware readers for the T6 NAS.
+//! t6-hw-rs: userspace hardware readers for UnifyDrive UP6/T6.
 //!
 //! Pure "read the box" helpers (sysfs, `/proc`, and the daemons' run files),
 //! with no HTTP or policy. Shared by the two backends that both need the same

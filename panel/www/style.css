@@ -310,7 +310,9 @@
     transition:transform .2s cubic-bezier(.3,1.4,.5,1),background .18s}
   .etoggle.on{background:var(--accent)}
   .etoggle.on .knob{transform:translateX(26px);background:var(--accent-ink)}
-  .erow.dragging{z-index:20;border-color:var(--accent-border);box-shadow:0 13px 30px var(--shadow)}
+  .erow{cursor:grab;user-select:none;-webkit-user-select:none}
+  .erow .etoggle{cursor:pointer}
+  .erow.dragging{z-index:20;cursor:grabbing;border-color:var(--accent-border);box-shadow:0 13px 30px var(--shadow);transform-origin:center}
   .erow.ghost{opacity:0}
   .addrow{display:flex;align-items:center;justify-content:center;gap:7px;height:60px;margin-top:11px;
     border:var(--line-bold) dashed var(--hair-strong);border-radius:17px;font-size:16px;font-weight:500;color:var(--ink-3)}
@@ -373,6 +375,10 @@
   .login-input:focus{border-color:var(--accent-border)}
   .login-input::placeholder{color:var(--ink-5)}
   .login-err{font-size:15.5px;color:var(--danger);min-height:0;padding:0 2px}
+  .login-remember{display:flex;align-items:center;gap:14px;padding:4px 2px}
+  .login-remember .lr-text{flex:1;min-width:0}
+  .login-remember .lr-title{font-size:16.5px;font-weight:500}
+  .login-remember .lr-hint{font-size:14px;color:var(--ink-3);margin-top:3px;line-height:1.35}
   .login-btn{height:60px;border-radius:14px;background:var(--accent);color:var(--accent-ink);
     display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;transition:transform .1s,opacity .15s}
   .login-btn:active{transform:scale(.97)}

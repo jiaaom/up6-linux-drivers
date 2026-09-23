@@ -30,7 +30,7 @@ impl EventWatcher {
         // AC lost: was on mains, now on battery.
         let ac = sources::ac_online();
         if cfg.ac_loss && rising_edge(self.ac_online, ac, |prev, now| prev && !now) {
-            beeps.push(EventBeep { pattern: Pattern::Double, reason: "AC power lost" });
+            beeps.push(EventBeep { pattern: Pattern::Short, reason: "AC power lost" }); // one beep, as the setting says
         }
         if ac.is_some() {
             self.ac_online = ac;

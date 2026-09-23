@@ -7,10 +7,20 @@
         "helpText": "The fan and LED daemons and the drivers stay installed (they belong to T6 Control Center / T6 Drivers)."
       },
       {
-        "type": "switch",
-        "field": "wizard_remove_settings",
-        "label": "Also remove panel settings (dashboard layout, brightness, timeout)",
-        "initValue": "false"
+        "type": "radio",
+        "field": "wizard_settings",
+        "label": "Settings",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "Keep panel settings",
+            "value": "keep"
+          },
+          {
+            "label": "Remove panel settings (home layout, theme, colour correction, saved sign-in)",
+            "value": "remove"
+          }
+        ]
       }
     ]
   }

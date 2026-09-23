@@ -114,7 +114,7 @@ function buildSettings(){
   if(sshT)sshT.addEventListener('click',function(){
     var nowOn=!sshT.classList.contains('on');
     showConfirm(nowOn?'Enable SSH?':'Disable SSH?',
-      nowOn?'Allow remote shell access to this NAS.':'Turn off remote shell access. Existing sessions stay connected until they close.',
+      nowOn?'Allow remote shell access to this device.':'Turn off remote shell access. Existing sessions stay connected until they close.',
       nowOn?'Enable':'Disable', !nowOn, function(){
         sshT.classList.toggle('on',nowOn);
         if(LAST&&LAST.ssh)LAST.ssh.enabled=nowOn; else if(LAST)LAST.ssh={enabled:nowOn};
@@ -176,10 +176,10 @@ function buildSettings(){
   });
   // System actions (no-login; confirm first)
   document.getElementById('restartRow').addEventListener('click',function(){
-    showConfirm('Restart device?','The NAS will reboot.','Restart',false,function(){fetch('api/power/restart',{method:'POST'}).catch(function(){});toast('Restarting…');});
+    showConfirm('Restart device?','The device will reboot.','Restart',false,function(){fetch('api/power/restart',{method:'POST'}).catch(function(){});toast('Restarting…');});
   });
   document.getElementById('shutdownRow').addEventListener('click',function(){
-    showConfirm('Shut down device?','The NAS will power off.','Shut Down',true,function(){fetch('api/power/shutdown',{method:'POST'}).catch(function(){});toast('Shutting down…');});
+    showConfirm('Shut down device?','The device will power off.','Shut Down',true,function(){fetch('api/power/shutdown',{method:'POST'}).catch(function(){});toast('Shutting down…');});
   });
 }
 

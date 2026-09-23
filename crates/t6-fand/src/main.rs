@@ -1,4 +1,4 @@
-//! t6-fand: fan policy daemon for the ZSpace T6 NAS.
+//! t6-fand: fan policy daemon for UnifyDrive UP6/T6.
 //!
 //! Drives the `t6_platform` hwmon PWM channels from temperature curves.
 //! Everything goes through standard hwmon sysfs, so it also works with any

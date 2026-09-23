@@ -13,6 +13,7 @@
 //! both surfaces; only the gateway one ever carries a signed-in user.
 
 mod api;
+mod autologin;
 mod firmware;
 mod fnos;
 mod gateway;
@@ -113,6 +114,12 @@ async fn main() {
 
     let opts = parse_args();
     migrate_state_dir();
+    // Remembered fnOS login: sign in in the background (retries on later
+    // status polls if fnOS isn't up yet at boot).
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        fnos::auto_sign_in().await;
+    });
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (t6-ledd, which runs first, restores the saved brightness).
     if !settings::load().panel_enabled() {

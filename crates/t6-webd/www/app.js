@@ -1,10 +1,14 @@
-// T6 Control Center – front end. Plain JS, no build step.
+// T6 Control Center – front end. Plain JS module, no build step.
 // All requests are relative, so the page works under any gateway prefix.
+// Theme and language come from the fnOS desktop through the TrimApp SDK
+// (web-app.js); strings go through t() with an en-US / zh-CN dictionary.
+import { TrimApp } from "./web-app.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const HISTORY = 120; // samples kept per zone for the sparkline (1/s)
 
 const state = {
+  language: "en-US",
   admin: false,
   activeProfile: null,
   pendingProfile: null,     // optimistic profile selection until the daemon reflects it
@@ -19,7 +23,219 @@ const state = {
   nightSched: "",     // schedule currently running (for dirty + revert)
   history: new Map(), // zone -> [{t, temp, pwm}]
   config: null,
+  last: null,         // last /api/status payload (re-render on language change)
 };
+
+// ---- i18n -----------------------------------------------------------------
+
+const I18N = {
+  "en-US": {
+    appTitle: "T6 Control Center",
+    tabDashboard: "Dashboard", tabFans: "Fans", tabLeds: "LEDs", tabDisplay: "Display", tabBattery: "Battery", tabBeeper: "Beeper",
+    refresh: "Refresh", admin: "Administrator", readOnly: "Read-only",
+    cpuTemp: "CPU temperature", fanProfile: "Fan profile", healthOk: "All running", healthProblems: "{n} problem(s)", repairingShort: "Repairing…",
+    access: "Your access", accessAdminNote: "can change every setting", accessReadNote: "changes need an administrator account",
+    healthTitle: "Drivers & services", repairDrivers: "Repair drivers", lastRepair: "Last repair",
+    builtinBattery: "Built-in battery", software: "Software",
+    nightMode: "Night mode",
+    nightHelp: "Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.",
+    nightNow: "Night mode now", everyDayFrom: "Every day from", to: "to", revert: "Revert", apply: "Apply",
+    bayLeds: "Bay LEDs", bayHelp: "Bays light white when a drive is present. A drive reported faulty blinks red.",
+    showDrives: "Show drives (white)", blinkFault: "Blink red on drive fault", perLed: "Advanced — per-LED control",
+    beepStartup: "Beep once on startup", beepAcLoss: "Beep once on AC power loss", beepDriveFault: "Beep on drive fault (RAID degraded)",
+    testPatterns: "Advanced — test patterns", testHelp: "Play an EC beeper pattern now. Continuous keeps sounding until stopped.",
+    beepShort: "Short", beepLong: "Long", beepDouble: "Double", beepContinuous: "Continuous", beepStop: "Stop",
+    backlight: "Backlight", backlightHelp: "Front LCD backlight. The level is applied immediately and remembered across reboots.",
+    on: "On", off: "Off", offUntilReboot: "Off until next reboot", level: "Level", advanced: "Advanced",
+    offAfterBoot: "Always turn off the built-in display after boot",
+    offAfterBootHelp: "For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.",
+    status: "Status", chargeLimits: "Charge limits",
+    limitsHelp: "Charging starts when the level drops below the lower bound and stops at the upper one. Choose a range, then Apply.",
+    choice7585: "Recommended for a NAS that stays on mains all day", choice5070: "Longest battery life, less backup runtime",
+    choiceNone: "No constraint", choiceNoneSub: "EC default: charges to ~97 %, tops up from 91 %",
+    choiceCustom: "Custom", choiceCustomSub: "Pick your own start and end",
+    start: "Start", end: "End", profile: "Profile", curves: "Curves", from: "from",
+    // dynamic
+    adminRequired: "administrator required", adminRequiredChange: "administrator required to change",
+    adminRequiredEdit: "administrator required to edit",
+    runtimeOverride: "runtime override (config default: {p})",
+    switchProfileFail: "Could not switch profile: {e}",
+    fandDown: "t6-fand is not running – fans are at the driver default (50 %).",
+    stopped: "stopped", rpm: "{n} rpm", reconnecting: "Reconnecting to the T6…",
+    noBattery: "no battery", onMains: "on mains", onBattery: "on battery", charging: "charging", atW: " at {w} W",
+    toTarget: "~{eta} to {t} %", left: "~{eta} left", holding: "holding between {a}–{b} %",
+    batNotCharging: "not charging", batFull: "full", batUnknown: "unknown",
+    ecPolicy: "EC policy", limits: "limits {a}–{b} %",
+    voltage: "Voltage", energy: "Energy", health: "Health", chemistry: "Chemistry", ofDesign: "{p} % of design ({w} Wh)",
+    minutes: "{m} min", hoursMin: "{h} h {m} min",
+    applying: "applying…", appliedEc: "applied — EC policy (charges to ~97 %, tops up from 91 %)",
+    appliedRange: "applied — charging {a}–{b} %, kept across reboots", failed: "failed: {e}",
+    limitsFail: "Could not set charge limits: {e}",
+    notAvailable: "not available", brightnessFail: "Could not set brightness: {e}",
+    backlightFail: "Could not switch the backlight: {e}", bootFail: "Could not change the boot setting: {e}",
+    ledsDown: "t6-ledd is not running – LEDs are unmanaged.", ledsConfig: "Configuration problem (defaults in use): {e}",
+    nightActive: "active ({r})", drivesIn: "drives in bay {b}", noDrives: "no drives detected",
+    driveFault: "⚠ Drive fault — bay {b} is blinking red", automatic: "Automatic – {d}", automaticShort: "automatic",
+    forcedOff: " · forced off", ledNA: " · not available", setFail: "Could not set {id}: {e}",
+    bayFail: "Could not switch bay LEDs: {e}", faultFail: "Could not change fault alert: {e}",
+    nightFail: "Could not switch night mode: {e}", schedFail: "Could not set the schedule: {e}",
+    beepFail: "Beeper: {e}", beepSetFail: "Beep setting: {e}",
+    slow: "slow", normal: "normal", fast: "fast", breathSpeed: "Breathing speed",
+    running: "running", notRunning: "not running", loaded: "loaded", loadedV: "loaded, {v}", notLoaded: "not loaded",
+    thisApp: "this app", linuxVersion: "Linux version", platformDesc: "fans, LEDs, backlight & battery driver",
+    touchDesc: "touchscreen driver", fandDesc: "fan control service", leddDesc: "LED & beeper service", kernel: "Kernel",
+    kernelV: "kernel {k}", repairing: "Repairing — building and loading the drivers (about 30 s)…",
+    problems: "Problems detected", allGood: "All drivers and services are running",
+    updateDrivers: "Update the T6 Drivers package to repair from here.",
+    dpkgBusy: "A system update is in progress; repair once it has finished.",
+    needHeaders: "Install the kernel headers first.",
+    repairRunning: "running", repairOk: "succeeded", repairFailed: "failed", repairNoop: "nothing needed fixing",
+    repairFailNotice: "Driver repair failed; see its log below.", repairedNotice: "Drivers repaired.", repairFail: "Repair: {e}",
+    unsaved: "Unsaved changes", dragHint: "Drag the purple dots to edit",
+    sensorsLbl: "sensors", filterLbl: "filter τ {s} s", hystLbl: "hysteresis {h} °C", rampLbl: "ramp {u}/{d} %/s",
+    floorLbl: "floor {f} %", kickLbl: "start {p} % for {s} s",
+    curvesFail: "Could not apply curves: {e}", configFail: "Could not load fan configuration: {e}",
+    silent: "Silent", balance: "Balanced", performance: "Performance", custom: "Custom",
+    rgbRed: "red", rgbGreen: "green", rgbBlue: "blue", rgbYellow: "red + green (cycle)", rgbCyan: "green + blue (cycle)",
+    rgbMagenta: "red + blue (cycle)", rgbWhite: "rainbow", colorOff: "off", colorWhite: "white", colorOrange: "orange",
+  },
+  "zh-CN": {
+    appTitle: "T6 控制中心",
+    tabDashboard: "概览", tabFans: "风扇", tabLeds: "指示灯", tabDisplay: "显示屏", tabBattery: "电池", tabBeeper: "蜂鸣器",
+    refresh: "刷新", admin: "管理员", readOnly: "只读",
+    cpuTemp: "CPU 温度", fanProfile: "风扇模式", healthOk: "全部正常", healthProblems: "{n} 个问题", repairingShort: "正在修复…",
+    access: "你的权限", accessAdminNote: "可以修改所有设置", accessReadNote: "修改设置需要管理员账户",
+    healthTitle: "驱动与服务", repairDrivers: "修复驱动", lastRepair: "上次修复",
+    builtinBattery: "内置电池", software: "软件",
+    nightMode: "夜间模式",
+    nightHelp: "关闭所有指示灯（电池灯仍会提示断电）。可手动开启，或设定每天的时段。",
+    nightNow: "立即开启夜间模式", everyDayFrom: "每天从", to: "到", revert: "还原", apply: "应用",
+    bayLeds: "硬盘位指示灯", bayHelp: "有硬盘时硬盘位亮白灯；硬盘报告故障时闪红灯。",
+    showDrives: "显示硬盘（白灯）", blinkFault: "硬盘故障时闪红灯", perLed: "高级 — 单个指示灯控制",
+    beepStartup: "开机时响一声", beepAcLoss: "断开交流电时响一声", beepDriveFault: "硬盘故障时鸣响（RAID 降级）",
+    testPatterns: "高级 — 测试音型", testHelp: "立即播放一种 EC 蜂鸣音型。“持续”会一直响到停止为止。",
+    beepShort: "短音", beepLong: "长音", beepDouble: "双响", beepContinuous: "持续", beepStop: "停止",
+    backlight: "背光", backlightHelp: "前面板液晶屏背光。亮度立即生效，重启后保留。",
+    on: "开", off: "关", offUntilReboot: "关闭（直到下次重启）", level: "亮度", advanced: "高级",
+    offAfterBoot: "开机后始终关闭内置显示屏",
+    offAfterBootHelp: "适用于无屏使用。开启后每次重启屏幕都保持熄灭，直到在这里打开。",
+    status: "状态", chargeLimits: "充电范围",
+    limitsHelp: "电量低于下限时开始充电，达到上限时停止。选好范围后点击“应用”。",
+    choice7585: "推荐：适合长期接电的 NAS", choice5070: "电池寿命最长，停电续航较短",
+    choiceNone: "不限制", choiceNoneSub: "EC 默认：充到约 97 %，低于 91 % 时补电",
+    choiceCustom: "自定义", choiceCustomSub: "自行设定开始和结束电量",
+    start: "开始", end: "结束", profile: "模式", curves: "曲线", from: "来自",
+    adminRequired: "需要管理员", adminRequiredChange: "需要管理员才能修改",
+    adminRequiredEdit: "需要管理员才能编辑",
+    runtimeOverride: "运行时覆盖（配置默认：{p}）",
+    switchProfileFail: "无法切换模式：{e}",
+    fandDown: "t6-fand 未运行 — 风扇处于驱动默认转速（50 %）。",
+    stopped: "停转", rpm: "{n} 转/分", reconnecting: "正在重新连接 T6…",
+    noBattery: "无电池", onMains: "交流供电", onBattery: "电池供电", charging: "充电中", atW: "，{w} W",
+    toTarget: "约 {eta} 充到 {t} %", left: "约剩 {eta}", holding: "保持在 {a}–{b} %",
+    batNotCharging: "未充电", batFull: "已充满", batUnknown: "未知",
+    ecPolicy: "EC 策略", limits: "范围 {a}–{b} %",
+    voltage: "电压", energy: "电量", health: "健康度", chemistry: "类型", ofDesign: "设计容量的 {p} %（{w} Wh）",
+    minutes: "{m} 分钟", hoursMin: "{h} 小时 {m} 分钟",
+    applying: "正在应用…", appliedEc: "已应用 — EC 策略（充到约 97 %，低于 91 % 补电）",
+    appliedRange: "已应用 — 充电范围 {a}–{b} %，重启后保留", failed: "失败：{e}",
+    limitsFail: "无法设置充电范围：{e}",
+    notAvailable: "不可用", brightnessFail: "无法设置亮度：{e}",
+    backlightFail: "无法开关背光：{e}", bootFail: "无法修改开机设置：{e}",
+    ledsDown: "t6-ledd 未运行 — 指示灯不受管理。", ledsConfig: "配置有问题（正在使用默认值）：{e}",
+    nightActive: "已开启（{r}）", drivesIn: "硬盘位 {b} 有硬盘", noDrives: "未检测到硬盘",
+    driveFault: "⚠ 硬盘故障 — 硬盘位 {b} 正在闪红灯", automatic: "自动 – {d}", automaticShort: "自动",
+    forcedOff: " · 强制关闭", ledNA: " · 不可用", setFail: "无法设置 {id}：{e}",
+    bayFail: "无法开关硬盘位指示灯：{e}", faultFail: "无法修改故障提示：{e}",
+    nightFail: "无法开关夜间模式：{e}", schedFail: "无法设置时段：{e}",
+    beepFail: "蜂鸣器：{e}", beepSetFail: "蜂鸣设置：{e}",
+    slow: "慢", normal: "中", fast: "快", breathSpeed: "呼吸速度",
+    running: "运行中", notRunning: "未运行", loaded: "已加载", loadedV: "已加载，{v}", notLoaded: "未加载",
+    thisApp: "本应用", linuxVersion: "Linux 版本", platformDesc: "风扇、指示灯、背光与电池驱动",
+    touchDesc: "触摸屏驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", kernel: "内核",
+    kernelV: "内核 {k}", repairing: "正在修复 — 编译并加载驱动（约 30 秒）…",
+    problems: "发现问题", allGood: "所有驱动和服务都在运行",
+    updateDrivers: "请更新 T6 Drivers 套件后再从这里修复。",
+    dpkgBusy: "系统正在更新，请在更新完成后再修复。",
+    needHeaders: "请先安装内核头文件。",
+    repairRunning: "进行中", repairOk: "成功", repairFailed: "失败", repairNoop: "检查正常，无需修复",
+    repairFailNotice: "驱动修复失败，请查看下方日志。", repairedNotice: "驱动已修复。", repairFail: "修复：{e}",
+    unsaved: "有未保存的修改", dragHint: "拖动紫色圆点编辑",
+    sensorsLbl: "传感器", filterLbl: "滤波 τ {s} 秒", hystLbl: "回差 {h} °C", rampLbl: "升降速 {u}/{d} %/秒",
+    floorLbl: "最低 {f} %", kickLbl: "启动 {p} %，持续 {s} 秒",
+    curvesFail: "无法应用曲线：{e}", configFail: "无法加载风扇配置：{e}",
+    silent: "静音", balance: "均衡", performance: "性能", custom: "自定义",
+    rgbRed: "红", rgbGreen: "绿", rgbBlue: "蓝", rgbYellow: "红 + 绿（循环）", rgbCyan: "绿 + 蓝（循环）",
+    rgbMagenta: "红 + 蓝（循环）", rgbWhite: "彩虹", colorOff: "关", colorWhite: "白", colorOrange: "橙",
+  },
+};
+
+function t(key, params = {}) {
+  const text = (I18N[state.language] || I18N["en-US"])[key] ?? I18N["en-US"][key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? "");
+}
+const profileName = (p) => (["silent", "balance", "performance", "custom"].includes(p) ? t(p) : p);
+
+// ---- theme + language from the fnOS desktop --------------------------------
+
+// The SDK is only for theme + language: if it can't start in some client
+// (desktop app, mobile webview, ...), the page must still work without it.
+let sdk = { isWeb: false, isStandaloneWeb: true, getPlatformConfig: () => Promise.reject(new Error("no sdk")), $on() {} };
+try {
+  sdk = new TrimApp();
+} catch (e) {
+  console.warn("TrimApp unavailable:", e);
+}
+let platformConfig = { language: navigator.language || "en-US", theme: "light" };
+
+function applyPreferences() {
+  const lang = String(platformConfig.language || "").replace("_", "-");
+  const next = lang.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+  const langChanged = next !== state.language;
+  state.language = next;
+  document.documentElement.lang = next;
+  // the host may hand back { theme: "dark" } instead of "dark"
+  const v = platformConfig.theme;
+  const theme = v && typeof v === "object" && "theme" in v ? v.theme : v;
+  document.documentElement.dataset.theme = String(theme || "").toLowerCase() === "dark" ? "dark" : "light";
+  document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
+  $("#pageTitle").textContent = t($(".nav-item.active").querySelector("[data-i18n]").dataset.i18n);
+  if (langChanged) {
+    // strings built in JS: re-render from the last data
+    $("#led-devices").dataset.key = "";
+    $("#profiles").dataset.key = "";
+    if (state.last) renderAll(state.last);
+    loadSystem();
+    loadHealth();
+    if (state.config) loadCurves();
+  }
+  redrawEditor(); // canvas colours follow the theme
+}
+
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+// Never let the SDK block the page: it is only for theme + language.
+async function initPlatform() {
+  try {
+    platformConfig = { ...platformConfig, ...(await withTimeout(sdk.getPlatformConfig(), 2000)) };
+    applyPreferences();
+  } catch {
+    // opened outside the fnOS desktop, or no reply: keep the browser defaults
+  }
+  if (sdk.isWeb === true && sdk.isStandaloneWeb === false) {
+    try {
+      sdk.$on("os/theme", (theme) => { platformConfig = { ...platformConfig, theme }; applyPreferences(); });
+      sdk.$on("os/language", (language) => { platformConfig = { ...platformConfig, language }; applyPreferences(); });
+    } catch {
+      // no live updates; the initial values still apply
+    }
+  }
+}
+
+// canvas colours come from the CSS tokens
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---- backend --------------------------------------------------------------
 
 async function api(path, opts = {}) {
   if (opts.body !== undefined) {
@@ -50,15 +266,22 @@ function notice(msg, kind = "") {
 function setConnError(msg) { notice(msg, "error"); connErrorActive = true; }
 function clearConnError() { if (connErrorActive) { connErrorActive = false; notice(""); } }
 
-// ---- tabs -----------------------------------------------------------------
+// ---- navigation ------------------------------------------------------------
 
 $("#tabs").addEventListener("click", (e) => {
-  const btn = e.target.closest(".tab");
+  const btn = e.target.closest(".nav-item");
   if (!btn || btn.disabled) return;
-  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
-  document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== btn.dataset.tab));
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b === btn));
+  document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== btn.dataset.tab));
+  $("#pageTitle").textContent = t(btn.querySelector("[data-i18n]").dataset.i18n);
   if (btn.dataset.tab === "fans") loadCurves();
   if (btn.dataset.tab === "dashboard") { loadSystem(); loadHealth(); }
+});
+$("#refreshBtn").addEventListener("click", () => {
+  pollLoop();
+  loadSystem();
+  loadHealth();
+  if (!$("#fans").hidden) loadCurves();
 });
 
 // ---- dashboard ------------------------------------------------------------
@@ -66,14 +289,11 @@ $("#tabs").addEventListener("click", (e) => {
 function renderUser(u) {
   state.admin = !!u.is_admin;
   const el = $("#user");
-  el.textContent = state.admin ? "admin" : "read-only";
+  el.textContent = state.admin ? t("admin") : t("readOnly");
   el.classList.toggle("admin", state.admin);
+  $("#access-note").textContent = state.admin ? t("accessAdminNote") : t("accessReadNote");
 }
 
-function renderActiveProfile(fan) {
-  const active = fan.running && fan.status ? fan.status.profile : null;
-  $("#active-profile").textContent = active ? `profile: ${active}` : "";
-}
 
 function renderProfiles(fan) {
   const box = $("#profiles");
@@ -85,18 +305,19 @@ function renderProfiles(fan) {
   const key = fan.profiles.join("|");
   if (box.dataset.key !== key) {
     box.dataset.key = key;
-    box.innerHTML = fan.profiles.map((p) => `<button data-profile="${p}">${p}</button>`).join("");
+    box.innerHTML = fan.profiles.map((p) => `<button type="button" data-profile="${p}">${profileName(p)}</button>`).join("");
   }
   box.querySelectorAll("button").forEach((b) => {
     b.classList.toggle("active", b.dataset.profile === active);
     b.disabled = !state.admin || !fan.running;
   });
   state.activeProfile = active;
-  if (typeof updateCurveBar === "function") updateCurveBar();
+  $("#hero-profile").textContent = active ? profileName(active) : "—";
+  updateCurveBar();
   const note = $("#profile-note");
-  if (!state.admin) note.textContent = "administrator required to change";
+  if (!state.admin) note.textContent = t("adminRequiredChange");
   else if (fan.profile_override && fan.profile_override !== fan.config_profile)
-    note.textContent = `runtime override (config default: ${fan.config_profile})`;
+    note.textContent = t("runtimeOverride", { p: profileName(fan.config_profile) });
   else note.textContent = "";
 }
 
@@ -116,7 +337,7 @@ $("#profiles").addEventListener("click", async (e) => {
     notice("");
   } catch (err) {
     state.pendingProfile = null;
-    notice(`Could not switch profile: ${err.message}`, "error");
+    notice(t("switchProfileFail", { e: err.message }), "error");
   }
 });
 
@@ -135,14 +356,14 @@ function drawSpark(canvas, h) {
   if (h.length < 2) return;
   const x = (i) => (i / (HISTORY - 1)) * W;
   // PWM 0–100 % as a filled area, temperature as a line scaled 20–100 °C.
-  ctx.fillStyle = "rgba(47,111,237,.15)";
+  ctx.fillStyle = cssVar("--accent-soft");
   ctx.beginPath();
   ctx.moveTo(x(0), H);
   h.forEach((s, i) => ctx.lineTo(x(i), H - (s.pwm / 100) * H));
   ctx.lineTo(x(h.length - 1), H);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = "#d97706";
+  ctx.strokeStyle = cssVar("--warn");
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   h.forEach((s, i) => {
@@ -155,9 +376,11 @@ function drawSpark(canvas, h) {
 
 function renderZones(fan) {
   const box = $("#zones");
+  const cpu = fan.running && fan.status ? (fan.status.zones.find((z) => z.zone === "cpu") || fan.status.zones[0]) : null;
+  $("#hero-cpu").textContent = cpu && cpu.temp_c != null ? `${cpu.temp_c.toFixed(1)} °C` : "—";
   if (!fan.running || !fan.status) {
     box.innerHTML = "";
-    notice("t6-fand is not running – fans are at the driver default (50 %).");
+    notice(t("fandDown"));
     return;
   }
   const tpl = $("#zone-card");
@@ -170,9 +393,9 @@ function renderZones(fan) {
     }
     const running = z.pwm_percent > 0;
     $(".name", card).textContent = z.fan;
-    $(".rpm", card).textContent = z.rpm == null ? "" : `${z.rpm} rpm`;
+    $(".rpm", card).textContent = z.rpm == null ? "" : t("rpm", { n: z.rpm });
     const big = $(".pwm", card);
-    big.textContent = running ? `${z.pwm_percent} %` : "stopped";
+    big.textContent = running ? `${z.pwm_percent} %` : t("stopped");
     big.classList.toggle("stopped", !running);
     $(".bar > i", card).style.width = `${z.pwm_percent}%`;
     $(".sensors", card).innerHTML = z.sensors
@@ -182,30 +405,34 @@ function renderZones(fan) {
   }
 }
 
+function renderAll(s) {
+  renderUser(s.user);
+  renderProfiles(s.fan);
+  renderBattery(s.battery);
+  renderDisplay(s.display);
+  renderLeds(s.leds);
+  document.querySelectorAll("#beep-buttons button").forEach((b) => (b.disabled = !state.admin || !s.leds));
+  $("#beep-note").textContent = !state.admin ? t("adminRequired") : "";
+  document.querySelectorAll(".beep-events input").forEach((cb) => {
+    cb.disabled = !state.admin || !s.leds;
+    const beep = s.leds && s.leds.beep;
+    if (beep && document.activeElement !== cb) cb.checked = !!beep[cb.dataset.event];
+  });
+}
+
 async function refresh() {
   try {
     const s = await api("status");
     pollFails = 0;
     clearConnError();
-    renderUser(s.user);
-    renderActiveProfile(s.fan);
-    renderProfiles(s.fan);
+    state.last = s;
+    renderAll(s);
     renderZones(s.fan);
     if (s.fan.running && s.fan.status) {
       s.fan.status.zones.forEach((z) => (state.fanTemps[z.zone] = z.temp_c));
       if (!$("#fans").hidden && !state.fanDragging) redrawEditor();
     }
-    renderBattery(s.battery);
-    renderDisplay(s.display);
-    renderLeds(s.leds);
-    document.querySelectorAll("#beep-buttons button").forEach((b) => (b.disabled = !state.admin || !s.leds));
-    $("#beep-note").textContent = !state.admin ? "administrator required" : "";
-    document.querySelectorAll(".beep-events input").forEach((cb) => {
-      cb.disabled = !state.admin || !s.leds;
-      const beep = s.leds && s.leds.beep;
-      if (beep && document.activeElement !== cb) cb.checked = !!beep[cb.dataset.event];
-    });
-    if (s.fan.running && $("#notice").textContent.startsWith("t6-fand is not running")) notice("");
+    if (s.fan.running && $("#notice").textContent === t("fandDown")) notice("");
     maybeLoadSystem();
   } catch (e) {
     // A single miss is almost always a transient blip (mobile webview
@@ -213,7 +440,7 @@ async function refresh() {
     // The loop keeps polling and recovers on its own, so only surface it
     // after a few consecutive failures.
     pollFails++;
-    if (pollFails >= 3) setConnError("Reconnecting to the T6\u2026");
+    if (pollFails >= 3) setConnError(t("reconnecting"));
   }
 }
 
@@ -222,28 +449,30 @@ async function refresh() {
 function fmtHours(h) {
   if (!isFinite(h) || h <= 0) return "";
   const m = Math.round(h * 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+  return m < 60 ? t("minutes", { m }) : t("hoursMin", { h: Math.floor(m / 60), m: String(m % 60).padStart(2, "0") });
 }
+
+const BAT_STATUS = { "Not charging": "batNotCharging", Full: "batFull", Unknown: "batUnknown", Charging: "charging" };
 
 // One-line human summary of the charging state.
 function batterySummary(b) {
-  if (!b.present) return "no battery";
-  const t = b.thresholds;
-  const held = t && !(t.start === 0 && t.end === 100) && b.status === "Not charging" && b.ac_online;
-  const parts = [b.ac_online ? "on mains" : "on battery"];
+  if (!b.present) return t("noBattery");
+  const th = b.thresholds;
+  const held = th && !(th.start === 0 && th.end === 100) && b.status === "Not charging" && b.ac_online;
+  const parts = [b.ac_online ? t("onMains") : t("onBattery")];
   if (b.status === "Charging") {
-    parts.push("charging" + (b.power_w > 0.5 ? ` at ${b.power_w.toFixed(1)} W` : ""));
-    const target = t ? t.end : 100;
+    parts.push(t("charging") + (b.power_w > 0.5 ? t("atW", { w: b.power_w.toFixed(1) }) : ""));
+    const target = th ? th.end : 100;
     const eta = b.power_w > 0.5 ? (b.energy_full_wh * target / 100 - b.energy_now_wh) / b.power_w : NaN;
-    if (fmtHours(eta)) parts.push(`~${fmtHours(eta)} to ${target} %`);
+    if (fmtHours(eta)) parts.push(t("toTarget", { eta: fmtHours(eta), t: target }));
   } else if (b.status === "Discharging") {
     if (b.power_w > 0.5) parts.push(`${b.power_w.toFixed(1)} W`);
     const eta = b.power_w > 0.5 ? b.energy_now_wh / b.power_w : NaN;
-    if (fmtHours(eta)) parts.push(`~${fmtHours(eta)} left`);
+    if (fmtHours(eta)) parts.push(t("left", { eta: fmtHours(eta) }));
   } else if (held) {
-    parts.push(`holding between ${t.start}–${t.end} %`);
+    parts.push(t("holding", { a: th.start, b: th.end }));
   } else if (b.status) {
-    parts.push(b.status.toLowerCase());
+    parts.push(BAT_STATUS[b.status] ? t(BAT_STATUS[b.status]) : b.status.toLowerCase());
   }
   return parts.join(" · ");
 }
@@ -251,21 +480,19 @@ function batterySummary(b) {
 function renderBattery(b) {
   const soc = b.capacity == null ? "—" : `${b.capacity} %`;
   const summary = batterySummary(b);
-  const limits = b.thresholds ? (b.thresholds.start === 0 && b.thresholds.end === 100 ? "EC policy" : `limits ${b.thresholds.start}–${b.thresholds.end} %`) : "";
-  $("#bo-soc").textContent = soc;
-  $("#bo-status").textContent = summary;
-  $("#bo-limits").textContent = limits;
-  $("#bo-bar").style.width = `${b.capacity || 0}%`;
+  const limits = b.thresholds ? (b.thresholds.start === 0 && b.thresholds.end === 100 ? t("ecPolicy") : t("limits", { a: b.thresholds.start, b: b.thresholds.end })) : "";
+  $("#hero-battery").textContent = soc;
+  $("#hero-battery-sub").textContent = b.present ? limits : "";
 
   $("#bat-soc").textContent = soc;
   $("#bat-status").textContent = summary;
   $("#bat-bar").style.width = `${b.capacity || 0}%`;
   $("#bat-model").textContent = [b.manufacturer, b.model].filter(Boolean).join(" ");
   const rows = [
-    ["Voltage", b.voltage_v != null ? `${b.voltage_v.toFixed(2)} V` : null],
-    ["Energy", b.energy_now_wh != null ? `${b.energy_now_wh.toFixed(1)} / ${b.energy_full_wh.toFixed(1)} Wh` : null],
-    ["Health", b.health_percent != null ? `${b.health_percent.toFixed(0)} % of design (${b.energy_full_design_wh.toFixed(1)} Wh)` : null],
-    ["Chemistry", b.technology],
+    [t("voltage"), b.voltage_v != null ? `${b.voltage_v.toFixed(2)} V` : null],
+    [t("energy"), b.energy_now_wh != null ? `${b.energy_now_wh.toFixed(1)} / ${b.energy_full_wh.toFixed(1)} Wh` : null],
+    [t("health"), b.health_percent != null ? t("ofDesign", { p: b.health_percent.toFixed(0), w: b.energy_full_design_wh.toFixed(1) }) : null],
+    [t("chemistry"), b.technology],
   ].filter(([, v]) => v);
   $("#bat-details").innerHTML = rows.map(([k, v]) => `<li><span>${k}</span><b>${v}</b></li>`).join("");
 
@@ -274,7 +501,7 @@ function renderBattery(b) {
   const editable = state.admin && !!b.thresholds;
   document.querySelectorAll("#lim-presets button").forEach((p) => (p.disabled = !editable));
   ["#lim-start", "#lim-end"].forEach((id) => ($(id).disabled = !editable));
-  $("#lim-note").textContent = !state.admin ? "administrator required to change" : "";
+  $("#lim-note").textContent = !state.admin ? t("adminRequiredChange") : "";
   if (b.thresholds && state.limMode === "preset" && (!state.limStaged || !limDirty())) {
     // preset mode, no pending edit: reflect what the device currently holds
     stageLimits(b.thresholds.start, b.thresholds.end, true);
@@ -332,18 +559,16 @@ async function applyLimits() {
   const s = state.limStaged;
   if (!s) return;
   $("#lim-apply").disabled = true;
-  $("#lim-status").textContent = "applying…";
+  $("#lim-status").textContent = t("applying");
   try {
     const r = await api("battery/thresholds", { method: "PUT", body: { start: s.start, end: s.end } });
     state.batteryThresholds = { start: r.start, end: r.end };
     state.limMode = presetFor(r.start, r.end) ? "preset" : "custom";
-    $("#lim-status").textContent = r.ec_policy
-      ? "applied — EC policy (charges to ~97 %, tops up from 91 %)"
-      : `applied — charging ${r.start}–${r.end} %, kept across reboots`;
+    $("#lim-status").textContent = r.ec_policy ? t("appliedEc") : t("appliedRange", { a: r.start, b: r.end });
     updateLimActions();
   } catch (err) {
-    $("#lim-status").textContent = `failed: ${err.message}`;
-    notice(`Could not set charge limits: ${err.message}`, "error");
+    $("#lim-status").textContent = t("failed", { e: err.message });
+    notice(t("limitsFail", { e: err.message }), "error");
     updateLimActions();
   }
 }
@@ -391,12 +616,12 @@ function renderDisplay(d) {
   const editable = state.admin && d.present;
   $("#bl-power").disabled = !editable;
   $("#bl-slider").disabled = !editable || !d.on;
-  $("#bl-note").textContent = !d.present ? "not available" : !state.admin ? "administrator required to change" : "";
+  $("#bl-note").textContent = !d.present ? t("notAvailable") : !state.admin ? t("adminRequiredChange") : "";
   if (d.max_brightness) $("#bl-slider").max = d.max_brightness;
   if (d.min_on) $("#bl-slider").min = d.min_on;
   if (!state.blDragging) {
     $("#bl-power").checked = d.on;
-    $("#bl-power-label").textContent = d.on ? "On" : "Off until next reboot";
+    $("#bl-power-label").textContent = d.on ? t("on") : t("offUntilReboot");
     $("#bl-slider").value = d.on ? Math.max(d.brightness || 0, d.min_on || 10) : d.on_level;
     syncBrightnessLabel();
   }
@@ -413,7 +638,7 @@ async function setBrightness(v) {
   try {
     await api("display/brightness", { method: "PUT", body: { brightness: v } });
   } catch (err) {
-    notice(`Could not set brightness: ${err.message}`, "error");
+    notice(t("brightnessFail", { e: err.message }), "error");
   }
 }
 
@@ -430,7 +655,7 @@ $("#bl-slider").addEventListener("change", () => {
 });
 $("#bl-power").addEventListener("change", async (e) => {
   const on = e.target.checked;
-  $("#bl-power-label").textContent = on ? "On" : "Off until next reboot";
+  $("#bl-power-label").textContent = on ? t("on") : t("offUntilReboot");
   $("#bl-slider").disabled = !on;
   try {
     await api("display/power", { method: "PUT", body: { on } });
@@ -440,14 +665,14 @@ $("#bl-power").addEventListener("change", async (e) => {
       await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: false } });
     }
   } catch (err) {
-    notice(`Could not switch the backlight: ${err.message}`, "error");
+    notice(t("backlightFail", { e: err.message }), "error");
   }
 });
 $("#bl-off-boot").addEventListener("change", async (e) => {
   try {
     await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: e.target.checked } });
   } catch (err) {
-    notice(`Could not change the boot setting: ${err.message}`, "error");
+    notice(t("bootFail", { e: err.message }), "error");
   }
 });
 
@@ -455,9 +680,10 @@ $("#bl-off-boot").addEventListener("change", async (e) => {
 
 // The tray light is an effect controller: single colour breathes, two
 // cycle, all three is a rainbow. Friendlier names for its dropdown.
-const RGB_LABEL = { off: "off", red: "red", green: "green", blue: "blue",
-  yellow: "red + green (cycle)", cyan: "green + blue (cycle)",
-  magenta: "red + blue (cycle)", white: "rainbow" };
+const RGB_LABEL = { off: "colorOff", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue",
+  yellow: "rgbYellow", cyan: "rgbCyan", magenta: "rgbMagenta", white: "rgbWhite" };
+const COLOR_LABEL = { off: "colorOff", white: "colorWhite", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue", orange: "colorOrange" };
+const colorName = (id, c) => (id === "rgb" ? (RGB_LABEL[c] ? t(RGB_LABEL[c]) : c) : (COLOR_LABEL[c] ? t(COLOR_LABEL[c]) : c));
 
 const LED_SWATCH = {
   off: "#e5e7eb", white: "#f8fafc", red: "#ef4444", green: "#22c55e", blue: "#3b82f6",
@@ -469,20 +695,20 @@ function swatch(color) {
 }
 
 function renderLeds(l) {
-  const notice = $("#leds-notice");
+  const box = $("#leds-notice");
   if (!l) {
-    notice.textContent = "t6-ledd is not running – LEDs are unmanaged.";
-    notice.hidden = false;
+    box.textContent = t("ledsDown");
+    box.hidden = false;
     return;
   }
-  notice.hidden = !l.config_error;
-  if (l.config_error) notice.textContent = `Configuration problem (defaults in use): ${l.config_error}`;
+  box.hidden = !l.config_error;
+  if (l.config_error) box.textContent = t("ledsConfig", { e: l.config_error });
   const editable = state.admin;
-  $("#leds-note").textContent = editable ? "" : "administrator required to change";
+  $("#leds-note").textContent = editable ? "" : t("adminRequiredChange");
 
   // night mode
   const n = l.night;
-  $("#night-state").textContent = n.active ? `active (${n.reason})` : "off";
+  $("#night-state").textContent = n.active ? t("nightActive", { r: n.reason }) : t("off");
   state.nightSched = n.schedule || "";
   if (!state.nightDirty) {
     $("#night-manual").checked = !!n.manual;
@@ -502,11 +728,11 @@ function renderLeds(l) {
   $("#bay-fault-blink").checked = !!l.bay_fault_blink;
   $("#bay-fault-blink").disabled = !editable;
   const present = l.bays_present || [];
-  $("#bay-summary").textContent = present.length ? `drives in bay ${present.join(", ")}` : "no drives detected";
+  $("#bay-summary").textContent = present.length ? t("drivesIn", { b: present.join(", ") }) : t("noDrives");
   const faults = l.faults || [];
   const warn = $("#bay-fault-warn");
   warn.hidden = faults.length === 0;
-  if (faults.length) warn.textContent = `\u26a0 Drive fault \u2014 bay ${faults.join(", ")} is blinking red`;
+  if (faults.length) warn.textContent = t("driveFault", { b: faults.join(", ") });
 
   // device rows: rebuild only when the set of devices changes
   const table = $("#led-devices");
@@ -519,17 +745,17 @@ function renderLeds(l) {
         <td class="name">${d.label}</td>
         <td class="eff"></td>
         <td>${d.colors.length
-          ? `<select class="led-color">${d.auto ? `<option value="auto">Automatic – ${d.auto_desc}</option>` : ""}${d.colors.map((c) => `<option value="${c}">${d.id === "rgb" ? RGB_LABEL[c] || c : c}</option>`).join("")}</select>`
-          : `<span class="muted">Automatic – ${d.auto_desc}</span>`}${d.id === "rgb"
-          ? ` <select class="tray-speed" title="Breathing speed"><option value="slow">slow</option><option value="normal">normal</option><option value="fast">fast</option></select>`
+          ? `<select class="led-color">${d.auto ? `<option value="auto">${t("automatic", { d: d.auto_desc })}</option>` : ""}${d.colors.map((c) => `<option value="${c}">${colorName(d.id, c)}</option>`).join("")}</select>`
+          : `<span class="meta">${t("automatic", { d: d.auto_desc })}</span>`}${d.id === "rgb"
+          ? ` <select class="tray-speed" title="${t("breathSpeed")}"><option value="slow">${t("slow")}</option><option value="normal">${t("normal")}</option><option value="fast">${t("fast")}</option></select>`
           : ""}</td>
       </tr>`).join("");
   }
   for (const d of devs) {
     const row = table.querySelector(`tr[data-id="${d.id}"]`);
     const forced = n.active;
-    const eff = d.effective === "auto" ? "automatic" : (d.id === "rgb" ? (RGB_LABEL[d.effective] || d.effective) : d.effective);
-    $(".eff", row).innerHTML = `${swatch(d.effective)}${eff}${forced ? " · forced off" : ""}${d.available ? "" : " · not available"}`;
+    const eff = d.effective === "auto" ? t("automaticShort") : colorName(d.id, d.effective);
+    $(".eff", row).innerHTML = `${swatch(d.effective)}${eff}${forced ? t("forcedOff") : ""}${d.available ? "" : t("ledNA")}`;
     const sel = $(".led-color", row);
     if (sel) {
       const want = d.mode === "auto" ? "auto" : d.color;
@@ -556,20 +782,20 @@ $("#led-devices").addEventListener("change", async (e) => {
     }
     notice("");
   } catch (err) {
-    notice(`Could not set ${id}: ${err.message}`, "error");
+    notice(t("setFail", { id, e: err.message }), "error");
   }
 });
 $("#bays-enabled").addEventListener("change", async (e) => {
   try { await api("leds/bays", { method: "PUT", body: { on: e.target.checked } }); }
-  catch (err) { notice(`Could not switch bay LEDs: ${err.message}`, "error"); }
+  catch (err) { notice(t("bayFail", { e: err.message }), "error"); }
 });
 $("#bay-fault-blink").addEventListener("change", async (e) => {
   try { await api("leds/bay-fault-blink", { method: "PUT", body: { on: e.target.checked } }); }
-  catch (err) { notice(`Could not change fault alert: ${err.message}`, "error"); }
+  catch (err) { notice(t("faultFail", { e: err.message }), "error"); }
 });
 $("#night-manual").addEventListener("change", async (e) => {
   try { await api("leds/night", { method: "PUT", body: { on: e.target.checked } }); }
-  catch (err) { notice(`Could not switch night mode: ${err.message}`, "error"); }
+  catch (err) { notice(t("nightFail", { e: err.message }), "error"); }
 });
 function nightSchedInput() {
   return $("#night-sched").checked ? `${$("#night-start").value}-${$("#night-end").value}` : "";
@@ -601,39 +827,42 @@ $("#night-apply").addEventListener("click", async () => {
     updateNightActions();
     notice("");
   } catch (err) {
-    notice(`Could not set the schedule: ${err.message}`, "error");
+    notice(t("schedFail", { e: err.message }), "error");
   }
 });
 
-// ---- system ---------------------------------------------------------------
+// ---- beeper ---------------------------------------------------------------
 
 $("#beep-buttons").addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b || b.disabled) return;
   try { await api("beep", { method: "POST", body: { pattern: +b.dataset.pattern } }); }
-  catch (err) { notice(`Beeper: ${err.message}`, "error"); }
+  catch (err) { notice(t("beepFail", { e: err.message }), "error"); }
 });
 document.querySelector(".beep-events").addEventListener("change", async (e) => {
   const cb = e.target.closest("input[data-event]");
   if (!cb) return;
   try { await api("beep/event", { method: "PUT", body: { event: cb.dataset.event, enabled: cb.checked } }); }
-  catch (err) { notice(`Beep setting: ${err.message}`, "error"); }
+  catch (err) { notice(t("beepSetFail", { e: err.message }), "error"); }
 });
+
+// ---- system ---------------------------------------------------------------
 
 let lastSystemLoad = 0;
 async function loadSystem() {
   try {
     const s = await api("system");
     lastSystemLoad = Date.now();
-    const yes = (b) => (b ? "running" : "not running");
-    const mod = (m) => (m.loaded ? `loaded${m.version ? ", " + m.version : ""}` : "not loaded");
+    if (s.hostname) $("#hero-host").textContent = s.hostname;
+    const yes = (b) => (b ? t("running") : t("notRunning"));
+    const mod = (m) => (m.loaded ? (m.version ? t("loadedV", { v: m.version }) : t("loaded")) : t("notLoaded"));
     $("#sys-info").innerHTML = [
-      ["T6 Control Center", "this app", s.app_version],
-      ["Kernel", "Linux version", s.kernel],
-      ["t6_platform", "fans, LEDs, backlight & battery driver", mod(s.modules.t6_platform)],
-      ["ft8722_ts", "touchscreen driver", mod(s.modules.ft8722_ts)],
-      ["t6-fand", "fan control service", yes(s.daemons["t6-fand"])],
-      ["t6-ledd", "LED & beeper service", yes(s.daemons["t6-ledd"])],
+      [t("appTitle"), t("thisApp"), s.app_version],
+      [t("kernel"), t("linuxVersion"), s.kernel],
+      ["t6_platform", t("platformDesc"), mod(s.modules.t6_platform)],
+      ["ft8722_ts", t("touchDesc"), mod(s.modules.ft8722_ts)],
+      ["t6-fand", t("fandDesc"), yes(s.daemons["t6-fand"])],
+      ["t6-ledd", t("leddDesc"), yes(s.daemons["t6-ledd"])],
     ].map(([k, d, v]) => `<li><span class="sw-name"><b>${k}</b><small>${d}</small></span><b>${v}</b></li>`).join("");
   } catch (e) {
     // Transient (e.g. the gateway not warm yet at startup). The poll retries
@@ -651,8 +880,8 @@ function maybeLoadSystem() {
 let healthTimer = null;
 let repairRequested = false; // show the log of the run we started as it streams in
 
-function escapeHtml(t) {
-  return String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 
 async function loadHealth() {
@@ -660,20 +889,25 @@ async function loadHealth() {
   let h;
   try { h = await api("health"); } catch (e) { return; }
   const card = $("#health");
-  card.hidden = false;
   const running = h.repair.running;
   const last = h.repair.last;
   const failed = !running && last && last.ok === false;
+  // The hero tile carries the everyday "all running"; the full card (problems,
+  // Repair button, log) only shows when there is something to act on.
+  card.hidden = !(h.problems.length || running || failed);
+  const tile = $("#hero-health");
+  tile.textContent = running ? t("repairingShort") : h.problems.length ? t("healthProblems", { n: h.problems.length }) : failed ? t("repairFailed") : t("healthOk");
+  tile.className = running ? "" : h.problems.length || failed ? "warn" : "ok";
   card.classList.toggle("bad", h.problems.length > 0 || failed);
   card.classList.toggle("ok", !h.problems.length && !running && !failed);
-  $("#health-kernel").textContent = `kernel ${h.kernel}`;
+  $("#health-kernel").textContent = t("kernelV", { k: h.kernel });
 
   let status;
-  if (running) status = "Repairing \u2014 building and loading the drivers (about 30 s)\u2026";
-  else if (h.problems.length) status = "Problems detected";
-  else status = "All drivers and services are running";
+  if (running) status = t("repairing");
+  else if (h.problems.length) status = t("problems");
+  else status = t("allGood");
   $("#health-status").textContent = status;
-  // Messages may quote a command in backticks.
+  // Messages (from the backend, English) may quote a command in backticks.
   $("#health-problems").innerHTML = h.problems
     .map((p) => `<li>${escapeHtml(p).replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`).join("");
 
@@ -683,24 +917,29 @@ async function loadHealth() {
   btn.hidden = !h.repair.available;
   btn.disabled = !state.admin || !h.can_repair;
   let note = "";
-  if (!h.repair.available) note = "Update the T6 Drivers package to repair from here.";
-  else if (!state.admin) note = "administrator required";
-  else if (h.dpkg_busy) note = "A system update is in progress; repair once it has finished.";
-  else if (h.modules.some((m) => !m.built) && !h.headers) note = "Install the kernel headers first.";
+  if (!h.repair.available) note = t("updateDrivers");
+  else if (!state.admin) note = t("adminRequired");
+  else if (h.dpkg_busy) note = t("dpkgBusy");
+  else if (h.modules.some((m) => !m.built) && !h.headers) note = t("needHeaders");
   $("#health-note").textContent = running ? "" : note;
 
   const wrap = $("#health-log-wrap");
   wrap.hidden = !last || !last.log.length;
   if (last) {
-    const when = last.time_us ? new Date(last.time_us / 1000).toLocaleString() : "";
-    const outcome = running ? "running" : last.ok === true ? "succeeded" : last.ok === false ? "failed" : "";
-    $("#health-log-title").textContent = `Last repair${outcome ? " " + outcome : ""}${when ? " \u00b7 " + when : ""}`;
+    const when = last.time_us ? new Date(last.time_us / 1000).toLocaleString(state.language) : "";
+    // A repair run checks first and only rebuilds/loads/restarts what is
+    // missing; a run that did none of that just confirmed things were fine.
+    const acted = last.log.some((l) => /^==> (building|loading|restarting|installing|removing) /.test(l));
+    const outcome = running ? t("repairRunning")
+      : last.ok === false ? t("repairFailed")
+      : last.ok === true ? (acted ? t("repairOk") : t("repairNoop")) : "";
+    $("#health-log-title").textContent = `${t("lastRepair")}${outcome ? " · " + outcome : ""}${when ? " · " + when : ""}`;
     $("#health-log").textContent = last.log.join("\n");
     if (running || (repairRequested && failed)) wrap.open = true;
   }
   if (!running && repairRequested) {
     repairRequested = false;
-    notice(failed ? "Driver repair failed; see its log below." : "Drivers repaired.", failed ? "error" : "");
+    notice(failed ? t("repairFailNotice") : t("repairedNotice"), failed ? "error" : "");
     loadSystem();
   }
   if (running) healthTimer = setTimeout(loadHealth, 2000);
@@ -716,7 +955,7 @@ $("#health-repair").addEventListener("click", async () => {
     // systemd needs a moment to report the unit as activating.
     setTimeout(loadHealth, 500);
   } catch (err) {
-    notice(`Repair: ${err.message}`, "error");
+    notice(t("repairFail", { e: err.message }), "error");
     loadHealth();
   }
 });
@@ -724,19 +963,19 @@ $("#health-repair").addEventListener("click", async () => {
 // ---- fan curve editor (custom profile) ------------------------------------
 
 const EDIT_PROFILE = "custom";
-const COLORS = { silent: "#16a34a", balance: "#2f6fed", performance: "#dc2626", custom: "#7c3aed" };
+const COLORS = { silent: "#16a34a", balance: "#1677ff", performance: "#dc2626", custom: "#7c3aed" };
 const colorFor = (name) => COLORS[name] || "#6b7280";
 
 // plot geometry
 const PLOT = { L: 34, R: 10, T: 12, B: 24, tMin: 20, tMax: 100 };
 
-function interp(points, t) {
-  if (t <= points[0][0]) return points[0][1];
+function interp(points, temp) {
+  if (temp <= points[0][0]) return points[0][1];
   const last = points[points.length - 1];
-  if (t >= last[0]) return last[1];
+  if (temp >= last[0]) return last[1];
   for (let i = 1; i < points.length; i++) {
     const [t0, p0] = points[i - 1], [t1, p1] = points[i];
-    if (t <= t1) return p0 + (p1 - p0) * (t - t0) / (t1 - t0);
+    if (temp <= t1) return p0 + (p1 - p0) * (temp - t0) / (t1 - t0);
   }
   return last[1];
 }
@@ -744,7 +983,7 @@ function interp(points, t) {
 function plotMap(canvas) {
   const { L, R, T, B, tMin, tMax } = PLOT, W = canvas.width, H = canvas.height;
   return {
-    x: (t) => L + ((t - tMin) / (tMax - tMin)) * (W - L - R),
+    x: (v) => L + ((v - tMin) / (tMax - tMin)) * (W - L - R),
     y: (p) => T + (1 - p / 100) * (H - T - B),
     tAt: (cx) => tMin + ((cx - L) / (W - L - R)) * (tMax - tMin),
     pAt: (cy) => (1 - (cy - T) / (H - T - B)) * 100,
@@ -762,25 +1001,26 @@ function drawZone(canvas, zone) {
 
   // grid
   ctx.font = "11px system-ui, sans-serif";
-  ctx.fillStyle = "#9ca3af"; ctx.strokeStyle = "#eef0f3"; ctx.lineWidth = 1;
+  ctx.fillStyle = cssVar("--subtle"); ctx.strokeStyle = cssVar("--grid"); ctx.lineWidth = 1;
   for (let p = 0; p <= 100; p += 25) {
     ctx.beginPath(); ctx.moveTo(L, m.y(p)); ctx.lineTo(W - R, m.y(p)); ctx.stroke();
     ctx.textAlign = "right"; ctx.fillText(`${p}%`, L - 4, m.y(p) + 4);
   }
-  for (let t = tMin; t <= tMax; t += 20) {
-    ctx.beginPath(); ctx.moveTo(m.x(t), T); ctx.lineTo(m.x(t), H - B); ctx.stroke();
-    ctx.textAlign = "center"; ctx.fillText(`${t}\u00b0`, m.x(t), H - 8);
+  for (let v = tMin; v <= tMax; v += 20) {
+    ctx.beginPath(); ctx.moveTo(m.x(v), T); ctx.lineTo(m.x(v), H - B); ctx.stroke();
+    ctx.textAlign = "center"; ctx.fillText(`${v}°`, m.x(v), H - 8);
   }
 
+  const ring = cssVar("--panel");
   const drawLine = (pts, color, width, alpha, dots) => {
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.moveTo(m.x(tMin), m.y(pts[0][1]));
-    pts.forEach(([t, p]) => ctx.lineTo(m.x(t), m.y(p)));
+    pts.forEach(([v, p]) => ctx.lineTo(m.x(v), m.y(p)));
     ctx.lineTo(m.x(tMax), m.y(pts[pts.length - 1][1])); ctx.stroke();
     if (dots) {
       ctx.fillStyle = color;
-      pts.forEach(([t, p]) => { ctx.beginPath(); ctx.arc(m.x(t), m.y(p), 4.5, 0, 2 * Math.PI); ctx.fill();
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); });
+      pts.forEach(([v, p]) => { ctx.beginPath(); ctx.arc(m.x(v), m.y(p), 4.5, 0, 2 * Math.PI); ctx.fill();
+        ctx.strokeStyle = ring; ctx.lineWidth = 1.5; ctx.stroke(); });
     }
     ctx.globalAlpha = 1;
   };
@@ -799,16 +1039,18 @@ function drawZone(canvas, zone) {
   // "now" marker: vertical line at current temp, dot on the custom curve
   const temp = state.fanTemps[zone];
   if (temp != null) {
+    const warn = cssVar("--warn");
     const cx = m.x(Math.max(tMin, Math.min(tMax, temp)));
-    ctx.strokeStyle = "#f59e0b"; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.strokeStyle = warn; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(cx, T); ctx.lineTo(cx, H - B); ctx.stroke(); ctx.setLineDash([]);
     const duty = interp(edited, temp);
-    ctx.fillStyle = "#f59e0b";
+    ctx.fillStyle = warn;
     ctx.beginPath(); ctx.arc(cx, m.y(duty), 3.5, 0, 2 * Math.PI); ctx.fill();
   }
 }
 
 function redrawEditor() {
+  if (!state.config) return;
   document.querySelectorAll("#curves canvas").forEach((c) => drawZone(c, c.dataset.zone));
 }
 
@@ -832,7 +1074,7 @@ function updateCurveBar() {
   const dirty = anyDirty();
   $("#curve-apply").disabled = !state.admin || !dirty;
   $("#curve-revert").disabled = !dirty;
-  $("#curve-hint").textContent = dirty ? "Unsaved changes" : (state.admin ? "Drag the purple dots to edit" : "administrator required to edit");
+  $("#curve-hint").textContent = dirty ? t("unsaved") : (state.admin ? t("dragHint") : t("adminRequiredEdit"));
 }
 
 // --- pointer interaction ---
@@ -846,14 +1088,14 @@ function attachEditing(canvas) {
   let drag = -1;
   const readout = canvas.parentElement.querySelector(".curve-readout");
 
-  const clampPoint = (i, t, p) => {
+  const clampPoint = (i, v, p) => {
     const pts = state.fanEdited[zone];
     const lo = i > 0 ? pts[i - 1][0] + 1 : -20;
     const hi = i < pts.length - 1 ? pts[i + 1][0] - 1 : 150;
-    return [Math.max(lo, Math.min(hi, Math.round(t))), Math.max(0, Math.min(100, Math.round(p)))];
+    return [Math.max(lo, Math.min(hi, Math.round(v))), Math.max(0, Math.min(100, Math.round(p)))];
   };
   const show = (i) => {
-    if (readout) readout.textContent = i >= 0 ? `${state.fanEdited[zone][i][0]} \u00b0C \u2192 ${state.fanEdited[zone][i][1]} %` : "";
+    if (readout) readout.textContent = i >= 0 ? `${state.fanEdited[zone][i][0]} °C → ${state.fanEdited[zone][i][1]} %` : "";
   };
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -862,14 +1104,14 @@ function attachEditing(canvas) {
     const { cx, cy } = pointerPos(canvas, e);
     // nearest existing point
     let best = -1, bestD = 14 * 14;
-    pts.forEach(([t, p], i) => { const dx = m.x(t) - cx, dy = m.y(p) - cy, d = dx * dx + dy * dy; if (d < bestD) { bestD = d; best = i; } });
+    pts.forEach(([v, p], i) => { const dx = m.x(v) - cx, dy = m.y(p) - cy, d = dx * dx + dy * dy; if (d < bestD) { bestD = d; best = i; } });
     if (best < 0) {
       // add a point where clicked (clamped, sorted), then drag it
-      const t = Math.round(Math.max(PLOT.tMin - 10, Math.min(PLOT.tMax + 10, m.tAt(cx))));
+      const v = Math.round(Math.max(PLOT.tMin - 10, Math.min(PLOT.tMax + 10, m.tAt(cx))));
       const p = Math.round(Math.max(0, Math.min(100, m.pAt(cy))));
-      if (pts.some((q) => q[0] === t)) return; // avoid duplicate temp
-      pts.push([t, p]); pts.sort((a, b) => a[0] - b[0]);
-      best = pts.findIndex((q) => q[0] === t);
+      if (pts.some((q) => q[0] === v)) return; // avoid duplicate temp
+      pts.push([v, p]); pts.sort((a, b) => a[0] - b[0]);
+      best = pts.findIndex((q) => q[0] === v);
     }
     drag = best;
     state.fanDragging = true;
@@ -886,7 +1128,7 @@ function attachEditing(canvas) {
 
   const end = (e) => {
     if (drag < 0) return;
-    const m = plotMap(canvas), { cy } = pointerPos(canvas, e);
+    const { cy } = pointerPos(canvas, e);
     // drag above the top edge deletes the point (keep at least two)
     if (cy < PLOT.T - 4 && state.fanEdited[zone].length > 2) {
       state.fanEdited[zone].splice(drag, 1);
@@ -908,7 +1150,7 @@ async function applyAll() {
     updateCurveBar();
     notice("");
   } catch (e) {
-    notice(`Could not apply curves: ${e.message}`, "error");
+    notice(t("curvesFail", { e: e.message }), "error");
   }
 }
 
@@ -931,19 +1173,19 @@ async function loadCurves() {
       if (!z.curves[EDIT_PROFILE]) continue;
       state.fanEdited[zone] = z.curves[EDIT_PROFILE].map((p) => p.slice());
       const card = document.createElement("div");
-      card.className = "card";
+      card.className = "panel";
       card.dataset.zoneCard = zone;
       const legend = ["silent", "balance", "performance", "custom"]
-        .filter((n) => z.curves[n]).map((n) => `<span><i style="background:${colorFor(n)}"></i>${n}</span>`).join("");
+        .filter((n) => z.curves[n]).map((n) => `<span><i style="background:${colorFor(n)}"></i>${profileName(n)}</span>`).join("");
       card.innerHTML = `
-        <div class="title"><span>${z.fan}</span><span class="muted curve-readout"></span></div>
+        <div class="section-head"><h3>${z.fan}</h3><span class="meta curve-readout"></span></div>
         <canvas class="curve" width="360" height="180" data-zone="${zone}"></canvas>
         <div class="legend">${legend}</div>
         <div class="params">
-          sensors: ${z.sensors.join(", ")}<br>
-          filter \u03c4 ${z.tau_secs ?? 0} s \u00b7 hysteresis ${z.hysteresis ?? 3} \u00b0C \u00b7
-          ramp ${z.ramp_up ?? 25}/${z.ramp_down ?? 5} %/s \u00b7 floor ${z.min_pwm ?? 8} % \u00b7
-          start ${z.start_pwm ?? 12} % for ${z.kick_secs ?? 3} s
+          ${t("sensorsLbl")}: ${z.sensors.join(", ")}<br>
+          ${t("filterLbl", { s: z.tau_secs ?? 0 })} · ${t("hystLbl", { h: z.hysteresis ?? 3 })} ·
+          ${t("rampLbl", { u: z.ramp_up ?? 25, d: z.ramp_down ?? 5 })} · ${t("floorLbl", { f: z.min_pwm ?? 8 })} ·
+          ${t("kickLbl", { p: z.start_pwm ?? 12, s: z.kick_secs ?? 3 })}
         </div>`;
       box.appendChild(card);
       const canvas = $(".curve", card);
@@ -952,12 +1194,14 @@ async function loadCurves() {
     }
     updateCurveBar();
   } catch (e) {
-    notice(`Could not load fan configuration: ${e.message}`, "error");
+    notice(t("configFail", { e: e.message }), "error");
   }
 }
 
 $("#curve-apply").addEventListener("click", applyAll);
 $("#curve-revert").addEventListener("click", revertAll);
+
+// ---- polling ---------------------------------------------------------------
 
 let pollTimer = null;
 let polling = false;
@@ -978,4 +1222,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) poll
 window.addEventListener("focus", pollLoop);
 window.addEventListener("online", pollLoop);
 
+applyPreferences();
 pollLoop();
+initPlatform();

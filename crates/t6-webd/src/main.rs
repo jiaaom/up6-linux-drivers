@@ -1,7 +1,7 @@
 //! t6-webd: HTTP backend of the T6 Control Center.
 //!
 //! Serves the web UI and a small JSON API over a Unix socket that the
-//! FygoOS unified gateway forwards to (`/app/t6control/...`). The gateway
+//! FygoOS unified gateway forwards to (`/app/t6-control/...`). The gateway
 //! authenticates the NAS user and adds `X-Trim-*` headers; every write
 //! endpoint requires the administrator flag from those headers.
 //!
@@ -18,7 +18,7 @@ mod www;
 use std::path::PathBuf;
 use tokio::net::{TcpListener, UnixListener};
 
-const DEFAULT_PREFIX: &str = "/app/t6control";
+const DEFAULT_PREFIX: &str = "/app/t6-control";
 
 struct Opts {
     prefix: String,
@@ -31,7 +31,7 @@ struct Opts {
 fn usage() -> ! {
     eprintln!(
         "usage: t6-webd (--socket PATH [--socket-group NAME] | --listen ADDR:PORT) \
-         [--prefix /app/t6control] [--www DIR]"
+         [--prefix /app/t6-control] [--www DIR]"
     );
     std::process::exit(2);
 }

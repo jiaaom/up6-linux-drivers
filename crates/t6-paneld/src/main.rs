@@ -5,7 +5,7 @@
 //!     kiosk (and, in development, to a phone over Tailscale). No gateway means
 //!     no identity headers, so every request there is "logged out".
 //!   - `--gateway-socket PATH` — the FygoOS unified gateway forwards requests
-//!     for `/app/t6panel` here after validating the user's session, adding the
+//!     for `/app/t6-panel` here after validating the user's session, adding the
 //!     `X-Trim-*` identity headers. This is the authenticated surface (account,
 //!     personal files, admin config).
 //!
@@ -23,20 +23,21 @@ mod www;
 use std::path::PathBuf;
 use tokio::net::{TcpListener, UnixListener};
 
-const DEFAULT_PREFIX: &str = "/app/t6panel";
+const DEFAULT_PREFIX: &str = "/app/t6-panel";
 
 struct Opts {
     listen: Option<String>,
     gateway_socket: Option<PathBuf>,
     socket_group: Option<String>,
     www_dir: Option<PathBuf>,
+    web_dir: Option<PathBuf>,
     prefix: String,
 }
 
 fn usage() -> ! {
     eprintln!(
         "usage: t6-paneld (--listen ADDR:PORT | --gateway-socket PATH [--socket-group NAME])... \
-         [--prefix /app/t6panel] [--www DIR]"
+         [--prefix /app/t6-panel] [--www DIR] [--web DIR]"
     );
     std::process::exit(2);
 }
@@ -47,6 +48,7 @@ fn parse_args() -> Opts {
         gateway_socket: None,
         socket_group: None,
         www_dir: None,
+        web_dir: None,
         prefix: DEFAULT_PREFIX.into(),
     };
     let mut args = std::env::args().skip(1);
@@ -58,6 +60,7 @@ fn parse_args() -> Opts {
             "--socket-group" => o.socket_group = Some(value()),
             "--prefix" => o.prefix = value().trim_end_matches('/').to_string(),
             "--www" => o.www_dir = Some(PathBuf::from(value())),
+            "--web" => o.web_dir = Some(PathBuf::from(value())),
             _ => usage(),
         }
     }
@@ -109,6 +112,12 @@ async fn main() {
     }
 
     let opts = parse_args();
+    migrate_state_dir();
+    // Front-panel app turned off from the admin page: keep the screen dark at
+    // boot too (t6-ledd, which runs first, restores the saved brightness).
+    if !settings::load().panel_enabled() {
+        let _ = t6_hw_rs::display::Display::new().set_power(false);
+    }
     // Port of the local shell, reported to the gateway surface so "sign out"
     // knows where to return.
     let shell_port = opts.listen.as_deref().and_then(|a| a.rsplit(':').next()).and_then(|p| p.parse::<u16>().ok());
@@ -116,7 +125,7 @@ async fn main() {
     // Local TCP surface (no-login shell): bare routes, so the kiosk loads it at
     // localhost and its relative fetches hit `/api/...`.
     if let Some(addr) = &opts.listen {
-        let app = api::router(www::Www::new(opts.www_dir.clone()), "", None);
+        let app = api::router(www::Www::new(opts.www_dir.clone()), www::Www::new(None), "", None);
         let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {
             eprintln!("cannot bind {addr}: {e}");
             std::process::exit(1);
@@ -127,7 +136,7 @@ async fn main() {
 
     // Gateway unix socket (authenticated surface): routes under the gatewayPrefix.
     if let Some(path) = &opts.gateway_socket {
-        let app = api::router(www::Www::new(opts.www_dir.clone()), &opts.prefix, shell_port);
+        let app = api::router(www::Www::new(opts.www_dir.clone()), www::Www::new(opts.web_dir.clone()), &opts.prefix, shell_port);
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).unwrap_or_else(|e| {
             eprintln!("cannot bind {}: {e}", path.display());
@@ -150,4 +159,22 @@ async fn main() {
         let _ = std::fs::remove_file(path);
     }
     println!("t6-paneld stopped");
+}
+
+/// Before the packages were renamed (t6panel -> t6-panel), the fnOS session
+/// ticket and the firmware cache lived in /var/lib/t6panel. Everything now
+/// shares /var/lib/t6-paneld (also what "remove settings" deletes); move
+/// the old files over once so the panel stays signed in.
+fn migrate_state_dir() {
+    let old = std::path::Path::new("/var/lib/t6panel");
+    let new = std::path::Path::new("/var/lib/t6-paneld");
+    let Ok(entries) = std::fs::read_dir(old) else { return };
+    let _ = std::fs::create_dir_all(new);
+    for e in entries.flatten() {
+        let dst = new.join(e.file_name());
+        if !dst.exists() {
+            let _ = std::fs::rename(e.path(), &dst);
+        }
+    }
+    let _ = std::fs::remove_dir(old); // only if now empty
 }

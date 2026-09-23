@@ -10,7 +10,7 @@ up, so the nominal 64 px looks blurry) and, with --ui, the desktop entry
 icons images/icon_64.png and images/icon_256.png.
 `--chip` draws a chip outline instead of the fan (used for t6-drivers);
 `--panel` draws the portrait front-panel screen with dashboard tiles
-(used for t6panel)."""
+(used for t6-panel)."""
 import math, struct, sys, zlib
 
 

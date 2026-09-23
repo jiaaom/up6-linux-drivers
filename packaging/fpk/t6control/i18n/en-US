@@ -1,8 +1,0 @@
-[common]
-display_name="T6 Control Center"
-desc="Fan curves, LEDs, display brightness, battery charge limits and beeper of the UnifyDrive UP6 / ZSpace T6. Requires T6 Drivers."
-changelog="Dashboard: drivers & services card that detects missing or unloaded drivers and failed services, with one-click driver repair (needs T6 Drivers 0.2.0)."
-
-[entry]
-title="T6 Control Center"
-desc="Fans, LEDs and hardware settings"

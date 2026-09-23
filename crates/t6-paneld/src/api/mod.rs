@@ -10,7 +10,9 @@
 //! - [`fnos_files`]   — fnOS file manager (list/search/mkdir/rename/trash/copy/move)
 //! - [`fnos_disks`]   — external drives + remote mounts, USB reconnect
 //! - [`fnos_notify`]  — fnOS health alerts + notification center
+//! - [`admin`]        — package web page (gateway only): kiosk on/off, restart
 
+mod admin;
 mod fnos_disks;
 mod fnos_files;
 mod fnos_notify;
@@ -39,6 +41,8 @@ use system::*;
 #[derive(Clone)]
 pub struct AppState {
     www: Arc<crate::www::Www>,
+    /// The package's admin web page (`panel/web`); gateway surface only.
+    web: Arc<crate::www::Www>,
     /// TCP port of the local no-login shell, so the authenticated (gateway)
     /// surface knows where "sign out" returns to. `None` on the shell itself.
     shell_port: Option<u16>,
@@ -47,12 +51,12 @@ pub struct AppState {
 /// Build the router with every route under `prefix`.
 ///
 /// The local TCP shell uses an empty prefix (bare `/`, `/api/...`). The gateway
-/// surface uses the app's gatewayPrefix (e.g. `/app/t6panel`): FygoOS forwards
+/// surface uses the app's gatewayPrefix (e.g. `/app/t6-panel`): FygoOS forwards
 /// the *unstripped* path, so routes must live under it, and `prefix` (no
 /// trailing slash) redirects to `prefix/` so the page's relative asset/API
 /// URLs resolve against the right base.
-pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Router {
-    let state = AppState { www: Arc::new(www), shell_port };
+pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Router {
+    let state = AppState { www: Arc::new(www), web: Arc::new(web), shell_port };
     let p = |s: &str| format!("{prefix}{s}");
     let mut r = Router::new()
         .route(&p("/api/panel"), get(get_panel))
@@ -138,6 +142,16 @@ pub fn router(www: crate::www::Www, prefix: &str, shell_port: Option<u16>) -> Ro
     if !prefix.is_empty() {
         let slash = format!("{prefix}/");
         r = r.route(prefix, get(move || async move { Redirect::permanent(&slash) }));
+        // Admin page + its API: gateway surface only (the local shell has no
+        // prefix and never gets these routes).
+        let admin_slash = format!("{prefix}/admin/");
+        r = r
+            .route(&p("/admin"), get(move || async move { Redirect::permanent(&admin_slash) }))
+            .route(&p("/admin/"), get(admin_index))
+            .route(&p("/admin/{file}"), get(admin_file))
+            .route(&p("/api/admin/status"), get(admin::get_status))
+            .route(&p("/api/admin/panel"), put(admin::put_panel))
+            .route(&p("/api/admin/panel/restart"), post(admin::post_restart));
     }
     r.with_state(state)
 }
@@ -156,15 +170,23 @@ pub(super) fn session_value(headers: &HeaderMap, shell_port: Option<u16>) -> Val
 }
 
 async fn index(State(s): State<AppState>) -> Response {
-    serve(&s, "index.html")
+    serve(&s.www, "index.html")
 }
 
 async fn static_file(State(s): State<AppState>, Path(file): Path<String>) -> Response {
-    serve(&s, &file)
+    serve(&s.www, &file)
 }
 
-fn serve(s: &AppState, name: &str) -> Response {
-    match s.www.get(name) {
+async fn admin_index(State(s): State<AppState>) -> Response {
+    serve(&s.web, "index.html")
+}
+
+async fn admin_file(State(s): State<AppState>, Path(file): Path<String>) -> Response {
+    serve(&s.web, &file)
+}
+
+fn serve(www: &crate::www::Www, name: &str) -> Response {
+    match www.get(name) {
         // The panel UI is live-reloaded during development and republished on
         // the same URL in production, so never let a client cache a stale page.
         Some((ctype, body)) => (

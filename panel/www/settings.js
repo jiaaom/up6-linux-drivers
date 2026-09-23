@@ -52,7 +52,6 @@ function buildSettings(){
   var ledsOn=!(LAST&&LAST.leds&&LAST.leds.night); // indicator lights active when night mode is off
   var sshOn=!!(LAST&&LAST.ssh&&LAST.ssh.enabled);
   var ccOn=!(LAST&&LAST.screen&&LAST.screen.color_correction===false); // default on
-  var host=(LAST&&LAST.host&&LAST.host.name)||'—';
   var appVer=(LAST&&LAST.app&&LAST.app.version)||'—'; // installed package version (t6-paneld)
   var seg=TIMEOUTS.map(function(t){return '<div class="segopt'+(t[0]===to?' on':'')+'" data-s="'+t[0]+'">'+t[1]+'</div>';}).join('');
   // var langSeg=LANGS.map(function(l){return '<div class="segopt'+(l[0]===lang?' on':'')+'" data-lang="'+l[0]+'">'+l[1]+'</div>';}).join(''); // language selection: placeholder, disabled until i18n
@@ -72,8 +71,6 @@ function buildSettings(){
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Hardware</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Device indicator lights</div><div class="etoggle'+(ledsOn?' on':'')+'" id="ledToggle"><div class="knob"></div></div></div>'+
-      '<div class="hairrow"></div>'+
-      '<div class="setrow tap" id="hwInfoRow"><div class="lbl">Hardware Information</div><div class="chev">›</div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Cooling</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Fan profile</div></div>'+
@@ -91,8 +88,6 @@ function buildSettings(){
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">About</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Panel app</div><div class="setval">'+appVer+'</div></div>'+
-      '<div class="hairrow"></div>'+
-      '<div class="setrow"><div class="lbl">Device</div><div class="setval">'+host+'</div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">System</div><div class="card">'+
       '<div class="setrow tap" id="restartRow"><div class="lbl">Restart</div><div class="chev">›</div></div>'+
@@ -114,7 +109,6 @@ function buildSettings(){
     var night=!nowOn;if(LAST&&LAST.leds)LAST.leds.night=night;
     fetch('api/leds/night',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:night})}).catch(function(){});
   });
-  document.getElementById('hwInfoRow').addEventListener('click',showHwInfo);
   // SSH on/off (systemctl via t6-paneld). Security-relevant → confirm first.
   var sshT=document.getElementById('sshToggle');
   if(sshT)sshT.addEventListener('click',function(){

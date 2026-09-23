@@ -23,7 +23,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const MANIFEST_URL: &str = "https://apiv2-liveupdate.fygonas.com/";
 const VERSION_FILE: &str = "/usr/trim/etc/version";
-const CACHE_FILE: &str = "/var/lib/t6panel/firmware.json";
+const CACHE_FILE: &str = "/var/lib/t6-paneld/firmware.json";
 /// How long a *successful* fetch stays fresh — we don't re-check within this.
 const FETCH_INTERVAL: u64 = 30 * 60;
 /// Minimum gap between fetch *attempts*, so a failed check (the server is a flaky
@@ -62,7 +62,7 @@ fn load_cache() -> Cache {
 
 fn save_cache(c: &Cache) {
     if let Ok(json) = serde_json::to_vec(c) {
-        let _ = std::fs::create_dir_all("/var/lib/t6panel");
+        let _ = std::fs::create_dir_all("/var/lib/t6-paneld");
         let tmp = format!("{CACHE_FILE}.tmp");
         if std::fs::write(&tmp, &json).is_ok() {
             let _ = std::fs::rename(&tmp, CACHE_FILE);

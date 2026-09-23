@@ -28,11 +28,20 @@ pub struct Settings {
     /// before starting weston). None = default = on; see set-drm-prop.py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_correction: Option<bool>,
+    /// Run the on-device kiosk (front-panel app). None = default = on. The
+    /// package's start/install scripts and t6-paneld's own startup read it,
+    /// so "off" survives App Center restarts, upgrades and reboots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_enabled: Option<bool>,
 }
 
 impl Settings {
     pub fn color_correction(&self) -> bool {
         self.color_correction.unwrap_or(true)
+    }
+
+    pub fn panel_enabled(&self) -> bool {
+        self.panel_enabled.unwrap_or(true)
     }
 }
 
@@ -87,6 +96,14 @@ pub fn set_theme(theme: String) -> Result<Settings, String> {
 pub fn set_color_correction(on: bool) -> Result<Settings, String> {
     let mut s = load();
     s.color_correction = Some(on);
+    save(&s)?;
+    Ok(s)
+}
+
+/// Persist whether the on-device kiosk should run.
+pub fn set_panel_enabled(on: bool) -> Result<Settings, String> {
+    let mut s = load();
+    s.panel_enabled = Some(on);
     save(&s)?;
     Ok(s)
 }

@@ -367,7 +367,7 @@ impl FnosClient {
 // without the password; the HMAC secret is NEVER persisted.
 // ---------------------------------------------------------------------------
 
-const SESSION_FILE: &str = "/var/lib/t6panel/fnos-session.json";
+const SESSION_FILE: &str = "/var/lib/t6-paneld/fnos-session.json";
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Persisted {
@@ -384,7 +384,7 @@ fn cell() -> &'static Mutex<Option<FnosClient>> {
 fn persist(s: &Session) {
     let p = Persisted { uid: s.uid, ticket: s.ticket.clone(), machine_id: s.machine_id.clone() };
     if let Ok(json) = serde_json::to_vec(&p) {
-        let _ = std::fs::create_dir_all("/var/lib/t6panel");
+        let _ = std::fs::create_dir_all("/var/lib/t6-paneld");
         let tmp = format!("{SESSION_FILE}.tmp");
         if std::fs::write(&tmp, &json).is_ok() {
             // ticket is a credential — keep it root-only.

@@ -20,7 +20,24 @@ impl Www {
         }
         let ctype = mime_for(name)?;
         let dir = self.dir.as_ref()?;
-        std::fs::read(dir.join(name)).ok().map(|b| (ctype, b))
+        let body = std::fs::read(dir.join(name)).ok()?;
+        if name != "index.html" {
+            return Some((ctype, body));
+        }
+        // Stamp `?v=__V__` asset URLs with a content hash (the admin page uses
+        // them) so a webview that ignores no-store can't pair a new page with
+        // a stale script; pages without the marker are served untouched.
+        let html = String::from_utf8_lossy(&body);
+        if !html.contains("?v=__V__") {
+            return Some((ctype, body));
+        }
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for f in ["app.js", "style.css", "web-app.js"] {
+            std::fs::read(dir.join(f)).ok().hash(&mut h);
+        }
+        let v = format!("{:016x}", h.finish());
+        Some((ctype, html.replace("?v=__V__", &format!("?v={}", &v[..10])).into_bytes()))
     }
 }
 

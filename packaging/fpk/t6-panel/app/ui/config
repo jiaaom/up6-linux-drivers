@@ -1,15 +1,15 @@
 {
     ".url": {
-        "t6panel.main": {
+        "t6-panel.main": {
             "title": "${entry.title}",
             "desc": "${entry.desc}",
             "icon": "images/icon_{0}.png",
             "type": "iframe",
             "protocol": "",
-            "gatewayPrefix": "/app/t6panel",
+            "gatewayPrefix": "/app/t6-panel",
             "gatewaySocket": "app.sock",
-            "url": "/app/t6panel",
-            "allUsers": true
+            "url": "/app/t6-panel/admin/",
+            "allUsers": false
         }
     }
 }

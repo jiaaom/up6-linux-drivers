@@ -1,193 +1,229 @@
 <!doctype html>
+<!-- T6 Control Center. Layout, tokens and the TrimApp SDK (web-app.js, copied
+     verbatim) follow the fnOS app convention: sidebar + topbar + panel cards,
+     theme and language pushed by the desktop. English markup is the default;
+     app.js swaps in zh-CN when fnOS reports it. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>T6 Control Center</title>
-  <link rel="stylesheet" href="style.css">
+  <title data-i18n="appTitle">T6 Control Center</title>
+  <link rel="stylesheet" href="style.css?v=__V__">
 </head>
 <body>
-  <nav class="tabs" id="tabs">
-    <div class="tab-list">
-      <button class="tab active" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="fans">Fans</button>
-      <button class="tab" data-tab="leds">LEDs</button>
-      <button class="tab" data-tab="display">Display</button>
-      <button class="tab" data-tab="battery">Battery</button>
-      <button class="tab" data-tab="beeper">Beeper</button>
-    </div>
-    <span class="badge" id="user">…</span>
-  </nav>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <nav class="nav-list" id="tabs">
+        <button class="nav-item active" type="button" data-tab="dashboard">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>
+          <span data-i18n="tabDashboard">Dashboard</span>
+        </button>
+        <button class="nav-item" type="button" data-tab="fans">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7 2 0 3 2 2 4-1 1.5-3 2.5-6 3zM14 12c4 0 7 1 7 4 0 2-2 3-4 2-1.5-1-2.5-3-3-6zM12 14c0 4-1 7-4 7-2 0-3-2-2-4 1-1.5 3-2.5 6-3zM10 12c-4 0-7-1-7-4 0-2 2-3 4-2 1.5 1 2.5 3 3 6z"/></svg></span>
+          <span data-i18n="tabFans">Fans</span>
+        </button>
+        <button class="nav-item" type="button" data-tab="leds">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg></span>
+          <span data-i18n="tabLeds">LEDs</span>
+        </button>
+        <button class="nav-item" type="button" data-tab="display">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
+          <span data-i18n="tabDisplay">Display</span>
+        </button>
+        <button class="nav-item" type="button" data-tab="battery">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M6 10v4M9.5 10v4"/></svg></span>
+          <span data-i18n="tabBattery">Battery</span>
+        </button>
+        <button class="nav-item" type="button" data-tab="beeper">
+          <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></span>
+          <span data-i18n="tabBeeper">Beeper</span>
+        </button>
+      </nav>
+    </aside>
 
-  <main>
-    <p class="notice" id="notice" hidden></p>
+    <main class="content">
+      <header class="topbar">
+        <h2 id="pageTitle" data-i18n="tabDashboard">Dashboard</h2>
+        <div class="topbar-actions">
+          <button class="ghost-btn" type="button" id="refreshBtn" data-i18n="refresh">Refresh</button>
+        </div>
+      </header>
 
-    <section id="dashboard" class="panel">
-      <div class="card health" id="health" hidden>
-        <div class="title"><span>Drivers &amp; services</span><span class="muted" id="health-kernel"></span></div>
-        <div class="health-status" id="health-status"></div>
-        <ul class="health-problems" id="health-problems"></ul>
-        <div class="actions" id="health-actions" hidden>
-          <button class="primary" id="health-repair">Repair drivers</button>
-          <span class="muted" id="health-note"></span>
-        </div>
-        <details class="advanced" id="health-log-wrap" hidden>
-          <summary id="health-log-title">Last repair</summary>
-          <pre class="log" id="health-log"></pre>
-        </details>
-      </div>
-      <div class="row">
-        <h2>Fans</h2>
-        <span class="muted" id="active-profile"></span>
-      </div>
-      <div class="cards" id="zones"></div>
-      <div class="row" style="margin-top:16px"><h2>Battery</h2></div>
-      <div class="cards">
-        <div class="card" id="battery-overview">
-          <div class="title"><span>Built-in Battery</span><span class="muted" id="bo-limits"></span></div>
-          <div class="big" id="bo-soc">—</div>
-          <div class="sub" id="bo-status"></div>
-          <div class="bar"><i id="bo-bar"></i></div>
-        </div>
-      </div>
-      <div class="row" style="margin-top:16px"><h2>Software</h2></div>
-      <div class="cards">
-        <div class="card">
-          <ul class="sensors" id="sys-info"></ul>
-        </div>
-      </div>
-    </section>
+      <div class="pages">
+        <p class="notice" id="notice" hidden></p>
 
-    <section id="leds" class="panel" hidden>
-      <p class="notice" id="leds-notice" hidden></p>
-      <div class="cards wide">
-        <div class="card">
-          <div class="title"><span>Night mode</span><span class="muted" id="night-state"></span></div>
-          <p class="help">Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.</p>
-          <label class="switch"><input type="checkbox" id="night-manual"><i></i><span>Night mode now</span></label>
-          <div class="schedule">
-            <label class="switch"><input type="checkbox" id="night-sched"><i></i><span>Every day from</span></label>
-            <input type="time" id="night-start" value="23:00"> <span class="muted">to</span>
-            <input type="time" id="night-end" value="07:00">
-          </div>
-          <div class="actions" id="night-actions" hidden>
-            <button id="night-revert">Revert</button>
-            <button class="primary" id="night-apply">Apply</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="title"><span>Bay LEDs</span><span class="muted" id="bay-summary"></span></div>
-          <p class="help">Bays light white when a drive is present. A drive reported faulty blinks red.</p>
-          <label class="switch"><input type="checkbox" id="bays-enabled"><i></i><span>Show drives (white)</span></label>
-          <label class="switch"><input type="checkbox" id="bay-fault-blink"><i></i><span>Blink red on drive fault</span></label>
-          <p class="notice error" id="bay-fault-warn" hidden></p>
-        </div>
-      </div>
-      <details class="advanced">
-        <summary>Advanced &mdash; per-LED control</summary>
-        <div class="row"><span class="muted" id="leds-note"></span></div>
-        <div class="card">
-          <table class="devices" id="led-devices"></table>
-        </div>
-      </details>
-    </section>
-
-    <section id="beeper" class="panel" hidden>
-      <div class="cards wide">
-        <div class="card">
-          <div class="title"><span>Beeper</span><span class="muted" id="beep-note"></span></div>
-          <div class="beep-events">
-            <label class="switch"><input type="checkbox" data-event="startup"><i></i><span>Beep once on startup</span></label>
-            <label class="switch"><input type="checkbox" data-event="ac_loss"><i></i><span>Beep once on AC power loss</span></label>
-            <label class="switch"><input type="checkbox" data-event="drive_fault"><i></i><span>Beep on drive fault (RAID degraded)</span></label>
-          </div>
-          <details class="advanced">
-            <summary>Advanced &mdash; test patterns</summary>
-            <p class="help">Play an EC beeper pattern now. <b>Continuous</b> keeps sounding until stopped.</p>
-            <div class="presets" id="beep-buttons">
-              <button data-pattern="1">Short</button>
-              <button data-pattern="2">Long</button>
-              <button data-pattern="4">Double</button>
-              <button data-pattern="8">Continuous</button>
-              <button data-pattern="0">Stop</button>
+        <section id="dashboard" class="page">
+          <div class="panel hero">
+            <div class="hero-photo"><img src="device-up6.png?v=__V__" alt="" width="226" height="300"></div>
+            <div class="hero-body">
+              <h3 id="hero-host">T6</h3>
+              <div class="hero-model">UnifyDrive UP6 · ZSpace T6</div>
+              <div class="hero-tiles">
+                <div class="hero-tile"><span data-i18n="healthTitle">Drivers &amp; services</span><b id="hero-health">—</b></div>
+                <div class="hero-tile"><span data-i18n="cpuTemp">CPU temperature</span><b id="hero-cpu">—</b></div>
+                <div class="hero-tile"><span data-i18n="fanProfile">Fan profile</span><b id="hero-profile">—</b></div>
+                <div class="hero-tile"><span data-i18n="tabBattery">Battery</span><b id="hero-battery">—</b><small id="hero-battery-sub"></small></div>
+              </div>
             </div>
+          </div>
+          <div class="panel health" id="health" hidden>
+            <div class="section-head"><h3 data-i18n="healthTitle">Drivers &amp; services</h3><span class="meta" id="health-kernel"></span></div>
+            <div class="health-status" id="health-status"></div>
+            <ul class="health-problems" id="health-problems"></ul>
+            <div class="actions" id="health-actions" hidden>
+              <button class="primary-btn" type="button" id="health-repair" data-i18n="repairDrivers">Repair drivers</button>
+              <span class="meta" id="health-note"></span>
+            </div>
+            <details class="advanced" id="health-log-wrap" hidden>
+              <summary id="health-log-title" data-i18n="lastRepair">Last repair</summary>
+              <pre class="log" id="health-log"></pre>
+            </details>
+          </div>
+          <div class="group-head"><h3 data-i18n="tabFans">Fans</h3></div>
+          <div class="cards" id="zones"></div>
+          <div class="group-head"><h3 data-i18n="software">Software</h3></div>
+          <div class="panel">
+            <ul class="sensors" id="access-info">
+              <li><span class="sw-name"><b data-i18n="access">Your access</b><small id="access-note"></small></span><b id="user">…</b></li>
+            </ul>
+            <ul class="sensors" id="sys-info"></ul>
+          </div>
+        </section>
+
+        <section id="leds" class="page" hidden>
+          <p class="notice" id="leds-notice" hidden></p>
+          <div class="cards wide">
+            <div class="panel">
+              <div class="section-head"><h3 data-i18n="nightMode">Night mode</h3><span class="meta" id="night-state"></span></div>
+              <p class="help" data-i18n="nightHelp">Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.</p>
+              <label class="switch"><input type="checkbox" id="night-manual"><i></i><span data-i18n="nightNow">Night mode now</span></label>
+              <div class="schedule">
+                <label class="switch"><input type="checkbox" id="night-sched"><i></i><span data-i18n="everyDayFrom">Every day from</span></label>
+                <input type="time" id="night-start" value="23:00"> <span class="meta" data-i18n="to">to</span>
+                <input type="time" id="night-end" value="07:00">
+              </div>
+              <div class="actions" id="night-actions" hidden>
+                <button class="ghost-btn" type="button" id="night-revert" data-i18n="revert">Revert</button>
+                <button class="primary-btn" type="button" id="night-apply" data-i18n="apply">Apply</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="section-head"><h3 data-i18n="bayLeds">Bay LEDs</h3><span class="meta" id="bay-summary"></span></div>
+              <p class="help" data-i18n="bayHelp">Bays light white when a drive is present. A drive reported faulty blinks red.</p>
+              <label class="switch"><input type="checkbox" id="bays-enabled"><i></i><span data-i18n="showDrives">Show drives (white)</span></label>
+              <label class="switch"><input type="checkbox" id="bay-fault-blink"><i></i><span data-i18n="blinkFault">Blink red on drive fault</span></label>
+              <p class="notice error" id="bay-fault-warn" hidden></p>
+            </div>
+          </div>
+          <details class="advanced panel">
+            <summary data-i18n="perLed">Advanced — per-LED control</summary>
+            <p class="meta" id="leds-note"></p>
+            <table class="devices" id="led-devices"></table>
           </details>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="display" class="panel" hidden>
-      <div class="cards wide">
-        <div class="card">
-          <div class="title"><span>Backlight</span><span class="muted" id="bl-note"></span></div>
-          <p class="help">Front LCD backlight. The level is applied immediately and remembered across reboots.</p>
-          <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label">Off</span></label>
-          <label class="slider"><span>Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
-          <details class="advanced">
-            <summary>Advanced</summary>
-            <label class="switch"><input type="checkbox" id="bl-off-boot"><i></i><span>Always turn off the built-in display after boot</span></label>
-            <p class="help">For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.</p>
-          </details>
-        </div>
-      </div>
-    </section>
+        <section id="beeper" class="page" hidden>
+          <div class="panel">
+            <div class="section-head"><h3 data-i18n="tabBeeper">Beeper</h3><span class="meta" id="beep-note"></span></div>
+            <div class="beep-events">
+              <label class="switch"><input type="checkbox" data-event="startup"><i></i><span data-i18n="beepStartup">Beep once on startup</span></label>
+              <label class="switch"><input type="checkbox" data-event="ac_loss"><i></i><span data-i18n="beepAcLoss">Beep once on AC power loss</span></label>
+              <label class="switch"><input type="checkbox" data-event="drive_fault"><i></i><span data-i18n="beepDriveFault">Beep on drive fault (RAID degraded)</span></label>
+            </div>
+            <details class="advanced">
+              <summary data-i18n="testPatterns">Advanced — test patterns</summary>
+              <p class="help" data-i18n="testHelp">Play an EC beeper pattern now. Continuous keeps sounding until stopped.</p>
+              <div class="presets" id="beep-buttons">
+                <button class="ghost-btn" type="button" data-pattern="1" data-i18n="beepShort">Short</button>
+                <button class="ghost-btn" type="button" data-pattern="2" data-i18n="beepLong">Long</button>
+                <button class="ghost-btn" type="button" data-pattern="4" data-i18n="beepDouble">Double</button>
+                <button class="ghost-btn" type="button" data-pattern="8" data-i18n="beepContinuous">Continuous</button>
+                <button class="ghost-btn" type="button" data-pattern="0" data-i18n="beepStop">Stop</button>
+              </div>
+            </details>
+          </div>
+        </section>
 
-    <section id="battery" class="panel" hidden>
-      <div class="cards wide">
-        <div class="card">
-          <div class="title"><span>Status</span><span class="muted" id="bat-model"></span></div>
-          <div class="big" id="bat-soc">—</div>
-          <div class="sub" id="bat-status"></div>
-          <div class="bar"><i id="bat-bar"></i></div>
-          <ul class="sensors" id="bat-details"></ul>
-        </div>
-        <div class="card">
-          <div class="title"><span>Charge limits</span><span class="muted" id="lim-note"></span></div>
-          <p class="help">Charging starts when the level drops below <b>start</b> and stops at <b>end</b>.
-            A NAS that sits on mains all day lives longer with the pack held around 75–85 %.
-            <b>Full</b> hands control back to the EC, which charges to ~97 % and tops up from 91 %.</p>
-          <div class="presets" id="lim-presets">
-            <button data-start="75" data-end="85">75-85 % (recommended)</button>
-            <button data-start="50" data-end="70">50-70 %</button>
-            <button data-start="0" data-end="100">No constraint (default EC policy)</button>
-            <button data-custom="1">Custom…</button>
+        <section id="display" class="page" hidden>
+          <div class="panel">
+            <div class="section-head"><h3 data-i18n="backlight">Backlight</h3><span class="meta" id="bl-note"></span></div>
+            <p class="help" data-i18n="backlightHelp">Front LCD backlight. The level is applied immediately and remembered across reboots.</p>
+            <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label" data-i18n="off">Off</span></label>
+            <label class="slider"><span data-i18n="level">Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
+            <details class="advanced">
+              <summary data-i18n="advanced">Advanced</summary>
+              <label class="switch"><input type="checkbox" id="bl-off-boot"><i></i><span data-i18n="offAfterBoot">Always turn off the built-in display after boot</span></label>
+              <p class="help" data-i18n="offAfterBootHelp">For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.</p>
+            </details>
           </div>
-          <div id="lim-custom" hidden>
-            <label class="slider"><span>Start</span><input type="range" id="lim-start" min="0" max="99" step="1"><b id="lim-start-v"></b></label>
-            <label class="slider"><span>End</span><input type="range" id="lim-end" min="1" max="100" step="1"><b id="lim-end-v"></b></label>
-          </div>
-          <div class="actions" id="lim-actions" hidden>
-            <button id="lim-revert">Revert</button>
-            <button class="primary" id="lim-apply">Apply</button>
-            <span class="muted" id="lim-status"></span>
-          </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="fans" class="panel" hidden>
-      <div class="row">
-        <h2>Profile</h2>
-        <div class="segmented" id="profiles" title="Fan profile"></div>
-        <span class="muted" id="profile-note"></span>
+        <section id="battery" class="page" hidden>
+          <div class="cards wide">
+            <div class="panel">
+              <div class="section-head"><h3 data-i18n="status">Status</h3><span class="meta" id="bat-model"></span></div>
+              <div class="big" id="bat-soc">—</div>
+              <div class="sub" id="bat-status"></div>
+              <div class="bar"><i id="bat-bar"></i></div>
+              <ul class="sensors" id="bat-details"></ul>
+            </div>
+            <div class="panel">
+              <div class="section-head"><h3 data-i18n="chargeLimits">Charge limits</h3><span class="meta" id="lim-note"></span></div>
+              <p class="help" data-i18n="limitsHelp">Charging starts when the level drops below the lower bound and stops at the upper one. Choose a range, then Apply.</p>
+              <div class="choices" id="lim-presets">
+                <button class="choice" type="button" data-start="75" data-end="85">
+                  <span class="choice-text"><b>75–85 %</b><small data-i18n="choice7585">Recommended for a NAS that stays on mains all day</small></span><i class="radio"></i>
+                </button>
+                <button class="choice" type="button" data-start="50" data-end="70">
+                  <span class="choice-text"><b>50–70 %</b><small data-i18n="choice5070">Longest battery life, less backup runtime</small></span><i class="radio"></i>
+                </button>
+                <button class="choice" type="button" data-start="0" data-end="100">
+                  <span class="choice-text"><b data-i18n="choiceNone">No constraint</b><small data-i18n="choiceNoneSub">EC default: charges to ~97 %, tops up from 91 %</small></span><i class="radio"></i>
+                </button>
+                <button class="choice" type="button" data-custom="1">
+                  <span class="choice-text"><b data-i18n="choiceCustom">Custom</b><small data-i18n="choiceCustomSub">Pick your own start and end</small></span><i class="radio"></i>
+                </button>
+              </div>
+              <div id="lim-custom" hidden>
+                <label class="slider"><span data-i18n="start">Start</span><input type="range" id="lim-start" min="0" max="99" step="1"><b id="lim-start-v"></b></label>
+                <label class="slider"><span data-i18n="end">End</span><input type="range" id="lim-end" min="1" max="100" step="1"><b id="lim-end-v"></b></label>
+              </div>
+              <div class="actions" id="lim-actions" hidden>
+                <button class="ghost-btn" type="button" id="lim-revert" data-i18n="revert">Revert</button>
+                <button class="primary-btn" type="button" id="lim-apply" data-i18n="apply">Apply</button>
+                <span class="meta" id="lim-status"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="fans" class="page" hidden>
+          <div class="panel">
+            <div class="section-head">
+              <h3 data-i18n="profile">Profile</h3>
+              <span class="meta" id="profile-note"></span>
+            </div>
+            <div class="segmented" id="profiles"></div>
+          </div>
+          <div class="group-head">
+            <h3 data-i18n="curves">Curves</h3>
+            <span class="meta"><span data-i18n="from">from</span> <code id="config-path"></code></span>
+            <span class="spacer"></span>
+            <div class="curve-bar" id="curve-bar" hidden>
+              <span class="meta" id="curve-hint"></span>
+              <button class="ghost-btn" type="button" id="curve-revert" data-i18n="revert">Revert</button>
+              <button class="primary-btn" type="button" id="curve-apply" data-i18n="apply">Apply</button>
+            </div>
+          </div>
+          <div class="cards wide" id="curves"></div>
+        </section>
       </div>
-      <div class="row">
-        <h2>Curves</h2>
-        <span class="muted">from <code id="config-path"></code></span>
-        <span class="spacer"></span>
-        <div class="curve-bar" id="curve-bar" hidden>
-          <span class="muted" id="curve-hint">Drag the purple dots to edit</span>
-          <button id="curve-revert">Revert</button>
-          <button class="primary" id="curve-apply">Apply</button>
-        </div>
-      </div>
-      <div class="cards wide" id="curves"></div>
-    </section>
-  </main>
+    </main>
+  </div>
 
   <template id="zone-card">
-    <div class="card zone">
-      <div class="title"><span class="name"></span><span class="muted rpm"></span></div>
+    <div class="panel zone">
+      <div class="section-head"><h3 class="name"></h3><span class="meta rpm"></span></div>
       <div class="big pwm"></div>
       <canvas class="spark" width="300" height="48"></canvas>
       <div class="bar"><i></i></div>
@@ -195,6 +231,13 @@
     </div>
   </template>
 
-  <script src="app.js"></script>
+  <script>
+    // Surface script failures (a module that fails to load or throws at the
+    // top level never wires up the page) instead of leaving a dead UI.
+    const showErr = (m) => { const n = document.getElementById("notice"); if (n) { n.textContent = "Page error: " + m; n.className = "notice error"; n.hidden = false; } };
+    addEventListener("error", (e) => showErr(e.message || (e.target && (e.target.src || e.target.href)) || "script error"), true);
+    addEventListener("unhandledrejection", (e) => showErr(String(e.reason && e.reason.message || e.reason)));
+  </script>
+  <script type="module" src="app.js?v=__V__"></script>
 </body>
 </html>

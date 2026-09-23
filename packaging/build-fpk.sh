@@ -1,9 +1,9 @@
 #!/bin/bash
-# Build the FygoOS packages: t6-drivers.fpk (DKMS modules) and t6control.fpk
+# Build the FygoOS packages: t6-drivers.fpk (DKMS modules) and t6-control.fpk
 # (fan and indicator daemons + web UI). Output lands in build/.
 #
 #   ./build-fpk.sh              build both
-#   ./build-fpk.sh t6control    build one
+#   ./build-fpk.sh t6-control    build one
 #
 # Package sources live in fpk/<name>/; their app/ payload is assembled here
 # from the rest of the repository so nothing is duplicated in git.
@@ -41,7 +41,7 @@ payload_t6_drivers() {
     cp "$SCRIPT_DIR/install-dkms.sh" "$app/"
 }
 
-payload_t6control() {
+payload_t6_control() {
     local app=$1/app crate
     mkdir -p "$app/bin"
     for crate in t6-fand t6-ledd t6-webd; do
@@ -55,7 +55,7 @@ payload_t6control() {
        "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" "$app/"
 }
 
-payload_t6panel() {
+payload_t6_panel() {
     local app=$1/app
     mkdir -p "$app/bin" "$app/www" "$app/app/node_modules"
     log "building t6-paneld (release)"
@@ -63,8 +63,10 @@ payload_t6panel() {
     cp "$CRATES/target/release/t6-paneld" "$app/bin/"
     # The panel UI (served by t6-paneld from $TRIM_APPDEST/www).
     cp "$REPO/panel/www/"* "$app/www/"
+    mkdir -p "$app/web"
+    cp "$REPO/panel/web/"* "$app/web/"   # admin page (fnOS desktop window)
     # The on-device kiosk: the Electron shell + its bundled Electron runtime,
-    # launched at boot by the t6-panel-kiosk unit (see fpk/t6panel/cmd/common).
+    # launched at boot by the t6-panel-kiosk unit (see fpk/t6-panel/cmd/common).
     cp "$REPO/panel/app/"{main.js,preload.js,package.json,package-lock.json,run-kiosk.sh,set-drm-prop.py,weston.ini} "$app/app/"
     chmod +x "$app/app/run-kiosk.sh" "$app/app/set-drm-prop.py"
     [ -x "$REPO/panel/app/node_modules/electron/dist/electron" ] \
@@ -86,7 +88,7 @@ build_package() {
 main() {
     command -v fygopack >/dev/null || die "fygopack not found (https://developer.fygonas.com/docs/cli/fygopack/)"
     local names=("$@")
-    [ ${#names[@]} -gt 0 ] || names=(t6-drivers t6control t6panel)
+    [ ${#names[@]} -gt 0 ] || names=(t6-drivers t6-control t6-panel)
     mkdir -p "$BUILD_DIR"
     for n in "${names[@]}"; do
         build_package "$n"

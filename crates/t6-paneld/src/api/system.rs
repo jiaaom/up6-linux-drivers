@@ -112,10 +112,13 @@ pub(super) struct ColorCorrectionReq {
 pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) -> Response {
     match crate::settings::set_color_correction(req.on) {
         Ok(s) => {
-            tokio::spawn(async {
-                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-                let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", "t6-panel-kiosk.service"]).status();
-            });
+            // Only when the panel app is on: restarting would start a stopped kiosk.
+            if s.panel_enabled() {
+                tokio::spawn(async {
+                    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                    let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", super::admin::KIOSK_UNIT]).status();
+                });
+            }
             Json(serde_json::json!({ "color_correction": s.color_correction() })).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),

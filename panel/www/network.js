@@ -429,14 +429,6 @@ function hideHotspot(){document.getElementById('hotspot').classList.remove('on')
       .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});
   });
 })();
-function showHwInfo(){
-  fetch('api/hwinfo',{cache:'no-store'}).then(function(r){return r.json();}).then(function(h){
-    var rows=[['Model',h.model],['CPU',(h.cpu||'—')+(h.cpu_threads?' · '+h.cpu_threads+' threads':'')],['Graphics',h.gpu],
-      ['Memory',h.ram_bytes?fmtB(h.ram_bytes):'—'],['Serial',h.serial],['Firmware',h.bios]];
-    (h.drives||[]).forEach(function(d,i){rows.push(['Drive '+(i+1),d.model+' · '+fmtB(d.size_bytes)]);});
-    showDetail('Device',rows);
-  }).catch(function(){toast('Could not read hardware info');});
-}
 document.getElementById('detailClose').addEventListener('click',closeDetail);
 document.getElementById('scrim').addEventListener('click',closeDetail);
 

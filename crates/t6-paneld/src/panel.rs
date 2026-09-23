@@ -66,16 +66,16 @@ fn health_status(
     json!({ "level": level, "text": text, "issues": issues, "uptime_s": uptime_s() })
 }
 
-/// Installed t6panel package version: fnOS puts it in the unit's environment
+/// Installed t6-panel package version: fnOS puts it in the unit's environment
 /// (TRIM_APPVER); else the installed manifest; else this crate's version
 /// (dev runs outside the App Center).
-fn app_version() -> String {
+pub(crate) fn app_version() -> String {
     if let Ok(v) = std::env::var("TRIM_APPVER") {
         if !v.trim().is_empty() {
             return v.trim().to_string();
         }
     }
-    std::fs::read_to_string("/var/apps/t6panel/manifest")
+    std::fs::read_to_string("/var/apps/t6-panel/manifest")
         .ok()
         .and_then(|t| {
             t.lines().find_map(|l| {

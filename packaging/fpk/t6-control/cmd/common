@@ -1,4 +1,4 @@
-# Shared definitions for the t6control lifecycle scripts (sourced, not executed).
+# Shared definitions for the t6-control lifecycle scripts (sourced, not executed).
 
 # The web backend runs as a systemd unit, like the first-party fnOS apps:
 # App Center records app state but does not start apps at boot.
@@ -56,13 +56,13 @@ install_webd() {
 [Unit]
 Description=T6 Control Center web backend
 After=t6-fand.service t6-ledd.service
-# The gateway forwards /app/t6control to the socket; start once nginx is up.
+# The gateway forwards /app/t6-control to the socket; start once nginx is up.
 After=trim_nginx.service
 
 [Service]
 Type=simple
 Environment=TRIM_APPVER=$TRIM_APPVER
-ExecStart=$TRIM_APPDEST/bin/t6-webd --socket $TRIM_APPDEST/app.sock --prefix /app/t6control
+ExecStart=$TRIM_APPDEST/bin/t6-webd --socket $TRIM_APPDEST/app.sock --prefix /app/t6-control
 Restart=on-failure
 RestartSec=5
 ProtectHome=yes

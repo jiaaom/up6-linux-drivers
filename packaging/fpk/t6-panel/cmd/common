@@ -1,7 +1,7 @@
-# Shared definitions for the t6panel lifecycle scripts (sourced, not executed).
+# Shared definitions for the t6-panel lifecycle scripts (sourced, not executed).
 #
 # The panel backend runs as a systemd unit. It serves two surfaces from one
-# process: the FygoOS gateway socket (authenticated, /app/t6panel) and a local
+# process: the FygoOS gateway socket (authenticated, /app/t6-panel) and a local
 # no-login TCP shell for the on-device Chromium kiosk. The fan/LED daemons it
 # reads belong to T6 Control Center (a hard dependency), so we do not touch them.
 
@@ -23,13 +23,13 @@ install_paneld() {
 [Unit]
 Description=T6 front-panel backend
 After=t6-fand.service t6-ledd.service
-# The gateway forwards /app/t6panel to the socket; start once nginx is up.
+# The gateway forwards /app/t6-panel to the socket; start once nginx is up.
 After=trim_nginx.service
 
 [Service]
 Type=simple
 Environment=TRIM_APPVER=$TRIM_APPVER
-ExecStart=$TRIM_APPDEST/bin/t6-paneld --gateway-socket $TRIM_APPDEST/app.sock --prefix /app/t6panel --listen $PANEL_LOCAL_ADDR --www $TRIM_APPDEST/www
+ExecStart=$TRIM_APPDEST/bin/t6-paneld --gateway-socket $TRIM_APPDEST/app.sock --prefix /app/t6-panel --listen $PANEL_LOCAL_ADDR --www $TRIM_APPDEST/www --web $TRIM_APPDEST/web
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
@@ -74,6 +74,13 @@ paneld_running() {
 KIOSK_UNIT=t6-panel-kiosk
 KIOSK_UNIT_FILE=/etc/systemd/system/$KIOSK_UNIT.service
 
+# The admin page can turn the front-panel app off (panel_enabled=false in
+# t6-paneld's settings); App Center start/install/upgrade must not undo that.
+panel_enabled() {
+    # Off only when explicitly false; no file / bad JSON = default on.
+    ! python3 -c 'import json,sys; sys.exit(0 if json.load(open("/var/lib/t6-paneld/settings.json")).get("panel_enabled", True) is False else 1)' 2>/dev/null
+}
+
 install_kiosk() {
     cat > "$KIOSK_UNIT_FILE" <<UNIT
 [Unit]
@@ -101,7 +108,11 @@ RestartSec=3
 WantedBy=multi-user.target
 UNIT
     systemctl daemon-reload
-    systemctl enable "$KIOSK_UNIT" >/dev/null 2>&1
+    if panel_enabled; then
+        systemctl enable "$KIOSK_UNIT" >/dev/null 2>&1
+    else
+        systemctl disable "$KIOSK_UNIT" >/dev/null 2>&1
+    fi
 }
 
 remove_kiosk() {
@@ -112,6 +123,7 @@ remove_kiosk() {
 
 start_kiosk() {
     [ -f "$KIOSK_UNIT_FILE" ] || install_kiosk
+    panel_enabled || return 0
     systemctl restart "$KIOSK_UNIT" || fail "t6-panel-kiosk failed to start (journalctl -u $KIOSK_UNIT)."
 }
 

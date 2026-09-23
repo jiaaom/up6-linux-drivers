@@ -59,7 +59,7 @@ impl AppState {
     }
 }
 
-/// Routes under `prefix` (no trailing slash), e.g. `/app/t6control`.
+/// Routes under `prefix` (no trailing slash), e.g. `/app/t6-control`.
 /// The bare prefix redirects to `prefix/` so the page's relative URLs
 /// resolve inside the prefix.
 pub fn router(prefix: &str) -> Router<AppState> {
@@ -127,7 +127,7 @@ async fn static_file(State(s): State<AppState>, Path(file): Path<String>) -> Res
 
 fn serve(s: &AppState, name: &str) -> Response {
     match s.inner.www.get(name) {
-        Some((ctype, body)) => ([(header::CONTENT_TYPE, ctype), (header::CACHE_CONTROL, "no-cache")], body).into_response(),
+        Some((ctype, body)) => ([(header::CONTENT_TYPE, ctype), (header::CACHE_CONTROL, "no-store")], body).into_response(),
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
 }
@@ -333,6 +333,7 @@ async fn get_system(State(s): State<AppState>) -> Json<serde_json::Value> {
     };
     Json(json!({
         "kernel": read("/proc/sys/kernel/osrelease"),
+        "hostname": t6_hw_rs::sensors::hostname(),
         // FygoOS exports the package version to the app's processes.
         "app_version": std::env::var("TRIM_APPVER").ok().or_else(|| option_env!("CARGO_PKG_VERSION").map(str::to_string)),
         "modules": { "t6_platform": module("t6_platform"), "ft8722_ts": module("ft8722_ts") },

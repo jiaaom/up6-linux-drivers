@@ -29,6 +29,17 @@ chmod 700 "$XDG_RUNTIME_DIR"
 # --config points at our own weston.ini (2x output scale on the touch panel —
 # see that file for why), rather than relying on any system-wide weston config.
 if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+  # Send limited-range RGB: the panel path stretches 16-235 to 0-255, so full
+  # range looks washed out (see set-drm-prop.py). Needs DRM master, i.e. must
+  # run before weston takes it; weston leaves the property alone. Non-fatal.
+  # Settings → Screen → Color correction (color_correction in t6-paneld's
+  # settings.json, default on) can turn it off; set Full explicitly then,
+  # since the property otherwise keeps its last value across restarts.
+  RANGE="Limited 16:235"
+  if python3 -c 'import json,sys; sys.exit(json.load(open("/var/lib/t6-paneld/settings.json")).get("color_correction", True) is not False)' 2>/dev/null; then
+    RANGE="Full"
+  fi
+  python3 "$APP_DIR/set-drm-prop.py" auto HDMI-A-1 "Broadcast RGB" "$RANGE" || true
   weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --config="$APP_DIR/weston.ini" &
   for _ in $(seq 1 40); do
     [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break

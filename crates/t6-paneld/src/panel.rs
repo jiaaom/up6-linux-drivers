@@ -66,6 +66,26 @@ fn health_status(
     json!({ "level": level, "text": text, "issues": issues, "uptime_s": uptime_s() })
 }
 
+/// Installed t6panel package version: fnOS puts it in the unit's environment
+/// (TRIM_APPVER); else the installed manifest; else this crate's version
+/// (dev runs outside the App Center).
+fn app_version() -> String {
+    if let Ok(v) = std::env::var("TRIM_APPVER") {
+        if !v.trim().is_empty() {
+            return v.trim().to_string();
+        }
+    }
+    std::fs::read_to_string("/var/apps/t6panel/manifest")
+        .ok()
+        .and_then(|t| {
+            t.lines().find_map(|l| {
+                let (k, v) = l.split_once('=')?;
+                (k.trim() == "version").then(|| v.trim().trim_matches('"').to_string())
+            })
+        })
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
+}
+
 pub fn build() -> Value {
     let bat = Battery::new().info();
     let disp = Display::new().info();
@@ -87,6 +107,9 @@ pub fn build() -> Value {
     json!({
         "host": {
             "name": sensors::hostname(),
+        },
+        "app": {
+            "version": app_version(),
         },
         "storage": vols,
         "net": net::counters(),
@@ -123,6 +146,7 @@ pub fn build() -> Value {
         // Panel-app (device) settings, persisted by t6-paneld.
         "screen": {
             "timeout_s": set.screen_timeout_s,
+            "color_correction": set.color_correction(),
         },
         "language": if set.language.is_empty() { "en".to_string() } else { set.language.clone() },
         "leds": leds,

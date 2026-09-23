@@ -21,7 +21,7 @@ var CONTENT={
         <div><div style="font-size:16px" class="muted">GPU</div><div class="tname"><span class="f-gpu">41</span>°</div></div>
         <div><div style="font-size:16px" class="muted">Memory</div><div class="tname"><span class="f-mem">61</span>%</div></div>
         <div><div style="font-size:16px" class="muted">Drives</div><div class="tname"><span class="f-drives">38</span>°</div></div></div>
-      <div style="display:flex;align-items:center;gap:13px;margin-top:13px;padding-top:12px;border-top:0.5px solid var(--hair)">
+      <div style="display:flex;align-items:center;gap:13px;margin-top:13px;padding-top:12px;border-top:var(--line) solid var(--hair)">
         <div style="font-size:16px;flex:none" class="muted">Fans</div>
         <div class="fanlist" style="display:flex;gap:8px;flex:1">
           <div style="flex:1;background:var(--fill-1);border-radius:9px;padding:7px 9px"><div style="font-size:15px" class="muted2">CPU</div><div style="font-size:18px;font-weight:500">1180</div></div>
@@ -30,15 +30,16 @@ var CONTENT={
         </div></div></div>`,
   /* Each tile owns an identity hue (data-aux); .tico picks it up through
      currentColor when the tile is on, and greys out when it is off. Hues run
-     blue -> teal -> violet -> rose -> apricot; Settings never lights up so it
-     stays hueless. */
+     blue -> teal -> violet -> rose -> apricot. Settings is a link, not a
+     state, so it is a .tile.nav (card surface, chevron, gear) instead of an
+     always-off tile, which read as "disabled". */
   conn:`<div class="grid">
       <div class="tile on" data-tile="eth" data-aux="blue"><div class="tico" style="width:22px;height:15px;border:2px solid currentColor;border-radius:4px"></div><div><div class="t">Ethernet</div><div class="s muted eth-sub">—</div></div></div>
       <div class="tile on" data-tile="wifi" data-aux="teal"><div class="tico" style="display:flex;align-items:flex-end;gap:3px;height:17px"><div style="width:4px;height:6px;border-radius:2px;background:currentColor"></div><div style="width:4px;height:10px;border-radius:2px;background:currentColor"></div><div style="width:4px;height:13.5px;border-radius:2px;background:currentColor"></div><div style="width:4px;height:17px;border-radius:2px;background:currentColor;opacity:.35"></div></div><div><div class="t">Wi-Fi</div><div class="s muted wifi-sub">—</div></div></div>
       <div class="tile off" data-tile="hotspot" data-aux="rose"><div class="tico" style="width:17px;height:17px;border-radius:8.5px;border:2px solid currentColor"></div><div><div class="t">Hotspot</div><div class="s muted2 hotspot-sub">Off</div></div></div>
       <div class="tile off" data-tile="tb4" data-aux="apricot"><div class="tico" style="width:17px;height:17px;border-radius:4.5px;transform:rotate(45deg);border:2px solid currentColor"></div><div><div class="t">TB4</div><div class="s muted2 tb-sub">No link</div></div></div>
       <div class="tile on" data-tile="sharing" data-aux="violet"><div class="tico" style="display:flex;gap:3px"><div style="width:8px;height:17px;border-radius:2.5px;background:currentColor"></div><div style="width:8px;height:17px;border-radius:2.5px;background:currentColor;opacity:.55"></div></div><div><div class="t">Sharing</div><div class="s muted sharing-sub">SMB · NFS</div></div></div>
-      <div class="tile off"><div class="tico" style="width:17px;height:17px;border-radius:8.5px;border:2px solid currentColor"></div><div><div class="t">Settings</div><div class="s muted2">Screen · SSH</div></div></div></div>`,
+      <div class="tile nav"><span class="chev">›</span><svg class="tico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><div><div class="t">Settings</div><div class="s muted">Screen · SSH</div></div></div></div>`,
   filemgr:`<div class="card fm-homecard">
       <div class="fm-hc-head" data-tile="filemgr-all">
         <div class="fm-hc-title"><svg width="19" height="19" viewBox="0 0 48 48" fill="none" stroke="var(--accent-text)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v20a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V19a3 3 0 0 0-3-3H24l-4-5H9a3 3 0 0 0-3 3z"/></svg><span>Files</span></div>

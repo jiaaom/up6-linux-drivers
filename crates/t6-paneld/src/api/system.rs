@@ -100,6 +100,28 @@ pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct ColorCorrectionReq {
+    on: bool,
+}
+
+/// The range is a DRM property that only the DRM master can set, and weston
+/// holds master while it runs, so a change takes effect by restarting the
+/// kiosk unit (run-kiosk.sh applies it before weston starts). The restart is
+/// deferred a moment so this response still reaches the (dying) renderer.
+pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) -> Response {
+    match crate::settings::set_color_correction(req.on) {
+        Ok(s) => {
+            tokio::spawn(async {
+                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", "t6-panel-kiosk.service"]).status();
+            });
+            Json(serde_json::json!({ "color_correction": s.color_correction() })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
 pub(super) async fn get_hwinfo() -> Json<t6_hw_rs::hwinfo::HwInfo> {
     Json(t6_hw_rs::hwinfo::info())
 }

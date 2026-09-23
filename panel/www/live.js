@@ -160,6 +160,7 @@ function refresh(d){
   if(!d)return;
   LAST=d;
   if(!idleArmed){idleArmed=true;armIdle();} // start the idle timer once data exists
+  syncBacklight(d.display); // backlight switched off/on elsewhere → match the sleep overlay
   if(!layoutApplied&&d.dashboard){layoutApplied=true;applyLayout(d.dashboard);homeCacheSave({dashboard:d.dashboard});} // restore saved widget layout
   // settings.json is the source of truth for the theme; theme.js has already
   // painted from the localStorage echo, so this only corrects a disagreement
@@ -209,7 +210,7 @@ function refresh(d){
         netHist.push(rxR+txR);if(netHist.length>26)netHist.shift();
         var nb=document.querySelector('.netbars');
         if(nb){var mx=Math.max.apply(null,netHist.concat([1]));
-          nb.innerHTML=netHist.map(function(v){var h=Math.max(3,Math.round(v/mx*100));return '<div style="flex:1;background:var(--accent);opacity:.6;border-radius:2.5px;height:'+h+'%"></div>';}).join('');}
+          nb.innerHTML=netHist.map(function(v){var h=Math.max(3,Math.round(v/mx*100));return '<div style="height:'+h+'%"></div>';}).join('');}
       }}
     prevNet={rx:d.net.rx_bytes,tx:d.net.tx_bytes,t:now};}
 }

@@ -3,12 +3,14 @@
 body with a fan glyph, supersampled for anti-aliasing. FygoOS asks for a
 rounded-rect body on a square canvas.
 
-    make-icons.py <package dir> <colour hex> [--chip] [--ui <ui dir>]
+    make-icons.py <package dir> <colour hex> [--chip|--panel] [--ui <ui dir>]
 
 Writes ICON.PNG and ICON_256.PNG (both 256 px: App Center scales ICON.PNG
 up, so the nominal 64 px looks blurry) and, with --ui, the desktop entry
 icons images/icon_64.png and images/icon_256.png.
-`--chip` draws a chip outline instead of the fan (used for t6-drivers)."""
+`--chip` draws a chip outline instead of the fan (used for t6-drivers);
+`--panel` draws the portrait front-panel screen with dashboard tiles
+(used for t6panel)."""
 import math, struct, sys, zlib
 
 
@@ -67,6 +69,48 @@ def chip(x, y, size):
     return 0
 
 
+def in_rrect(u, v, x0, y0, x1, y1, r):
+    """1 inside the rounded rectangle (x0,y0)-(x1,y1), coordinates in 0..1."""
+    if u < x0 or u > x1 or v < y0 or v > y1:
+        return 0
+    cx = min(max(u, x0 + r), x1 - r)
+    cy = min(max(v, y0 + r), y1 - r)
+    return 1 if (u - cx) ** 2 + (v - cy) ** 2 <= r * r else 0
+
+
+def panel(x, y, size):
+    """White glyph: the T6's 1:2 portrait touch screen showing the panel's
+    home layout (status line, hero card, 2x2 tiles, network bar) on tinted
+    glass; one tile carries a knocked-out fingertip, the "touch" cue."""
+    u, v = x / size, y / size
+    x0, x1, y0, y1 = 0.35, 0.65, 0.20, 0.80            # 0.30 x 0.60 = 1:2
+    if not in_rrect(u, v, x0, y0, x1, y1, 0.06):
+        return 0
+    if not in_rrect(u, v, x0 + 0.022, y0 + 0.022, x1 - 0.022, y1 - 0.022, 0.04):
+        return 1                                        # bezel
+    ix0, ix1 = x0 + 0.045, x1 - 0.045
+    w, g = ix1 - ix0, 0.02
+    yy = y0 + 0.05
+    if in_rrect(u, v, ix0, yy, ix0 + w * 0.42, yy + 0.018, 0.009):
+        return 0.9                                      # status line
+    yy += 0.018 + g
+    if in_rrect(u, v, ix0, yy, ix1, yy + 0.14, 0.022):
+        return 1                                        # hero card
+    yy += 0.14 + g
+    t = (w - g) / 2
+    for row in range(2):
+        for col in range(2):
+            cx = ix0 + col * (t + g)
+            if in_rrect(u, v, cx, yy, cx + t, yy + t, 0.02):
+                if row == 1 and col == 1 and math.hypot(u - (cx + t / 2), v - (yy + t / 2)) < t * 0.26:
+                    return 0.16                         # fingertip: shows the glass through
+                return 0.9
+        yy += t + g
+    if in_rrect(u, v, ix0, yy, ix1, y1 - 0.05, 0.02):
+        return 0.9                                      # network bar
+    return 0.16                                         # glass tint
+
+
 def render(size, colour, glyph, ss=4):
     rgb = tuple(int(colour[i:i + 2], 16) for i in (0, 2, 4))
     dark = tuple(max(0, int(c * 0.72)) for c in rgb)
@@ -96,7 +140,7 @@ def render(size, colour, glyph, ss=4):
 def main():
     args = sys.argv[1:]
     out, colour = args[0], args[1].lstrip("#")
-    glyph = chip if "--chip" in args else fan
+    glyph = chip if "--chip" in args else panel if "--panel" in args else fan
     targets = [(f"{out}/ICON.PNG", 256), (f"{out}/ICON_256.PNG", 256)]
     if "--ui" in args:
         ui = args[args.index("--ui") + 1]

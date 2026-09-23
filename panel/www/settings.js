@@ -51,7 +51,9 @@ function buildSettings(){
   var lang=(LAST&&LAST.language)||'en';
   var ledsOn=!(LAST&&LAST.leds&&LAST.leds.night); // indicator lights active when night mode is off
   var sshOn=!!(LAST&&LAST.ssh&&LAST.ssh.enabled);
+  var ccOn=!(LAST&&LAST.screen&&LAST.screen.color_correction===false); // default on
   var host=(LAST&&LAST.host&&LAST.host.name)||'—';
+  var appVer=(LAST&&LAST.app&&LAST.app.version)||'—'; // installed package version (t6-paneld)
   var seg=TIMEOUTS.map(function(t){return '<div class="segopt'+(t[0]===to?' on':'')+'" data-s="'+t[0]+'">'+t[1]+'</div>';}).join('');
   // var langSeg=LANGS.map(function(l){return '<div class="segopt'+(l[0]===lang?' on':'')+'" data-lang="'+l[0]+'">'+l[1]+'</div>';}).join(''); // language selection: placeholder, disabled until i18n
   settingsScroll.innerHTML=
@@ -61,6 +63,8 @@ function buildSettings(){
       '<div class="hairrow"></div>'+
       '<div class="setrow"><div class="lbl">Screen Timeout</div></div>'+
       '<div class="seg" id="timeoutSeg">'+seg+'</div>'+
+      '<div class="hairrow"></div>'+
+      '<div class="setrow"><div class="lbl">Color correction</div><div class="etoggle'+(ccOn?' on':'')+'" id="ccToggle"><div class="knob"></div></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Appearance</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Theme</div></div>'+
@@ -86,7 +90,7 @@ function buildSettings(){
       '<div class="setrow"><div class="lbl">SSH (Secure Shell)</div><div class="etoggle'+(sshOn?' on':'')+'" id="sshToggle"><div class="knob"></div></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">About</div><div class="card">'+
-      '<div class="setrow"><div class="lbl">Panel app</div><div class="setval">0.1.0</div></div>'+
+      '<div class="setrow"><div class="lbl">Panel app</div><div class="setval">'+appVer+'</div></div>'+
       '<div class="hairrow"></div>'+
       '<div class="setrow"><div class="lbl">Device</div><div class="setval">'+host+'</div></div>'+
     '</div></div>'+
@@ -124,6 +128,22 @@ function buildSettings(){
           .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t||'');});})
           .then(function(){toast('SSH '+(nowOn?'enabled':'disabled'));})
           .catch(function(){sshT.classList.toggle('on',!nowOn);toast('SSH change failed');});
+      });
+  });
+  // Color correction: limited-range output to the front panel (set-drm-prop.py).
+  // Only settable before weston starts, so applying it restarts the screen —
+  // confirm first; the toggle only flips once the user agrees.
+  var ccT=document.getElementById('ccToggle');
+  ccT.addEventListener('click',function(){
+    var nowOn=!ccT.classList.contains('on');
+    showConfirm(nowOn?'Turn on color correction?':'Turn off color correction?',
+      (nowOn?'Fixes washed-out colors and clipped highlights on this screen. ':'Colors on this screen will look washed out. ')+
+        'The screen restarts to apply this (a few seconds of black).',
+      'Restart Screen', false, function(){
+        ccT.classList.toggle('on',nowOn);
+        fetch('api/settings/color-correction',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:nowOn})})
+          .then(function(r){if(!r.ok)throw new Error();toast('Restarting screen…');})
+          .catch(function(){ccT.classList.toggle('on',!nowOn);toast('Color correction change failed');});
       });
   });
   // Fan profile -> t6-fand (highlight the active one, switch on tap)
@@ -186,13 +206,26 @@ function showConfirm(title,msg,okText,danger,cb){
    (single taps do nothing, so a stray touch won't wake the panel). On the real
    panel the FT8722 still reports touches with the backlight off, so the
    double-tap lands even though the screen is dark. No passcode. */
-var idleTimer=null, sleepEl=document.getElementById('sleep'), asleep=false, lastTap=0;
+var idleTimer=null, sleepEl=document.getElementById('sleep'), asleep=false, lastTap=0, powerSetAt=0;
 function currentTimeout(){return (LAST&&LAST.screen&&LAST.screen.timeout_s)||0;}
-function setPower(on){fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on})}).catch(function(){});}
+function setPower(on){powerSetAt=Date.now();fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on})}).catch(function(){});}
 function goSleep(){if(asleep)return;asleep=true;clearTimeout(idleTimer);sleepEl.classList.add('on');setPower(false);}
 function wake(){if(!asleep)return;asleep=false;sleepEl.classList.remove('on');setPower(true);armIdle();}
 function armIdle(){clearTimeout(idleTimer);var s=currentTimeout();if(s>0&&!asleep)idleTimer=setTimeout(goSleep,s*1000);}
 function onActivity(){if(!asleep)armIdle();} // activity resets the idle timer only while awake
+/* The backlight can also be switched by someone else — off-after-boot, the web
+   console, another client — so each /api/panel poll reconciles the overlay with
+   the real state: dark screen → asleep (double-tap wakes it, instead of taps
+   landing on an invisible UI); lit screen → overlay dropped. Kiosk only: a
+   browser viewing the panel remotely shouldn't black out because the physical
+   screen did. Our own switches are left alone for a few seconds so a poll that
+   was already in flight can't undo them. */
+var IS_KIOSK=/Electron\//.test(navigator.userAgent);
+function syncBacklight(disp){
+  if(!IS_KIOSK||!disp||typeof disp.on!=='boolean'||Date.now()-powerSetAt<4000)return;
+  if(!disp.on&&!asleep){asleep=true;clearTimeout(idleTimer);sleepEl.classList.add('on');}
+  else if(disp.on&&asleep){asleep=false;sleepEl.classList.remove('on');armIdle();}
+}
 document.getElementById('sleepBtn').addEventListener('click',goSleep);
 // double-tap the dark overlay to wake
 sleepEl.addEventListener('pointerdown',function(e){var t=Date.now();if(t-lastTap<400)wake();lastTap=t;e.preventDefault();});

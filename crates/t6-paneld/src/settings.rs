@@ -24,6 +24,16 @@ pub struct Settings {
     /// Panel colour theme: "dark" (default) or "light". Empty = dark.
     #[serde(default)]
     pub theme: String,
+    /// Send limited-range RGB to the front panel (run-kiosk.sh reads this key
+    /// before starting weston). None = default = on; see set-drm-prop.py.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_correction: Option<bool>,
+}
+
+impl Settings {
+    pub fn color_correction(&self) -> bool {
+        self.color_correction.unwrap_or(true)
+    }
 }
 
 pub fn load() -> Settings {
@@ -69,6 +79,14 @@ pub fn set_theme(theme: String) -> Result<Settings, String> {
     }
     let mut s = load();
     s.theme = theme;
+    save(&s)?;
+    Ok(s)
+}
+
+/// Persist the front-panel colour-range correction on/off.
+pub fn set_color_correction(on: bool) -> Result<Settings, String> {
+    let mut s = load();
+    s.color_correction = Some(on);
     save(&s)?;
     Ok(s)
 }

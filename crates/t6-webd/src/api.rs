@@ -82,6 +82,7 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/display/off-after-boot"), axum::routing::put(put_display_off_after_boot))
         .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/bays"), axum::routing::put(put_bays))
+        .route(&p("/api/leds/power-button"), axum::routing::put(put_power_button))
         .route(&p("/api/leds/bay-fault-blink"), axum::routing::put(put_bay_fault_blink))
         .route(&p("/api/leds/night"), axum::routing::put(put_night))
         .route(&p("/api/leds/tray-speed"), axum::routing::put(put_tray_speed))
@@ -218,7 +219,9 @@ struct BrightnessBody {
 
 async fn put_brightness(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<BrightnessBody>) -> ApiResult {
     require_admin(&s, &headers)?;
-    let v = s.inner.display.set_brightness(b.brightness).map_err(bad_request)?;
+    let v = tokio::task::spawn_blocking(move || s.inner.display.set_brightness(b.brightness))
+        .await.map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(bad_request)?;
     Ok(Json(json!({ "ok": true, "brightness": v })))
 }
 
@@ -229,7 +232,9 @@ struct PowerBody {
 
 async fn put_display_power(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<PowerBody>) -> ApiResult {
     require_admin(&s, &headers)?;
-    let v = s.inner.display.set_power(b.on).map_err(bad_request)?;
+    let v = tokio::task::spawn_blocking(move || s.inner.display.set_power(b.on))
+        .await.map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(bad_request)?;
     Ok(Json(json!({ "ok": true, "on": b.on, "brightness": v })))
 }
 
@@ -240,7 +245,9 @@ struct OffAfterBootBody {
 
 async fn put_display_off_after_boot(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OffAfterBootBody>) -> ApiResult {
     require_admin(&s, &headers)?;
-    s.inner.display.set_off_after_boot(b.off_after_boot).map_err(bad_request)?;
+    tokio::task::spawn_blocking(move || s.inner.display.set_off_after_boot(b.off_after_boot))
+        .await.map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(bad_request)?;
     Ok(Json(json!({ "ok": true, "off_after_boot": b.off_after_boot })))
 }
 
@@ -269,6 +276,12 @@ struct OnBody {
 async fn put_bays(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OnBody>) -> ApiResult {
     require_admin(&s, &headers)?;
     s.inner.ledd.command(if b.on { "bays on" } else { "bays off" }).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn put_power_button(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OnBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    s.inner.ledd.command(if b.on { "power-button on" } else { "power-button off" }).map_err(bad_request)?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -336,7 +349,7 @@ async fn get_system(State(s): State<AppState>) -> Json<serde_json::Value> {
         "hostname": t6_hw_rs::sensors::hostname(),
         // FygoOS exports the package version to the app's processes.
         "app_version": std::env::var("TRIM_APPVER").ok().or_else(|| option_env!("CARGO_PKG_VERSION").map(str::to_string)),
-        "modules": { "t6_platform": module("t6_platform"), "ft8722_ts": module("ft8722_ts") },
+        "modules": { "t6_platform": module("t6_platform"), "ft8722_ts": module("ft8722_ts"), "ite_it6616": module("ite_it6616") },
         "daemons": {
             "t6-fand": s.inner.fand.status().is_some(),
             "t6-ledd": s.inner.ledd.status().is_some(),

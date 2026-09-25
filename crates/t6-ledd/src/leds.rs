@@ -1,7 +1,5 @@
-//! LED hardware access: the `t6:*` brightness class devices and the tray
-//! speed attribute. `LedBank` is to the LEDs what `Beeper` is to the
-//! beeper — the one place that touches the sysfs, and the write-order rule
-//! that a full-byte LED register imposes.
+//! LED hardware access: the `t6:*` brightness class devices and tray speed.
+//! `LedBank` centralizes colour updates and suppresses redundant writes.
 
 use crate::devices::Device;
 use std::collections::HashMap;
@@ -34,10 +32,8 @@ impl LedBank {
 
     /// Set a device to a colour (every LED not in the colour goes off).
     ///
-    /// The "off" LEDs are written before the "on" LEDs. The EC LEDs of one
-    /// device (power button, each bay) share a single register in full-byte
-    /// mode, so a colour's off-write zeroes the whole byte; doing the offs
-    /// first means the final write is the colour we want, not a stray zero.
+    /// Switch old channels off before selecting the new colour. System and
+    /// bay LEDs select one hardware colour; tray RGB channels can combine.
     pub fn set(&mut self, dev: &Device, color: &str) -> Result<(), String> {
         let on = dev.leds_for(color).ok_or_else(|| format!("{}: unknown colour {color:?}", dev.id))?;
         for led in dev.leds {
@@ -81,7 +77,13 @@ pub enum Effect {
     Solid(String),
     /// Alternate `color` and off every half `period_ms` (drive fault, ...).
     Blink { color: String, period_ms: u64 },
+    /// Two short pulses, then a pause (Wi-Fi hotspot).
+    Heartbeat { color: String },
 }
+
+/// Heartbeat cycle: on 100 ms, off 100 ms, on 100 ms, off 900 ms.
+const HEARTBEAT_CYCLE_MS: u128 = 1200;
+const HEARTBEAT_ON_MS: [(u128, u128); 2] = [(0, 100), (200, 300)];
 
 impl Effect {
     pub fn off() -> Self {
@@ -96,6 +98,17 @@ impl Effect {
                 let period = (*period_ms).max(1) as u128;
                 if (elapsed.as_millis() / period) % 2 == 0 { color } else { "off" }
             }
+            Effect::Heartbeat { color } => {
+                let t = elapsed.as_millis() % HEARTBEAT_CYCLE_MS;
+                if HEARTBEAT_ON_MS.iter().any(|(a, b)| (*a..*b).contains(&t)) { color } else { "off" }
+            }
+        }
+    }
+
+    /// The colour an animated effect shows when lit.
+    pub fn base_color(&self) -> &str {
+        match self {
+            Effect::Solid(c) | Effect::Blink { color: c, .. } | Effect::Heartbeat { color: c } => c,
         }
     }
 
@@ -104,6 +117,7 @@ impl Effect {
         match self {
             Effect::Solid(c) => c.clone(),
             Effect::Blink { color, .. } => format!("blink {color}"),
+            Effect::Heartbeat { color } => format!("heartbeat {color}"),
         }
     }
 }
@@ -120,6 +134,15 @@ mod tests {
         assert_eq!(b.frame_color(Duration::from_millis(500)), "off");
         assert_eq!(b.frame_color(Duration::from_millis(999)), "off");
         assert_eq!(b.frame_color(Duration::from_millis(1000)), "red");
+    }
+
+    #[test]
+    fn heartbeat_is_two_pulses_then_a_pause() {
+        let h = Effect::Heartbeat { color: "blue".into() };
+        let at = |ms| h.frame_color(Duration::from_millis(ms));
+        assert_eq!([at(0), at(99), at(100), at(199), at(200), at(299)], ["blue", "blue", "off", "off", "blue", "blue"]);
+        assert_eq!([at(300), at(1199), at(1200), at(1350)], ["off", "off", "blue", "off"]);
+        assert_eq!(h.describe(), "heartbeat blue");
     }
 
     #[test]

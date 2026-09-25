@@ -44,8 +44,11 @@ pub(super) async fn get_status(headers: HeaderMap) -> Response {
     let disp = Display::new().info();
     Json(serde_json::json!({
         "panel": { "enabled": set.panel_enabled(), "active": kiosk_active() },
-        "display": { "present": disp.present, "on": disp.on, "brightness": disp.brightness, "on_level": disp.on_level, "min_on": disp.min_on },
+        "display": { "present": disp.present, "on": disp.on },
+        // Front-panel theme; empty/unset means dark (as in /api/panel).
+        "theme": if set.theme.is_empty() { "dark".to_string() } else { set.theme.clone() },
         "color_correction": set.color_correction(),
+        "screen_timeout_s": set.screen_timeout_s,
         "version": crate::panel::app_version(),
         "host": t6_hw_rs::sensors::hostname(),
     }))
@@ -57,29 +60,34 @@ pub(super) struct PanelReq {
     enabled: bool,
 }
 
-/// Off = stop + disable the kiosk unit and switch the backlight off; on =
-/// backlight on, enable + start. The choice is persisted first so the
-/// package scripts honour it on the next start/upgrade/boot.
+/// Sleep before stopping the video source; start it before waking the panel.
+/// The choice is persisted first so package scripts honour it on the next
+/// start/upgrade/boot. Failed power transitions are reported, never hidden.
 pub(super) async fn put_panel(headers: HeaderMap, Json(req): Json<PanelReq>) -> Response {
     if !is_admin(&headers) {
         return forbidden();
     }
-    if let Err(e) = crate::settings::set_panel_enabled(req.enabled) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response();
-    }
-    let res = if req.enabled {
-        let _ = Display::new().set_power(true);
-        systemctl(&["enable", "--now", KIOSK_UNIT])
-    } else {
-        let r = systemctl(&["disable", "--now", KIOSK_UNIT]);
-        // Electron exits with SIGTRAP on SIGTERM, so a clean stop reads as
-        // "failed"; clear that (a real crash still restarts via on-failure).
-        let _ = systemctl(&["reset-failed", KIOSK_UNIT]);
-        let _ = Display::new().set_power(false);
-        r
-    };
+    let res = tokio::task::spawn_blocking(move || {
+        crate::settings::set_panel_enabled(req.enabled)?;
+        if req.enabled {
+            systemctl(&["enable", "--now", KIOSK_UNIT])?;
+            Display::new().set_power(true)?;
+        } else {
+            let power = Display::new().set_power(false);
+            let stop = systemctl(&["disable", "--now", KIOSK_UNIT]);
+            // Electron exits with SIGTRAP on SIGTERM; clear the resulting
+            // failed state, but still report any stop or display failure.
+            let _ = systemctl(&["reset-failed", KIOSK_UNIT]);
+            match (power, stop) {
+                (Err(power), Err(stop)) => return Err(format!("{power}; {stop}")),
+                (Err(e), _) | (_, Err(e)) => return Err(e),
+                (Ok(_), Ok(())) => {}
+            }
+        }
+        Ok(kiosk_active())
+    }).await.unwrap_or_else(|e| Err(format!("panel worker failed: {e}")));
     match res {
-        Ok(()) => Json(serde_json::json!({ "enabled": req.enabled, "active": kiosk_active() })).into_response(),
+        Ok(active) => Json(serde_json::json!({ "enabled": req.enabled, "active": active })).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }

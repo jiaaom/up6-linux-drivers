@@ -16,33 +16,72 @@ struct t6_led {
 	u8 address;
 	u8 mask;
 	u8 on_value;
-	/* Tray RGB (0xa2): the write also forces the enable bit and the current
-	 * speed nibble, so clearing every colour leaves 0x01 (off) at the
-	 * chosen speed rather than 0x00 (the EC's own breathing). */
 	bool is_tray;
 	enum t6_led_mode mode;
 };
 
 static int t6_led_set_blocking(struct led_classdev *cdev,
-			       enum led_brightness brightness)
+				       enum led_brightness brightness)
 {
 	struct t6_led *led = container_of(cdev, struct t6_led, cdev);
+	struct t6_platform *priv = led->priv;
+	u8 reg_value, value;
+	int ret;
 
 	if (brightness > 1)
 		return -ERANGE;
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	mutex_lock(&priv->led_lock);
+	if (led->address == 0xa1 && t6_charge_owns_battery_led(priv)) {
+		/* Charge policy owns the byte: reject colour changes, but make the
+		 * common all-LEDs-off park operation a harmless no-op. */
+		ret = brightness ? -EBUSY : 0;
+		goto out;
+	}
+	ret = t6_ec_read(priv, led->address, &reg_value);
+	if (ret)
+		goto out;
+	if (led->mode == T6_LED_FULL_BYTE) {
+		/* Whole-byte hardware is last-on-wins; a sibling's off must not clear it. */
+		if (!brightness && reg_value != led->on_value) {
+			ret = 0;
+			goto out;
+		}
+		value = brightness ? led->on_value : 0;
+		ret = t6_ec_write(priv, led->address, value);
+		goto out;
+	}
+
+	value = (reg_value & ~(led->mask | 0x01 | 0xf0)) |
+		(brightness ? led->on_value : 0) | 0x01 | priv->tray_speed;
+	ret = t6_ec_write(priv, led->address, value);
+out:
+	mutex_unlock(&priv->led_lock);
+	t6_platform_op_end(priv);
+	return ret;
+}
+
+static enum led_brightness t6_led_get(struct led_classdev *cdev)
+{
+	struct t6_led *led = container_of(cdev, struct t6_led, cdev);
+	struct t6_platform *priv = led->priv;
+	u8 value;
+	int ret;
+
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	mutex_lock(&priv->led_lock);
+	ret = t6_ec_read(priv, led->address, &value);
+	mutex_unlock(&priv->led_lock);
+	t6_platform_op_end(priv);
+	if (ret)
+		return ret;
 	if (led->mode == T6_LED_FULL_BYTE)
-		return t6_ec_write(led->priv, led->address,
-				   brightness ? led->on_value : 0);
-
-	if (led->is_tray)
-		/* colour bit + enable (0x01) + speed nibble (0xf0) */
-		return t6_ec_update_bits(led->priv, led->address,
-					 led->mask | 0x01 | 0xf0,
-					 (brightness ? led->on_value : 0) | 0x01 |
-					 led->priv->tray_speed);
-
-	return t6_ec_update_bits(led->priv, led->address, led->mask,
-				 brightness ? led->on_value : 0);
+		return value == led->on_value;
+	return !!(value & led->mask);
 }
 
 static int t6_led_init(struct t6_led *led, struct t6_platform *priv,
@@ -57,6 +96,7 @@ static int t6_led_init(struct t6_led *led, struct t6_platform *priv,
 	led->cdev.name = name;
 	led->cdev.max_brightness = 1;
 	led->cdev.brightness_set_blocking = t6_led_set_blocking;
+	led->cdev.brightness_get = t6_led_get;
 	return devm_led_classdev_register(&priv->pdev->dev, &led->cdev);
 }
 
@@ -71,34 +111,56 @@ static const struct {
 };
 
 static ssize_t tray_speed_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+				       struct device_attribute *attr, char *buf)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
 	unsigned int i;
+	ssize_t ret;
 
+	if (t6_platform_op_begin(priv))
+		return -ENODEV;
+	mutex_lock(&priv->led_lock);
 	for (i = 0; i < ARRAY_SIZE(t6_tray_speeds); i++)
-		if (t6_tray_speeds[i].bits == priv->tray_speed)
-			return sysfs_emit(buf, "%s\n", t6_tray_speeds[i].name);
-	return sysfs_emit(buf, "0x%02x\n", priv->tray_speed);
+		if (t6_tray_speeds[i].bits == priv->tray_speed) {
+			ret = sysfs_emit(buf, "%s\n", t6_tray_speeds[i].name);
+			goto out;
+		}
+	ret = sysfs_emit(buf, "0x%02x\n", priv->tray_speed);
+out:
+	mutex_unlock(&priv->led_lock);
+	t6_platform_op_end(priv);
+	return ret;
 }
 
 static ssize_t tray_speed_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
+					struct device_attribute *attr,
+					const char *buf, size_t count)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
+	u8 reg_value, value, speed;
 	unsigned int i;
 	int ret;
 
-	for (i = 0; i < ARRAY_SIZE(t6_tray_speeds); i++) {
-		if (sysfs_streq(buf, t6_tray_speeds[i].name)) {
-			priv->tray_speed = t6_tray_speeds[i].bits;
-			/* Re-apply the speed nibble to the live colour, if any. */
-			ret = t6_ec_update_bits(priv, 0xa2, 0xf0, priv->tray_speed);
-			return ret ? ret : count;
-		}
+	for (i = 0; i < ARRAY_SIZE(t6_tray_speeds); i++)
+		if (sysfs_streq(buf, t6_tray_speeds[i].name))
+			break;
+	if (i == ARRAY_SIZE(t6_tray_speeds))
+		return -EINVAL;
+	speed = t6_tray_speeds[i].bits;
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	mutex_lock(&priv->led_lock);
+	ret = t6_ec_read(priv, 0xa2, &reg_value);
+	if (!ret) {
+		value = (reg_value & ~0xf0) | speed;
+		ret = t6_ec_write(priv, 0xa2, value);
+		if (!ret)
+			priv->tray_speed = speed;
 	}
-	return -EINVAL;
+	mutex_unlock(&priv->led_lock);
+	t6_platform_op_end(priv);
+	return ret ? ret : count;
 }
 
 static DEVICE_ATTR_RW(tray_speed);
@@ -177,19 +239,20 @@ int t6_leds_register(struct t6_platform *priv)
 		};
 
 		for (i = 0; i < ARRAY_SIZE(rgb); i++) {
+			leds[n].is_tray = true;
 			ret = t6_led_init(&leds[n], priv, rgb[i].name, 0xa2,
 					  rgb[i].mask, rgb[i].mask, T6_LED_MASKED);
 			if (ret)
 				return ret;
-			leds[n++].is_tray = true;
+			n++;
 		}
 	}
 
-	/*
-	 * Battery/UPS LED. The EC never drives it on its own; 0x00 is dark and
-	 * bit 0 is the vendor "control enabled" flag, so a colour value carries
-	 * it and off writes 0x00. Whole-byte writes, no wait on bit 0.
-	 */
+/* Battery/UPS LED. In EC policy 0x00 hands the byte back to firmware;
+ * colour values are whole-byte host values. While charge thresholds are
+ * active, t6_charge.c owns this register: colour writes fail and off is a
+ * no-op so LED teardown cannot undo the charge indication.
+ */
 	ret = t6_led_init(&leds[n++], priv, "t6:battery:orange", 0xa1,
 			  0xff, 0x03, T6_LED_FULL_BYTE);
 	if (ret)

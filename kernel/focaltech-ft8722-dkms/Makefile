@@ -1,4 +1,5 @@
 obj-m += ft8722_ts.o
+ft8722_ts-y := ft8722_core.o ft8722_input.o
 
 KERNELRELEASE ?= $(shell uname -r)
 

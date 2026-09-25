@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * FocalTech FT8722 I2C touch protocol as used on the ZSpace T6 front panel.
+ * FocalTech FT8722 I2C touch protocol.
  *
  * Recovered from the vendor focaltech_tp.ko (BTF + disassembly of
  * fts_irq_handler / fts_input_report_b) and validated on hardware.

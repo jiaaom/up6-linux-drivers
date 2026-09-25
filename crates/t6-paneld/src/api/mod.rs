@@ -65,6 +65,7 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         // lock-screen brightness); admin-gated writes live on the gateway side.
         .route(&p("/api/display/brightness"), put(put_brightness))
         .route(&p("/api/display/power"), put(put_power))
+        .route(&p("/api/display/events"), get(display_events))
         .route(&p("/api/settings/screen-timeout"), put(put_screen_timeout))
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
         .route(&p("/api/settings/theme"), put(put_theme))

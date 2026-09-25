@@ -44,14 +44,18 @@ static struct gpiod_lookup_table t6_gpio_led_lookup = {
 struct t6_gpio_led {
 	struct led_classdev cdev;
 	struct gpio_desc *gpiod;
+	struct t6_platform *priv;
 };
 
 static int t6_gpio_led_set(struct led_classdev *cdev,
-			   enum led_brightness brightness)
+				   enum led_brightness brightness)
 {
 	struct t6_gpio_led *led = container_of(cdev, struct t6_gpio_led, cdev);
 
+	if (t6_platform_op_begin(led->priv))
+		return -ENODEV;
 	gpiod_set_value_cansleep(led->gpiod, brightness ? 1 : 0);
+	t6_platform_op_end(led->priv);
 	return 0;
 }
 
@@ -79,15 +83,20 @@ int t6_gpio_leds_register(struct t6_platform *priv)
 		return -ENOMEM;
 
 	for (i = 0; i < ARRAY_SIZE(t6_gpio_led_descs); i++) {
-		/* GPIOD_ASIS: do not glitch a line that firmware or a previous load left lit. */
+		int value;
+
+		/* GPIOD_ASIS: do not glitch a line firmware left lit. */
 		leds[i].gpiod = devm_gpiod_get_index(dev, T6_GPIO_CON_ID, i,
 						     GPIOD_ASIS);
 		if (IS_ERR(leds[i].gpiod))
 			return PTR_ERR(leds[i].gpiod);
-		ret = gpiod_direction_output(leds[i].gpiod,
-					     gpiod_get_value_cansleep(leds[i].gpiod) > 0);
+		value = gpiod_get_value_cansleep(leds[i].gpiod);
+		if (value < 0)
+			return value;
+		ret = gpiod_direction_output(leds[i].gpiod, value);
 		if (ret)
 			return ret;
+		leds[i].priv = priv;
 		leds[i].cdev.name = t6_gpio_led_descs[i].name;
 		leds[i].cdev.max_brightness = 1;
 		leds[i].cdev.brightness_set_blocking = t6_gpio_led_set;

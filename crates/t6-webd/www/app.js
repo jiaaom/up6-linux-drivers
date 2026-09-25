@@ -38,7 +38,7 @@ const I18N = {
     healthTitle: "Drivers & services", repairDrivers: "Repair drivers", lastRepair: "Last repair",
     builtinBattery: "Built-in battery", software: "Software",
     nightMode: "Night mode",
-    nightHelp: "Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.",
+    nightHelp: "Switches every LED off. Alerts stay on: the battery LED on a power failure, overheating, and drive, Wi-Fi and Bluetooth faults. Turn it on by hand, or give it a daily window.",
     nightNow: "Night mode now", everyDayFrom: "Every day from", to: "to", revert: "Revert", apply: "Apply",
     bayLeds: "Bay LEDs", bayHelp: "Bays light white when a drive is present. A drive reported faulty blinks red.",
     showDrives: "Show drives (white)", blinkFault: "Blink red on drive fault", perLed: "Advanced — per-LED control",
@@ -48,6 +48,9 @@ const I18N = {
     backlight: "Backlight", backlightHelp: "Front LCD backlight. The level is applied immediately and remembered across reboots.",
     on: "On", off: "Off", offUntilReboot: "Off until next reboot", level: "Level", advanced: "Advanced",
     offAfterBoot: "Always turn off the built-in display after boot",
+    powerButtonScreen: "The power button switches the screen on and off",
+    powerButtonHelp: "Like a phone's side button. The screen reacts about a second after you let go. A desktop running on the screen also locks its session.",
+    powerButtonFail: "Could not change the power button: {e}",
     offAfterBootHelp: "For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.",
     status: "Status", chargeLimits: "Charge limits",
     limitsHelp: "Charging starts when the level drops below the lower bound and stops at the upper one. Choose a range, then Apply.",
@@ -83,7 +86,7 @@ const I18N = {
     slow: "slow", normal: "normal", fast: "fast", breathSpeed: "Breathing speed",
     running: "running", notRunning: "not running", loaded: "loaded", loadedV: "loaded, {v}", notLoaded: "not loaded",
     thisApp: "this app", linuxVersion: "Linux version", platformDesc: "fans, LEDs, backlight & battery driver",
-    touchDesc: "touchscreen driver", fandDesc: "fan control service", leddDesc: "LED & beeper service", kernel: "Kernel",
+    touchDesc: "touchscreen driver", bridgeDesc: "HDMI-to-DSI front-panel bridge", fandDesc: "fan control service", leddDesc: "LED & beeper service", kernel: "Kernel",
     kernelV: "kernel {k}", repairing: "Repairing — building and loading the drivers (about 30 s)…",
     problems: "Problems detected", allGood: "All drivers and services are running",
     updateDrivers: "Update the T6 Drivers package to repair from here.",
@@ -98,6 +101,27 @@ const I18N = {
     silent: "Silent", balance: "Balanced", performance: "Performance", custom: "Custom",
     rgbRed: "red", rgbGreen: "green", rgbBlue: "blue", rgbYellow: "red + green (cycle)", rgbCyan: "green + blue (cycle)",
     rgbMagenta: "red + blue (cycle)", rgbWhite: "rainbow", colorOff: "off", colorWhite: "white", colorOrange: "orange",
+    colorYellow: "yellow", colorCyan: "cyan", colorMagenta: "magenta", fxBlink: "{c}, blinking", fxHeartbeat: "{c}, heartbeat",
+    wifiLegend: "Blue: online · cyan: weak signal · cyan blinking: connecting · blue heartbeat: hotspot · yellow: on but not usable · red: fault (also at night) · off: Wi-Fi off or not set up",
+    "wifi.connected": "Connected to {c}{s}", "wifi.weak-signal": "Weak signal on {c}{s}", "wifi.connecting": "Connecting to {c}…",
+    "wifi.hotspot": "Hotspot {c} is on", "wifi.not-connected": "Not connected to a saved network",
+    "wifi.no-ip": "Connected to {c}, but no IP address", "wifi.portal": "{c} needs a sign-in page",
+    "wifi.no-internet": "Connected to {c}, but no internet", "wifi.driver-missing": "Wi-Fi card found, but no driver is loaded",
+    "wifi.no-interface": "Wi-Fi driver loaded, but the card did not start (firmware?)", "wifi.hard-blocked": "Wi-Fi is blocked in hardware",
+    "wifi.unavailable": "The Wi-Fi card is not responding", "wifi.nm-down": "NetworkManager is not running",
+    "wifi.disabled": "Wi-Fi is turned off", "wifi.no-hardware": "No Wi-Fi card", "wifi.not-configured": "No Wi-Fi network saved",
+    "wifi.not-managed": "Not managed by NetworkManager", "wifi.starting": "Starting…",
+    radioLeds: "Status LEDs", radioHelp: "These LEDs show what the machine is doing. Red is an alarm and stays on in night mode.",
+    showPower: "Show power status", powerLegend: "Power button — off while the screen is on · white while the screen is off · red blinking: overheating (also at night)",
+    "power.screenOn": "Screen is on", "power.screenOff": "Screen is off", "power.hot": "Overheating: {s} at {t} °C", bayN: "bay {n}",
+    showWifi: "Show Wi-Fi status", showBt: "Show Bluetooth status", ledKeptOff: "LED kept off", nightOff: "off for night mode",
+    btLegend: "Blue: a device is connected · blue heartbeat: discoverable (pairing) · red: fault (also at night) · off: idle, off or no Bluetooth",
+    "bt.connected": "{n} device(s) connected", "bt.discoverable": "Discoverable — waiting for a device to pair",
+    "bt.idle": "On, no device connected", "bt.powered-off": "Adapter is off (is BlueZ installed?)",
+    "bt.disabled": "Bluetooth is turned off", "bt.no-hardware": "No Bluetooth adapter",
+    "bt.driver-missing": "Bluetooth hardware found, but no driver is loaded",
+    "bt.no-adapter": "Bluetooth driver loaded, but the adapter did not start (firmware?)",
+    "bt.hard-blocked": "Bluetooth is blocked in hardware", "bt.starting": "Starting…",
   },
   "zh-CN": {
     appTitle: "T6 控制中心",
@@ -108,7 +132,7 @@ const I18N = {
     healthTitle: "驱动与服务", repairDrivers: "修复驱动", lastRepair: "上次修复",
     builtinBattery: "内置电池", software: "软件",
     nightMode: "夜间模式",
-    nightHelp: "关闭所有指示灯（电池灯仍会提示断电）。可手动开启，或设定每天的时段。",
+    nightHelp: "关闭所有指示灯。警示仍会亮：断电时的电池灯、过热，以及硬盘、Wi-Fi、蓝牙故障。可手动开启，或设定每天的时段。",
     nightNow: "立即开启夜间模式", everyDayFrom: "每天从", to: "到", revert: "还原", apply: "应用",
     bayLeds: "硬盘位指示灯", bayHelp: "有硬盘时硬盘位亮白灯；硬盘报告故障时闪红灯。",
     showDrives: "显示硬盘（白灯）", blinkFault: "硬盘故障时闪红灯", perLed: "高级 — 单个指示灯控制",
@@ -118,6 +142,9 @@ const I18N = {
     backlight: "背光", backlightHelp: "前面板液晶屏背光。亮度立即生效，重启后保留。",
     on: "开", off: "关", offUntilReboot: "关闭（直到下次重启）", level: "亮度", advanced: "高级",
     offAfterBoot: "开机后始终关闭内置显示屏",
+    powerButtonScreen: "按电源键开关屏幕",
+    powerButtonHelp: "就像手机的锁屏键。松开按键约一秒后屏幕才会响应。如果屏幕上运行着桌面环境，它也会同时锁屏。",
+    powerButtonFail: "无法更改电源键设置：{e}",
     offAfterBootHelp: "适用于无屏使用。开启后每次重启屏幕都保持熄灭，直到在这里打开。",
     status: "状态", chargeLimits: "充电范围",
     limitsHelp: "电量低于下限时开始充电，达到上限时停止。选好范围后点击“应用”。",
@@ -152,7 +179,7 @@ const I18N = {
     slow: "慢", normal: "中", fast: "快", breathSpeed: "呼吸速度",
     running: "运行中", notRunning: "未运行", loaded: "已加载", loadedV: "已加载，{v}", notLoaded: "未加载",
     thisApp: "本应用", linuxVersion: "Linux 版本", platformDesc: "风扇、指示灯、背光与电池驱动",
-    touchDesc: "触摸屏驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", kernel: "内核",
+    touchDesc: "触摸屏驱动", bridgeDesc: "前面板 HDMI-to-DSI 桥接驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", kernel: "内核",
     kernelV: "内核 {k}", repairing: "正在修复 — 编译并加载驱动（约 30 秒）…",
     problems: "发现问题", allGood: "所有驱动和服务都在运行",
     updateDrivers: "请更新 T6 Drivers 套件后再从这里修复。",
@@ -167,6 +194,27 @@ const I18N = {
     silent: "静音", balance: "均衡", performance: "性能", custom: "自定义",
     rgbRed: "红", rgbGreen: "绿", rgbBlue: "蓝", rgbYellow: "红 + 绿（循环）", rgbCyan: "绿 + 蓝（循环）",
     rgbMagenta: "红 + 蓝（循环）", rgbWhite: "彩虹", colorOff: "关", colorWhite: "白", colorOrange: "橙",
+    colorYellow: "黄", colorCyan: "青", colorMagenta: "品红", fxBlink: "{c}，闪烁", fxHeartbeat: "{c}，心跳",
+    wifiLegend: "蓝：已联网 · 青：信号弱 · 青色闪烁：正在连接 · 蓝色心跳：热点 · 黄：已开启但不可用 · 红：故障（夜间也亮） · 熄灭：Wi-Fi 已关闭或未配置",
+    "wifi.connected": "已连接 {c}{s}", "wifi.weak-signal": "{c} 信号弱{s}", "wifi.connecting": "正在连接 {c}…",
+    "wifi.hotspot": "热点 {c} 已开启", "wifi.not-connected": "未连接到已保存的网络",
+    "wifi.no-ip": "已连接 {c}，但没有 IP 地址", "wifi.portal": "{c} 需要网页登录",
+    "wifi.no-internet": "已连接 {c}，但无法访问互联网", "wifi.driver-missing": "检测到 Wi-Fi 网卡，但驱动未加载",
+    "wifi.no-interface": "Wi-Fi 驱动已加载，但网卡未能启动（固件？）", "wifi.hard-blocked": "Wi-Fi 被硬件屏蔽",
+    "wifi.unavailable": "Wi-Fi 网卡无响应", "wifi.nm-down": "NetworkManager 未运行",
+    "wifi.disabled": "Wi-Fi 已关闭", "wifi.no-hardware": "没有 Wi-Fi 网卡", "wifi.not-configured": "未保存任何 Wi-Fi 网络",
+    "wifi.not-managed": "不受 NetworkManager 管理", "wifi.starting": "正在启动…",
+    radioLeds: "状态指示灯", radioHelp: "这些灯显示机器当前的状态。红色是警报，夜间模式下也会亮。",
+    showPower: "显示电源状态", powerLegend: "电源键 — 屏幕亮时熄灭 · 屏幕关闭时白色 · 红色闪烁：过热（夜间也亮）",
+    "power.screenOn": "屏幕已开启", "power.screenOff": "屏幕已关闭", "power.hot": "过热：{s} {t} °C", bayN: "硬盘位 {n}",
+    showWifi: "显示 Wi-Fi 状态", showBt: "显示蓝牙状态", ledKeptOff: "指示灯保持关闭", nightOff: "夜间模式已关闭",
+    btLegend: "蓝：有设备连接 · 蓝色心跳：可被发现（配对中） · 红：故障（夜间也亮） · 熄灭：空闲、已关闭或没有蓝牙",
+    "bt.connected": "已连接 {n} 个设备", "bt.discoverable": "可被发现，等待设备配对",
+    "bt.idle": "已开启，没有设备连接", "bt.powered-off": "适配器未开启（是否已安装 BlueZ？）",
+    "bt.disabled": "蓝牙已关闭", "bt.no-hardware": "没有蓝牙适配器",
+    "bt.driver-missing": "检测到蓝牙硬件，但驱动未加载",
+    "bt.no-adapter": "蓝牙驱动已加载，但适配器未能启动（固件？）",
+    "bt.hard-blocked": "蓝牙被硬件屏蔽", "bt.starting": "正在启动…",
   },
 };
 
@@ -186,7 +234,23 @@ try {
 } catch (e) {
   console.warn("TrimApp unavailable:", e);
 }
-let platformConfig = { language: navigator.language || "en-US", theme: "light" };
+let platformConfig = { language: navigator.language || "en-US", theme: null };
+// The theme the host gave ("dark"/"light", or { theme }), or null. The fnOS
+// iOS app's SDK bridge does not answer getPlatformConfig at all (app 1.34.4),
+// but its webview's prefers-color-scheme follows the app's dark mode, so
+// without an answer the page follows that, live.
+const darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+function hostTheme(v) {
+  const theme = v && typeof v === "object" && "theme" in v ? v.theme : v;
+  const s = String(theme || "").toLowerCase();
+  return s === "dark" || s === "light" ? s : null;
+}
+function resolvedTheme() {
+  return hostTheme(platformConfig.theme) || (darkQuery && darkQuery.matches ? "dark" : "light");
+}
+// First paint already in the right theme, before the host answers (or not).
+document.documentElement.dataset.theme = resolvedTheme();
+
 
 function applyPreferences() {
   const lang = String(platformConfig.language || "").replace("_", "-");
@@ -194,10 +258,7 @@ function applyPreferences() {
   const langChanged = next !== state.language;
   state.language = next;
   document.documentElement.lang = next;
-  // the host may hand back { theme: "dark" } instead of "dark"
-  const v = platformConfig.theme;
-  const theme = v && typeof v === "object" && "theme" in v ? v.theme : v;
-  document.documentElement.dataset.theme = String(theme || "").toLowerCase() === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = resolvedTheme();
   document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
   $("#pageTitle").textContent = t($(".nav-item.active").querySelector("[data-i18n]").dataset.i18n);
   if (langChanged) {
@@ -220,8 +281,12 @@ async function initPlatform() {
     platformConfig = { ...platformConfig, ...(await withTimeout(sdk.getPlatformConfig(), 2000)) };
     applyPreferences();
   } catch {
-    // opened outside the fnOS desktop, or no reply: keep the browser defaults
+    // opened outside the fnOS desktop, or no reply (the iOS app): follow the
+    // browser's language and dark-mode setting
+    applyPreferences();
   }
+  // The system setting only counts while the host has not named a theme.
+  darkQuery?.addEventListener?.("change", () => { if (!hostTheme(platformConfig.theme)) applyPreferences(); });
   if (sdk.isWeb === true && sdk.isStandaloneWeb === false) {
     try {
       sdk.$on("os/theme", (theme) => { platformConfig = { ...platformConfig, theme }; applyPreferences(); });
@@ -410,6 +475,7 @@ function renderAll(s) {
   renderProfiles(s.fan);
   renderBattery(s.battery);
   renderDisplay(s.display);
+  renderPowerButton(s.leds);
   renderLeds(s.leds);
   document.querySelectorAll("#beep-buttons button").forEach((b) => (b.disabled = !state.admin || !s.leds));
   $("#beep-note").textContent = !state.admin ? t("adminRequired") : "";
@@ -630,6 +696,13 @@ function renderDisplay(d) {
   if (document.activeElement !== ob) ob.checked = !!d.off_after_boot;
 }
 
+// The button is t6-ledd's (it keeps running without the front panel).
+function renderPowerButton(l) {
+  const cb = $("#bl-button");
+  cb.disabled = !state.admin || !l;
+  if (l && document.activeElement !== cb) cb.checked = l.power_button_screen !== false;
+}
+
 function syncBrightnessLabel() {
   $("#bl-value").textContent = `${+$("#bl-slider").value} %`;
 }
@@ -668,6 +741,13 @@ $("#bl-power").addEventListener("change", async (e) => {
     notice(t("backlightFail", { e: err.message }), "error");
   }
 });
+$("#bl-button").addEventListener("change", async (e) => {
+  try {
+    await api("leds/power-button", { method: "PUT", body: { on: e.target.checked } });
+  } catch (err) {
+    notice(t("powerButtonFail", { e: err.message }), "error");
+  }
+});
 $("#bl-off-boot").addEventListener("change", async (e) => {
   try {
     await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: e.target.checked } });
@@ -682,16 +762,70 @@ $("#bl-off-boot").addEventListener("change", async (e) => {
 // cycle, all three is a rainbow. Friendlier names for its dropdown.
 const RGB_LABEL = { off: "colorOff", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue",
   yellow: "rgbYellow", cyan: "rgbCyan", magenta: "rgbMagenta", white: "rgbWhite" };
-const COLOR_LABEL = { off: "colorOff", white: "colorWhite", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue", orange: "colorOrange" };
+const COLOR_LABEL = { off: "colorOff", white: "colorWhite", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue", orange: "colorOrange",
+  yellow: "colorYellow", cyan: "colorCyan", magenta: "colorMagenta" };
 const colorName = (id, c) => (id === "rgb" ? (RGB_LABEL[c] ? t(RGB_LABEL[c]) : c) : (COLOR_LABEL[c] ? t(COLOR_LABEL[c]) : c));
+// t6-ledd reports animated effects as "blink red" / "heartbeat blue".
+const splitEffect = (e) => {
+  const m = /^(blink|heartbeat) (\w+)$/.exec(e || "");
+  return m ? { fx: m[1], color: m[2] } : { fx: "", color: e };
+};
+const effectName = (id, e) => {
+  const { fx, color } = splitEffect(e);
+  const c = colorName(id, color);
+  return fx === "blink" ? t("fxBlink", { c }) : fx === "heartbeat" ? t("fxHeartbeat", { c }) : c;
+};
+
+function wifiWhy(w) {
+  if (!w) return "";
+  const c = escapeHtml(w.connection || w.iface || "Wi-Fi");
+  const sig = w.signal_dbm != null && ["connected", "weak-signal"].includes(w.reason) ? ` · ${w.signal_dbm} dBm` : "";
+  return t(`wifi.${w.reason}`, { c, s: sig });
+}
+
+const btWhy = (b) => (b ? t(`bt.${b.reason}`, { n: b.connections }) : "");
+// Status LEDs: shown in their own card (on = automatic, off = kept dark),
+// not in the per-LED table.
+function powerWhy(p) {
+  if (!p) return "";
+  if (p.overheat) {
+    const s = p.overheat.sensor.replace(/^bay (\d)$/, (_, n) => `${t("bayN", { n })}`);
+    return t("power.hot", { s: escapeHtml(s), t: Math.round(p.overheat.temp_c) });
+  }
+  return t(p.screen_on ? "power.screenOn" : "power.screenOff");
+}
+
+const LED_STATUS = {
+  power: { why: (l) => powerWhy(l.power), fault: (l) => !!l.power?.overheat },
+  wifi: { why: (l) => wifiWhy(l.wifi), fault: (l) => l.wifi?.state === "fault" },
+  bt: { why: (l) => btWhy(l.bluetooth), fault: (l) => l.bluetooth?.state === "fault" },
+};
+
+function renderRadioLeds(l, editable) {
+  for (const box of document.querySelectorAll(".radio-led")) {
+    const id = box.dataset.id;
+    const d = l.devices.find((x) => x.id === id);
+    box.hidden = !d || !d.available;
+    if (!d) continue;
+    const on = d.mode === "auto";
+    const cb = $(".radio-show", box);
+    if (document.activeElement !== cb) cb.checked = on;
+    cb.disabled = !editable;
+    const st = LED_STATUS[id];
+    const night = l.night?.active && on && !st.fault(l);
+    const tail = !on ? ` · ${t("ledKeptOff")}` : night ? ` · ${t("nightOff")}` : "";
+    $(".led-status", box).innerHTML = `${swatch(on && !night ? d.effective : "off")}${st.why(l)}${tail}`;
+  }
+}
 
 const LED_SWATCH = {
   off: "#e5e7eb", white: "#f8fafc", red: "#ef4444", green: "#22c55e", blue: "#3b82f6",
   yellow: "#eab308", cyan: "#06b6d4", magenta: "#d946ef", orange: "#f97316",
 };
 
-function swatch(color) {
-  return `<i class="dot" style="background:${LED_SWATCH[color] || "#e5e7eb"}"></i>`;
+function swatch(effect) {
+  const { fx, color } = splitEffect(effect);
+  return `<i class="dot${fx ? ` fx-${fx}` : ""}" style="background:${LED_SWATCH[color] || "#e5e7eb"}"></i>`;
 }
 
 function renderLeds(l) {
@@ -736,7 +870,8 @@ function renderLeds(l) {
 
   // device rows: rebuild only when the set of devices changes
   const table = $("#led-devices");
-  const devs = l.devices.filter((d) => !d.bay);
+  renderRadioLeds(l, editable);
+  const devs = l.devices.filter((d) => !d.bay && !LED_STATUS[d.id]);
   const key = devs.map((d) => d.id).join(",");
   if (table.dataset.key !== key) {
     table.dataset.key = key;
@@ -754,7 +889,7 @@ function renderLeds(l) {
   for (const d of devs) {
     const row = table.querySelector(`tr[data-id="${d.id}"]`);
     const forced = n.active;
-    const eff = d.effective === "auto" ? t("automaticShort") : colorName(d.id, d.effective);
+    const eff = d.effective === "auto" ? t("automaticShort") : effectName(d.id, d.effective);
     $(".eff", row).innerHTML = `${swatch(d.effective)}${eff}${forced ? t("forcedOff") : ""}${d.available ? "" : t("ledNA")}`;
     const sel = $(".led-color", row);
     if (sel) {
@@ -780,6 +915,17 @@ $("#led-devices").addEventListener("change", async (e) => {
     } else {
       await api(`leds/${id}`, { method: "PUT", body: { value: sel.value } });
     }
+    notice("");
+  } catch (err) {
+    notice(t("setFail", { id, e: err.message }), "error");
+  }
+});
+$("#radio-leds").addEventListener("change", async (e) => {
+  const cb = e.target.closest(".radio-show");
+  if (!cb) return;
+  const id = cb.closest(".radio-led").dataset.id;
+  try {
+    await api(`leds/${id}`, { method: "PUT", body: { value: cb.checked ? "auto" : "off" } });
     notice("");
   } catch (err) {
     notice(t("setFail", { id, e: err.message }), "error");
@@ -861,6 +1007,7 @@ async function loadSystem() {
       [t("kernel"), t("linuxVersion"), s.kernel],
       ["t6_platform", t("platformDesc"), mod(s.modules.t6_platform)],
       ["ft8722_ts", t("touchDesc"), mod(s.modules.ft8722_ts)],
+      ["ite_it6616", t("bridgeDesc"), mod(s.modules.ite_it6616)],
       ["t6-fand", t("fandDesc"), yes(s.daemons["t6-fand"])],
       ["t6-ledd", t("leddDesc"), yes(s.daemons["t6-ledd"])],
     ].map(([k, d, v]) => `<li><span class="sw-name"><b>${k}</b><small>${d}</small></span><b>${v}</b></li>`).join("");

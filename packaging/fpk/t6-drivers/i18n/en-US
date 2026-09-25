@@ -1,4 +1,4 @@
 [common]
 display_name="T6 Drivers"
-desc="Kernel drivers (DKMS) for the UnifyDrive UP6 / ZSpace T6 / PA60: fans, temperatures, LEDs, backlight, beeper, keys, battery charge control and touchscreen."
-changelog="1.0.0: first stable release. Rebuilds the drivers automatically at boot after a kernel update, and can be repaired from the T6 Control Center dashboard. t6-platform 0.9.11: fixes a crash (and a hung rmmod) when the battery charge thresholds were read while the driver was unloading."
+desc="Kernel drivers (DKMS) for the UnifyDrive UP6 / ZSpace T6 / PA60: fans, temperatures, LEDs, backlight, beeper, keys, battery charge control, touchscreen and HDMI-to-DSI panel bridge."
+changelog="1.1.0: fixes fan handover, charge-control recovery, touch errors and LED concurrency; adds platform suspend/resume handling; modularizes the touch and display-bridge drivers. Includes IT6616 panel sleep/wake."

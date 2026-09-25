@@ -15,7 +15,11 @@ use std::os::unix::fs::MetadataExt;
 use std::process::Command;
 
 /// Kernel module and the DKMS package that builds it.
-const MODULES: [(&str, &str); 2] = [("t6_platform", "t6-platform"), ("ft8722_ts", "focaltech-ft8722")];
+const MODULES: [(&str, &str); 3] = [
+    ("t6_platform", "t6-platform"),
+    ("ft8722_ts", "focaltech-ft8722"),
+    ("ite_it6616", "ite-it6616"),
+];
 /// Services that depend on the modules; those not installed are skipped.
 const SERVICES: [&str; 5] = ["t6-fand", "t6-ledd", "t6-paneld", "t6-panel-kiosk", "t6-webd"];
 const REPAIR_UNIT: &str = "t6-drivers-repair.service";

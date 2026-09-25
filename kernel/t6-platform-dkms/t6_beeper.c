@@ -32,11 +32,15 @@ static void t6_beeper_work(struct work_struct *work)
 {
 	struct t6_beeper *beeper = container_of(work, struct t6_beeper, work);
 	int mode = atomic_read(&beeper->pending);
-	int ret = t6_ec_set_beeper(beeper->priv, mode);
+	int ret;
 
+	if (t6_platform_op_begin(beeper->priv))
+		return;
+	ret = t6_ec_set_beeper(beeper->priv, mode);
 	if (ret)
 		dev_warn_ratelimited(&beeper->priv->pdev->dev,
 				     "beeper mode %d failed: %d\n", mode, ret);
+	t6_platform_op_end(beeper->priv);
 }
 
 static int t6_beeper_event(struct input_dev *input, unsigned int type,
@@ -75,8 +79,11 @@ static ssize_t beep_store(struct device *dev, struct device_attribute *attr,
 		return ret;
 	if (mode > U8_MAX)
 		return -ERANGE;
-
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
 	ret = t6_ec_set_beeper(priv, mode);
+	t6_platform_op_end(priv);
 	return ret ? ret : count;
 }
 

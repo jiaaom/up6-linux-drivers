@@ -114,6 +114,25 @@
               <label class="switch"><input type="checkbox" id="bay-fault-blink"><i></i><span data-i18n="blinkFault">Blink red on drive fault</span></label>
               <p class="notice error" id="bay-fault-warn" hidden></p>
             </div>
+            <div class="panel" id="radio-leds">
+              <div class="section-head"><h3 data-i18n="radioLeds">Status LEDs</h3></div>
+              <p class="help" data-i18n="radioHelp">These LEDs show what the machine is doing. Red is an alarm and stays on in night mode.</p>
+              <div class="radio-led" data-id="power">
+                <label class="switch"><input type="checkbox" class="radio-show"><i></i><span data-i18n="showPower">Show power status</span></label>
+                <p class="led-status"></p>
+                <p class="meta led-legend" data-i18n="powerLegend"></p>
+              </div>
+              <div class="radio-led" data-id="wifi">
+                <label class="switch"><input type="checkbox" class="radio-show"><i></i><span data-i18n="showWifi">Show Wi-Fi status</span></label>
+                <p class="led-status"></p>
+                <p class="meta led-legend" data-i18n="wifiLegend"></p>
+              </div>
+              <div class="radio-led" data-id="bt">
+                <label class="switch"><input type="checkbox" class="radio-show"><i></i><span data-i18n="showBt">Show Bluetooth status</span></label>
+                <p class="led-status"></p>
+                <p class="meta led-legend" data-i18n="btLegend"></p>
+              </div>
+            </div>
           </div>
           <details class="advanced panel">
             <summary data-i18n="perLed">Advanced — per-LED control</summary>
@@ -150,6 +169,8 @@
             <p class="help" data-i18n="backlightHelp">Front LCD backlight. The level is applied immediately and remembered across reboots.</p>
             <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label" data-i18n="off">Off</span></label>
             <label class="slider"><span data-i18n="level">Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
+            <label class="switch"><input type="checkbox" id="bl-button"><i></i><span data-i18n="powerButtonScreen">The power button switches the screen on and off</span></label>
+            <p class="help" data-i18n="powerButtonHelp">Like a phone's side button. The screen reacts about a second after you let go. A desktop running on the screen also locks its session.</p>
             <details class="advanced">
               <summary data-i18n="advanced">Advanced</summary>
               <label class="switch"><input type="checkbox" id="bl-off-boot"><i></i><span data-i18n="offAfterBoot">Always turn off the built-in display after boot</span></label>

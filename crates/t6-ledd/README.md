@@ -7,15 +7,63 @@ beeper. Rust, no runtime dependencies.
 
 - Devices: power button, bays 1–6, tray light (RGB), Bluetooth, Wi-Fi,
   battery. Each is `auto` (a rule evaluated every 2 s) or `manual` (a
-  fixed colour). Auto rules: power white; bay white while a drive is
-  installed (PCIe root-port presence); Bluetooth blue while an adapter is
-  present and not rfkill-blocked; Wi-Fi blue while a wireless link is up;
+  fixed colour). Auto rules: power button dark while the screen is on,
+  white while it is off, red blink when overheating (below); bay white while a drive is
+  installed (PCIe root-port presence); Bluetooth and Wi-Fi show their
+  status (below);
   tray light off by default (a colour breathes, two cycle, all three is a
   rainbow; its speed is slow/normal/fast via `tray_speed`); battery left to
   the driver's charge control (dark on mains, orange on battery).
+- Wi-Fi LED (`src/wifi.rs`), for whichever Wi-Fi card is fitted (no
+  interface name or PCI address is assumed; the card is replaceable):
+
+  | LED | state |
+  |---|---|
+  | blue | connected, internet reachable |
+  | cyan | connected, signal below -75 dBm (blue again above -70) |
+  | cyan, slow blink | NetworkManager is connecting (at most 60 s) |
+  | blue heartbeat | this machine is a Wi-Fi hotspot |
+  | yellow | on but not usable: saved network not connected, no IP, captive portal, no internet |
+  | red | fault: card without driver, driver without interface (firmware), hard-blocked, card unavailable, NetworkManager down for 20 s |
+  | off | switched off, no Wi-Fi card, or no Wi-Fi network saved |
+
+  Sources: sysfs (interfaces, PCI class 0x0280 controllers, rfkill,
+  `/proc/net/wireless`) and NetworkManager (`nmcli`, queried every 10 s
+  and on every `nmcli monitor` event). Working states show at once;
+  yellow waits 5 s and red 10 s (and never in the first 60 s after boot),
+  so scans and blips do not flash the LED. A Wi-Fi fault stays red in
+  night mode. The reason is in `status.json` (`wifi`) and in the Control
+  Center. `T6_LEDD_FAKE_WIFI=<state>` forces a state for testing.
+- Power button LED (`src/power.rs`): dark while the LCD backlight is on
+  (the screen already shows the machine is on), white while it is off or
+  when there is no backlight; red blink (1 Hz) when overheating, over the
+  screen rule and in night mode. Overheat: CPU package ≥ 95 °C for 30 s or
+  ≥ 105 °C at once; an NVMe drive over its own `temp1_max` for 30 s or at
+  its `temp1_crit` at once (80/85 °C when a drive reports none); clears
+  5 °C under the threshold. The backlight is checked every 250 ms (cached
+  sysfs values, no EC access). `T6_LEDD_FAKE_OVERHEAT=1` forces the alarm.
+  White is what the LED is left at when the daemon exits.
+- Bluetooth LED (`src/bluetooth.rs`), from the kernel only (works with
+  or without BlueZ; any adapter, no USB port assumed):
+
+  | LED | state |
+  |---|---|
+  | blue heartbeat | discoverable (pairing) |
+  | blue | at least one device connected |
+  | red | fault: USB Bluetooth device without driver, driver without adapter (firmware), hard-blocked |
+  | off | idle, adapter powered off (no BlueZ), switched off, or no adapter |
+
+  Sources: `/sys/class/bluetooth` (adapters `hciN`, connections
+  `hciN:handle`), the HCIGETDEVINFO ioctl (up/discoverable flags), USB
+  interfaces of class e0/01/01, rfkill. Red waits 10 s (never in the first
+  60 s after boot) and stays on in night mode. `T6_LEDD_FAKE_BT=<state>`
+  forces a state for testing.
+- Status LEDs (power, Wi-Fi, Bluetooth) offer only `off` as a manual
+  setting; a fixed colour saved by an older version goes back to `auto`.
 - `bays_enabled = false` switches the six bay LEDs off regardless of mode.
 - Night mode (manual, or a daily `HH:MM-HH:MM` schedule) switches every
-  LED off except the battery LED.
+  LED off except the battery LED and alarms (overheat, drive, Wi-Fi,
+  Bluetooth faults).
 - Control socket `/run/t6-ledd/ctl`: one line per connection, e.g.
   `set rgb blue`, `set bay6 auto`, `bays off`, `tray-speed fast`, `night on`,
   `schedule 23:00-07:00`, `schedule off`, `beep 1`, `reload`, `status`.

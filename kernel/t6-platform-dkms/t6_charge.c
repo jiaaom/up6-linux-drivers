@@ -54,6 +54,16 @@ static bool t6_charge_host_active(const struct t6_platform *priv)
 	return priv->charge_start != 0 || priv->charge_end != 100;
 }
 
+bool t6_charge_owns_battery_led(struct t6_platform *priv)
+{
+	bool active;
+
+	mutex_lock(&priv->charge_lock);
+	active = t6_charge_host_active(priv);
+	mutex_unlock(&priv->charge_lock);
+	return active;
+}
+
 static int t6_charge_set_led(struct t6_platform *priv, u8 ctrl)
 {
 	u8 want, cur;
@@ -72,38 +82,65 @@ static int t6_charge_set_led(struct t6_platform *priv, u8 ctrl)
 	return cur == want ? 0 : t6_ec_write(priv, T6_BATLED_REG, want);
 }
 
-/* Runs from the poll work, power-supply events and threshold writes; serialised by charge_lock. */
 static int t6_charge_apply(struct t6_platform *priv)
 {
 	u8 soc, ctrl;
+	bool host_active;
 	int ret;
 
 	lockdep_assert_held(&priv->charge_lock);
-
+	host_active = t6_charge_host_active(priv);
 	ret = t6_ec_read(priv, T6_CHG_REG, &ctrl);
-	if (ret)
+	if (ret) {
+		if (!host_active)
+			priv->charge_recovery_pending = true;
 		return ret;
-
-	if (!t6_charge_host_active(priv)) {
+	}
+	if (!host_active) {
+		priv->charge_enabled = false;
 		ret = t6_ec_update_bits(priv, T6_CHG_REG,
 					T6_CHG_OWNER | T6_CHG_ENABLE, 0);
-		return ret ? ret : t6_charge_set_led(priv, ctrl);
+		if (!ret)
+			ret = t6_charge_set_led(priv, ctrl);
+		priv->charge_recovery_pending = !!ret;
+		return ret;
 	}
-
 	ret = t6_ec_read(priv, T6_SOC_REG, &soc);
 	if (ret)
 		return ret;
-
-	/* Between the thresholds keep whatever we were doing (hysteresis). */
 	if (soc >= priv->charge_end)
-		ctrl &= ~T6_CHG_ENABLE;
+		priv->charge_enabled = false;
 	else if (soc <= priv->charge_start)
+		priv->charge_enabled = true;
+	if (priv->charge_enabled)
 		ctrl |= T6_CHG_ENABLE;
+	else
+		ctrl &= ~T6_CHG_ENABLE;
 	ctrl |= T6_CHG_OWNER;
+	ret = t6_ec_update_bits(priv, T6_CHG_REG,
+				T6_CHG_OWNER | T6_CHG_ENABLE, ctrl);
+	if (ret)
+		return ret;
+	ret = t6_charge_set_led(priv, ctrl);
+	priv->charge_recovery_pending = false;
+	return ret;
+}
 
-	ret = t6_ec_update_bits(priv, T6_CHG_REG, T6_CHG_OWNER | T6_CHG_ENABLE,
-				ctrl);
-	return ret ? ret : t6_charge_set_led(priv, ctrl);
+static int t6_charge_return_to_ec(struct t6_platform *priv)
+{
+	u8 led;
+	int ret;
+
+	lockdep_assert_held(&priv->charge_lock);
+	ret = t6_ec_update_bits(priv, T6_CHG_REG,
+				T6_CHG_OWNER | T6_CHG_ENABLE, 0);
+	if (ret)
+		return ret;
+	ret = t6_ec_read(priv, T6_BATLED_REG, &led);
+	if (ret)
+		return ret;
+	return led == T6_BATLED_EC ? 0 : t6_ec_write(priv, T6_BATLED_REG,
+							T6_BATLED_EC);
 }
 
 /* AC plug/unplug reaches us through the ACPI battery/adapter drivers within a second. */
@@ -113,8 +150,12 @@ static int t6_charge_psy_notify(struct notifier_block *nb, unsigned long event,
 	struct t6_platform *priv = container_of(nb, struct t6_platform,
 						charge_psy_nb);
 
-	if (event == PSY_EVENT_PROP_CHANGED && t6_charge_host_active(priv))
-		mod_delayed_work(system_wq, &priv->charge_work, 0);
+	if (event == PSY_EVENT_PROP_CHANGED &&
+	    READ_ONCE(priv->online) &&
+	    (READ_ONCE(priv->charge_start) != 0 ||
+	     READ_ONCE(priv->charge_end) != 100 ||
+	     READ_ONCE(priv->charge_recovery_pending)))
+		mod_delayed_work(system_freezable_wq, &priv->charge_work, 0);
 	return NOTIFY_OK;
 }
 
@@ -124,33 +165,50 @@ static void t6_charge_work(struct work_struct *work)
 						charge_work.work);
 	int ret;
 
+	if (t6_platform_op_begin(priv))
+		return;
 	mutex_lock(&priv->charge_lock);
+	if (!t6_charge_host_active(priv) && !priv->charge_recovery_pending) {
+		mutex_unlock(&priv->charge_lock);
+		t6_platform_op_end(priv);
+		return;
+	}
 	ret = t6_charge_apply(priv);
 	if (ret)
 		dev_warn_ratelimited(&priv->pdev->dev,
 				     "charge control update failed: %d\n", ret);
-	if (t6_charge_host_active(priv))
-		schedule_delayed_work(&priv->charge_work,
-				      msecs_to_jiffies(T6_CHG_POLL_MS));
+	if (t6_charge_host_active(priv) || priv->charge_recovery_pending)
+		mod_delayed_work(system_freezable_wq, &priv->charge_work,
+				 msecs_to_jiffies(T6_CHG_POLL_MS));
 	mutex_unlock(&priv->charge_lock);
+	t6_platform_op_end(priv);
 }
 
-static int t6_charge_set_thresholds(struct t6_platform *priv,
-				    unsigned int start, unsigned int end)
+static int t6_charge_set_threshold(struct t6_platform *priv, bool set_start,
+					unsigned int value)
 {
+	unsigned int start, end;
 	int ret;
 
-	if (end > 100 || start >= end)
-		return -EINVAL;
-
 	mutex_lock(&priv->charge_lock);
+	start = priv->charge_start;
+	end = priv->charge_end;
+	if (set_start)
+		start = value;
+	else
+		end = value;
+	if (end > 100 || start >= end) {
+		mutex_unlock(&priv->charge_lock);
+		return -EINVAL;
+	}
 	priv->charge_start = start;
 	priv->charge_end = end;
 	cancel_delayed_work(&priv->charge_work);
 	ret = t6_charge_apply(priv);
-	if (!ret && t6_charge_host_active(priv))
-		schedule_delayed_work(&priv->charge_work,
-				      msecs_to_jiffies(T6_CHG_POLL_MS));
+	/* Preserve the requested policy and retry failed EC handback as well. */
+	if (t6_charge_host_active(priv) || priv->charge_recovery_pending)
+		mod_delayed_work(system_freezable_wq, &priv->charge_work,
+				 msecs_to_jiffies(T6_CHG_POLL_MS));
 	mutex_unlock(&priv->charge_lock);
 	return ret;
 }
@@ -164,7 +222,42 @@ int t6_charge_release(struct t6_platform *priv)
 	cancel_delayed_work(&priv->charge_work);
 	priv->charge_start = 0;
 	priv->charge_end = 100;
+	priv->charge_enabled = false;
+	ret = t6_charge_return_to_ec(priv);
+	priv->charge_recovery_pending = !!ret;
+	mutex_unlock(&priv->charge_lock);
+	return ret;
+}
+
+int t6_charge_suspend(struct t6_platform *priv)
+{
+	int ret;
+
+	mutex_lock(&priv->charge_lock);
+	cancel_delayed_work(&priv->charge_work);
+	if (!t6_charge_host_active(priv) && !priv->charge_recovery_pending) {
+		mutex_unlock(&priv->charge_lock);
+		return 0;
+	}
+	ret = t6_charge_return_to_ec(priv);
+	priv->charge_recovery_pending = !!ret;
+	mutex_unlock(&priv->charge_lock);
+	return ret;
+}
+
+int t6_charge_resume(struct t6_platform *priv)
+{
+	int ret;
+
+	mutex_lock(&priv->charge_lock);
+	if (!t6_charge_host_active(priv) && !priv->charge_recovery_pending) {
+		mutex_unlock(&priv->charge_lock);
+		return 0;
+	}
 	ret = t6_charge_apply(priv);
+	if (t6_charge_host_active(priv) || priv->charge_recovery_pending)
+		mod_delayed_work(system_freezable_wq, &priv->charge_work,
+				 msecs_to_jiffies(T6_CHG_POLL_MS));
 	mutex_unlock(&priv->charge_lock);
 	return ret;
 }
@@ -173,20 +266,40 @@ static ssize_t charge_control_start_threshold_show(struct device *dev,
 						   struct device_attribute *attr,
 						   char *buf)
 {
-	return sysfs_emit(buf, "%u\n", t6_chg->charge_start);
+	struct t6_platform *priv = READ_ONCE(t6_chg);
+	unsigned int value;
+	int ret;
+
+	if (!priv)
+		return -ENODEV;
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	mutex_lock(&priv->charge_lock);
+	value = priv->charge_start;
+	mutex_unlock(&priv->charge_lock);
+	t6_platform_op_end(priv);
+	return sysfs_emit(buf, "%u\n", value);
 }
 
 static ssize_t charge_control_start_threshold_store(struct device *dev,
 						    struct device_attribute *attr,
 						    const char *buf, size_t count)
 {
+	struct t6_platform *priv = READ_ONCE(t6_chg);
 	unsigned int value;
 	int ret;
 
+	if (!priv)
+		return -ENODEV;
 	ret = kstrtouint(buf, 10, &value);
 	if (ret)
 		return ret;
-	ret = t6_charge_set_thresholds(t6_chg, value, t6_chg->charge_end);
+	ret = t6_platform_op_begin(priv);
+	if (!ret) {
+		ret = t6_charge_set_threshold(priv, true, value);
+		t6_platform_op_end(priv);
+	}
 	return ret ? ret : count;
 }
 
@@ -194,20 +307,40 @@ static ssize_t charge_control_end_threshold_show(struct device *dev,
 						 struct device_attribute *attr,
 						 char *buf)
 {
-	return sysfs_emit(buf, "%u\n", t6_chg->charge_end);
+	struct t6_platform *priv = READ_ONCE(t6_chg);
+	unsigned int value;
+	int ret;
+
+	if (!priv)
+		return -ENODEV;
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	mutex_lock(&priv->charge_lock);
+	value = priv->charge_end;
+	mutex_unlock(&priv->charge_lock);
+	t6_platform_op_end(priv);
+	return sysfs_emit(buf, "%u\n", value);
 }
 
 static ssize_t charge_control_end_threshold_store(struct device *dev,
 						  struct device_attribute *attr,
 						  const char *buf, size_t count)
 {
+	struct t6_platform *priv = READ_ONCE(t6_chg);
 	unsigned int value;
 	int ret;
 
+	if (!priv)
+		return -ENODEV;
 	ret = kstrtouint(buf, 10, &value);
 	if (ret)
 		return ret;
-	ret = t6_charge_set_thresholds(t6_chg, t6_chg->charge_start, value);
+	ret = t6_platform_op_begin(priv);
+	if (!ret) {
+		ret = t6_charge_set_threshold(priv, false, value);
+		t6_platform_op_end(priv);
+	}
 	return ret ? ret : count;
 }
 
@@ -254,28 +387,28 @@ int t6_charge_register(struct t6_platform *priv)
 	INIT_DELAYED_WORK(&priv->charge_work, t6_charge_work);
 	priv->charge_start = 0;
 	priv->charge_end = 100;
-	t6_chg = priv;
+	priv->charge_enabled = false;
+	priv->charge_recovery_pending = false;
+	WRITE_ONCE(t6_chg, priv);
 
 	/* Start from EC policy regardless of what a previous owner left behind. */
 	ret = t6_charge_release(priv);
 	if (ret)
-		return ret;
+		goto err_owner;
 
-	/*
-	 * Not devm: the attributes must be gone before t6_charge_unregister()
-	 * hands the pack back to the EC and clears t6_chg, while devres would
-	 * remove them only later, from platform_device_unregister().
-	 */
 	battery_hook_register(&t6_charge_hook);
 	priv->charge_psy_nb.notifier_call = t6_charge_psy_notify;
 	ret = power_supply_reg_notifier(&priv->charge_psy_nb);
 	if (ret) {
 		battery_hook_unregister(&t6_charge_hook);
-		return ret;
+		goto err_owner;
 	}
 
-	if (t6_charge_end_default != 100 || t6_charge_start_default != 0) {
-		ret = t6_charge_set_thresholds(priv, t6_charge_start_default,
+	if (t6_charge_start_default || t6_charge_end_default != 100) {
+		ret = t6_charge_set_threshold(priv, true,
+					      t6_charge_start_default);
+		if (!ret)
+			ret = t6_charge_set_threshold(priv, false,
 					       t6_charge_end_default);
 		if (ret)
 			dev_warn(&priv->pdev->dev,
@@ -283,18 +416,16 @@ int t6_charge_register(struct t6_platform *priv)
 				 t6_charge_start_default, t6_charge_end_default);
 	}
 	return 0;
+
+err_owner:
+	WRITE_ONCE(t6_chg, NULL);
+	return ret;
 }
 
 void t6_charge_unregister(struct t6_platform *priv)
 {
-	/*
-	 * Remove the threshold attributes first; this waits for readers and
-	 * writers already inside them. A read racing module unload used to
-	 * find t6_chg NULL, and the resulting oops left rmmod stuck forever.
-	 */
 	battery_hook_unregister(&t6_charge_hook);
 	power_supply_unreg_notifier(&priv->charge_psy_nb);
-	t6_charge_release(priv);
 	cancel_delayed_work_sync(&priv->charge_work);
-	t6_chg = NULL;
+	WRITE_ONCE(t6_chg, NULL);
 }

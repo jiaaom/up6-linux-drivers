@@ -1,8 +1,8 @@
 #!/bin/bash
-# Install (or remove) the DKMS packages from t6-platform-dkms/ and focaltech-ft8722-dkms/.
+# Install (or remove) the DKMS packages from t6-platform-dkms/, focaltech-ft8722-dkms/ and ite-it6616-dkms/.
 #
-#   sudo ./install-dkms.sh            install/upgrade both packages for the running kernel
-#   sudo ./install-dkms.sh --remove   remove both packages and their boot-time config
+#   sudo ./install-dkms.sh            install/upgrade all packages for the running kernel
+#   sudo ./install-dkms.sh --remove   remove all packages and their boot-time config
 #   sudo ./install-dkms.sh --no-load  install without loading the modules right away
 #   sudo ./install-dkms.sh --repair   build whatever is missing for the running kernel,
 #                                     load the modules and restart T6 services that are down
@@ -21,21 +21,33 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
+PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms ite-it6616-dkms)
 # Package dirs are siblings of this script inside the .fpk payload, but live
 # under ../kernel/ in the source tree.
 if [ -d "$SCRIPT_DIR/${PACKAGES[0]}" ]; then PKG_ROOT=$SCRIPT_DIR; else PKG_ROOT=$SCRIPT_DIR/../kernel; fi
 MODULES_LOAD_CONF=/etc/modules-load.d/t6-platform.conf
-MODULES=(t6_platform ft8722_ts)
+MODULES=(t6_platform ft8722_ts ite_it6616)
 # Services that use the modules, restarted by --repair when a module was
 # (re)loaded or the service is down. Missing ones are skipped.
 T6_SERVICES=(t6-fand t6-ledd t6-paneld t6-panel-kiosk)
 # Serialises every run: the boot check, a repair from the web UI and the
 # App Center install/upgrade/uninstall callbacks.
 LOCK_FILE=/run/lock/t6-drivers.lock
+# Keep the compositor running: IT6616 needs HDMI video to wake on removal.
+# Stop only the background writers before replacing their kernel devices.
+RESTART_AFTER_RELOAD=()
 
 LOG=$(mktemp -t install-dkms.XXXXXX)
-trap 'rm -f "$LOG"' EXIT
+finish() {
+    local status=$? s
+    trap - EXIT
+    rm -f "$LOG"
+    for s in "${RESTART_AFTER_RELOAD[@]}"; do
+        systemctl start "$s" || printf 'warning: failed to restore %s\n' "$s" >&2
+    done
+    exit "$status"
+}
+trap finish EXIT
 
 log()  { printf '==> %s\n' "$*"; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -103,7 +115,7 @@ remove_package() {
 }
 
 install_package() {
-    local dir=$1 name ver src
+    local dir=$1 name ver src file
     name=$(conf_value "$dir" PACKAGE_NAME)
     ver=$(conf_value "$dir" PACKAGE_VERSION)
     [ -n "$name" ] && [ -n "$ver" ] || die "$dir/dkms.conf lacks PACKAGE_NAME/PACKAGE_VERSION"
@@ -115,8 +127,11 @@ install_package() {
     mkdir -p "$src"
     # Sources only; build artefacts stay out of /usr/src.
     cp "$dir"/Makefile "$dir"/dkms.conf "$src"/
-    cp "$dir"/*.c "$src"/
-    cp "$dir"/*.h "$src"/ 2>/dev/null || true
+    for file in "$dir"/*.c "$dir"/*.h; do
+        [ -f "$file" ] || continue
+        case "$file" in *.mod.c) continue ;; esac
+        cp "$file" "$src/"
+    done
     [ -f "$dir/README.md" ] && cp "$dir/README.md" "$src"/
 
     dkms_step add "$name/$ver"
@@ -125,7 +140,7 @@ install_package() {
 }
 
 # t6_platform has no hardware alias (it gates on DMI in probe), so it must be
-# listed for boot-time loading; ft8722_ts autoloads from its ACPI alias.
+# listed for boot-time loading; the ACPI-matched modules autoload from aliases.
 install_boot_config() {
     if [ ! -f "$MODULES_LOAD_CONF" ]; then
         log "enabling t6_platform at boot ($MODULES_LOAD_CONF)"
@@ -133,17 +148,45 @@ install_boot_config() {
     fi
 }
 
+# 0.9.12 briefly reported KEY_POWER and needed a udev rule to keep logind
+# from powering off on a tap. The button is KEY_SCREENLOCK now, which logind
+# ignores; remove the old rules.
+remove_old_button_rules() {
+    if [ -e /etc/udev/rules.d/69-t6-power-button.rules ] || [ -e /etc/udev/rules.d/71-t6-power-button.rules ]; then
+        rm -f /etc/udev/rules.d/69-t6-power-button.rules /etc/udev/rules.d/71-t6-power-button.rules
+        udevadm control --reload 2>/dev/null || true
+    fi
+}
+
+pause_controls() {
+    local s
+    for s in t6-fand t6-ledd; do
+        if systemctl is-active --quiet "$s"; then
+            RESTART_AFTER_RELOAD+=("$s")
+            log "stopping $s before module replacement"
+            systemctl stop "$s" || die "cannot stop $s"
+        fi
+    done
+}
+
+resume_controls() {
+    local s failed=no
+    for s in "${RESTART_AFTER_RELOAD[@]}"; do
+        log "starting $s with the new kernel devices"
+        systemctl start "$s" || failed=yes
+    done
+    [ "$failed" = no ] || die "cannot restart control services (see journalctl)"
+    RESTART_AFTER_RELOAD=()
+}
+
 load_modules() {
     local m
+    pause_controls
     for m in "${MODULES[@]}"; do
         unload_module "$m"
         modprobe "$m" || die "cannot load $m (see dmesg)"
     done
-    # Reloading t6_platform renumbers its hwmon device; the fan daemon caches paths.
-    if systemctl is-active --quiet t6-fand 2>/dev/null; then
-        log "restarting t6-fand"
-        systemctl restart t6-fand
-    fi
+    resume_controls
 }
 
 do_install() {
@@ -155,6 +198,7 @@ do_install() {
         names+=("$(conf_value "$PKG_ROOT/$dir" PACKAGE_NAME)")
     done
     install_boot_config
+    remove_old_button_rules
     if [ "$load" = yes ]; then
         log "loading modules"
         load_modules
@@ -204,6 +248,7 @@ do_repair() {
         printf 'error: a system update is in progress; try again once it has finished\n' >&2
         exit 4
     fi
+    remove_old_button_rules
     for dir in "${PACKAGES[@]}"; do
         [ -f "$PKG_ROOT/$dir/dkms.conf" ] || die "missing $PKG_ROOT/$dir/dkms.conf"
         name=$(conf_value "$PKG_ROOT/$dir" PACKAGE_NAME)
@@ -230,7 +275,7 @@ do_repair() {
 
 do_remove() {
     local m dir name
-    for m in ft8722_ts t6_platform; do
+    for m in ite_it6616 ft8722_ts t6_platform; do
         unload_module "$m"
     done
     for dir in "${PACKAGES[@]}"; do
@@ -238,6 +283,7 @@ do_remove() {
         [ -n "$name" ] && remove_package "$name"
     done
     rm -f "$MODULES_LOAD_CONF"
+    remove_old_button_rules
     log "removed"
 }
 

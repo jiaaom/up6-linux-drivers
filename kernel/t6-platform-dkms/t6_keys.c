@@ -1,117 +1,89 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Front-panel buttons, polled from EC register 0x5f.
+ * Front power button, from EC query event 0x40.
  *
- * Confirmed on hardware 2026-09-12: bit 5 = power button, bit 4 = reset
- * pinhole, both active-low (idle value 0xf2). Bits 1, 6 and 7 are the
- * vendor's board-internal test buttons and are not exposed. Taps are as
- * short as ~110 ms, so the register is sampled every 20 ms and a change
- * must be seen twice in a row.
+ * The EC raises an SCI for every press of the front power button and
+ * answers QR_EC with 0x40 - about 1.0 s after the button is *released*,
+ * whether it was tapped or held (measured 2026-09-24). The firmware has no
+ * _Q40 method, so without this handler the kernel drops the event. We claim
+ * it and report one tap (down + up) per event: nothing is polled, at the
+ * cost of that ~1 s delay and of not knowing how long the button was held.
+ * The live button state is still in EC register 0x5f (bit 5, active-low;
+ * bit 4 is the reset pinhole, which raises no event), should this ever need
+ * to become a poll.
  *
- * Keycodes: the front button is KEY_POWER, so systemd-logind applies its
- * HandlePowerKey policy (poweroff by default) to a tap - the standard
- * semantics of a power button, and the reason the device is opt-in
- * (enable_keys=1). The reset pinhole is deliberately KEY_PROG1, a neutral
- * user-defined code: KEY_RESTART would make logind reboot on a tap, while
- * the vendor's meaning is "reset password / network after a long hold",
- * which belongs in a userspace policy.
+ * The key is KEY_SCREENLOCK, not KEY_POWER: the button works like a phone's
+ * side button (t6-ledd switches the screen on and off; a desktop locks its
+ * session), and logind never treats it as a power switch, so a tap can not
+ * power the NAS off.
  */
+#include <linux/acpi.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
 
 #include "t6_platform.h"
 
-#define T6_KEYS_REG		0x5f
-#define T6_KEYS_POLL_MS		20
+#define T6_KEYS_QUERY		0x40
 
-struct t6_key_desc {
-	u8 mask;
-	u16 code;
-};
+/*
+ * EC query handlers (drivers/acpi/ec.c). Exported, but declared only in the
+ * kernel-internal drivers/acpi/internal.h.
+ */
+struct acpi_ec;
+typedef int (*acpi_ec_query_func)(void *data);
+extern struct acpi_ec *first_ec;
+int acpi_ec_add_query_handler(struct acpi_ec *ec, u8 query_bit,
+			      acpi_handle handle, acpi_ec_query_func func,
+			      void *data);
+void acpi_ec_remove_query_handler(struct acpi_ec *ec, u8 query_bit);
 
-static const struct t6_key_desc t6_keymap[] = {
-	{ BIT(5), KEY_POWER },		/* front power button */
-	{ BIT(4), KEY_PROG1 },		/* reset pinhole: neutral, policy in userspace */
-};
-
-struct t6_keys_state {
-	struct t6_platform *priv;
-	u8 stable;
-	u8 candidate;
-	bool initialized;
-};
-
-static void t6_keys_poll(struct input_dev *input)
+/* Runs from the EC's query work item. */
+static int t6_keys_query(void *data)
 {
-	struct t6_keys_state *state = input_get_drvdata(input);
-	u8 raw, logical;
-	unsigned int i;
-	int ret;
+	struct input_dev *input = data;
 
-	ret = t6_ec_read(state->priv, T6_KEYS_REG, &raw);
-	if (ret) {
-		dev_err_ratelimited(&input->dev, "EC key read failed: %d\n", ret);
-		return;
-	}
-
-	/* logical: bit set = pressed */
-	logical = t6_keys_active_low ? (u8)~raw : raw;
-	if (!state->initialized) {
-		state->stable = logical;
-		state->candidate = logical;
-		state->initialized = true;
-		return;
-	}
-	if (logical != state->candidate) {
-		state->candidate = logical;
-		return;
-	}
-	if (logical == state->stable)
-		return;
-
-	state->stable = logical;
-	for (i = 0; i < ARRAY_SIZE(t6_keymap); i++)
-		input_report_key(input, t6_keymap[i].code,
-				 !!(logical & t6_keymap[i].mask));
+	input_report_key(input, KEY_SCREENLOCK, 1);
 	input_sync(input);
+	input_report_key(input, KEY_SCREENLOCK, 0);
+	input_sync(input);
+	return 0;
 }
 
 int t6_keys_register(struct t6_platform *priv)
 {
-	struct t6_keys_state *state;
 	struct input_dev *input;
-	unsigned int i;
 	int ret;
 
-	if (!t6_keys_enabled)
+	if (!first_ec) {
+		dev_warn(&priv->pdev->dev, "no ACPI EC: front power button unavailable\n");
 		return 0;
+	}
 
 	input = devm_input_allocate_device(&priv->pdev->dev);
 	if (!input)
 		return -ENOMEM;
-	state = devm_kzalloc(&priv->pdev->dev, sizeof(*state), GFP_KERNEL);
-	if (!state)
-		return -ENOMEM;
-
-	state->priv = priv;
-	input_set_drvdata(input, state);
 	input->name = "T6 front-panel buttons";
 	input->phys = "t6-platform/input0";
 	input->id.bustype = BUS_HOST;
 	input->dev.parent = &priv->pdev->dev;
-	for (i = 0; i < ARRAY_SIZE(t6_keymap); i++)
-		input_set_capability(input, EV_KEY, t6_keymap[i].code);
-
-	ret = input_setup_polling(input, t6_keys_poll);
+	input_set_capability(input, EV_KEY, KEY_SCREENLOCK);
+	ret = input_register_device(input);
 	if (ret)
 		return ret;
-	input_set_poll_interval(input, T6_KEYS_POLL_MS);
-	input_set_min_poll_interval(input, T6_KEYS_POLL_MS);
-	input_set_max_poll_interval(input, 100);
 
-	ret = input_register_device(input);
+	ret = acpi_ec_add_query_handler(first_ec, T6_KEYS_QUERY, NULL,
+					t6_keys_query, input);
 	if (ret)
 		return ret;
 	priv->keys = input;
 	return 0;
+}
+
+/* Before the input device goes away; waits for a running handler. */
+void t6_keys_unregister(struct t6_platform *priv)
+{
+	if (!priv->keys)
+		return;
+	acpi_ec_remove_query_handler(first_ec, T6_KEYS_QUERY);
+	priv->keys = NULL;
 }

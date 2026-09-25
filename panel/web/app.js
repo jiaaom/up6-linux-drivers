@@ -12,8 +12,36 @@ try {
   console.warn("TrimApp unavailable:", e);
 }
 // Outside the fnOS desktop the SDK can't report a language: follow the browser.
-let platformConfig = { language: navigator.language || "en-US", theme: "light" };
-const state = { language: "en-US", status: null, dragging: false };
+let platformConfig = { language: navigator.language || "en-US", theme: null };
+// The theme the host gave ("dark"/"light", or { theme }), or null. The fnOS
+// iOS app's SDK bridge does not answer getPlatformConfig at all (app 1.34.4),
+// but its webview's prefers-color-scheme follows the app's dark mode, so
+// without an answer the page follows that, live.
+const darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+function hostTheme(v) {
+  const theme = v && typeof v === "object" && "theme" in v ? v.theme : v;
+  const s = String(theme || "").toLowerCase();
+  return s === "dark" || s === "light" ? s : null;
+}
+function resolvedTheme() {
+  return hostTheme(platformConfig.theme) || (darkQuery && darkQuery.matches ? "dark" : "light");
+}
+// First paint already in the right theme, before the host answers (or not).
+document.documentElement.dataset.theme = resolvedTheme();
+
+const state = { language: "en-US", status: null };
+
+// Front-panel themes, in picker order. A new theme needs an entry here, its
+// strings in I18N, a theme-<id>.png preview (240x480, a capture of the home
+// screen) and to be allowed in t6-paneld (settings::set_theme) and
+// panel/www/theme.js.
+// Same choices as the panel's own Settings page (panel/www/settings.js).
+const TIMEOUTS = [0, 60, 300, 900, 1800];
+
+const THEMES = [
+  { id: "light", img: "theme-light.png" },
+  { id: "dark", img: "theme-dark.png" },
+];
 
 const I18N = {
   "zh-CN": {
@@ -25,15 +53,22 @@ const I18N = {
     panelAppHint: "关闭后停止前面板应用并熄灭屏幕，重启后保持关闭。",
     status: "状态",
     screen: "屏幕",
-    brightness: "亮度",
     version: "版本",
     running: "运行中",
     stopped: "已停止",
     starting: "启动中",
     screenOn: "亮",
     screenOff: "熄灭",
-    turnOffScreen: "关闭屏幕",
-    wakeScreen: "唤醒屏幕",
+    display: "显示",
+    theme: "主题",
+    themeHint: "前面板应用的外观，几秒内在屏幕上生效。",
+    theme_light: "浅色",
+    theme_dark: "深色",
+    themeSaved: "主题已更改",
+    screenTimeout: "自动关屏",
+    screenTimeoutHint: "前面板这么久没被触摸后自动关闭屏幕。",
+    never: "从不",
+    minutes: "{n} 分钟",
     colorCorrection: "颜色校正",
     colorCorrectionHint: "修正屏幕发白和高光被截断。切换时屏幕会重启几秒。",
     actions: "操作",
@@ -69,15 +104,22 @@ const I18N = {
     panelAppHint: "Off stops the front-panel app and turns the screen off; it stays off after a reboot.",
     status: "Status",
     screen: "Screen",
-    brightness: "Brightness",
     version: "Version",
     running: "Running",
     stopped: "Stopped",
     starting: "Starting",
     screenOn: "On",
     screenOff: "Off",
-    turnOffScreen: "Turn off screen",
-    wakeScreen: "Wake screen",
+    display: "Display",
+    theme: "Theme",
+    themeHint: "The look of the front-panel app. It changes on the screen within a few seconds.",
+    theme_light: "Light",
+    theme_dark: "Dark",
+    themeSaved: "Theme changed",
+    screenTimeout: "Screen timeout",
+    screenTimeoutHint: "Turn the screen off after the front panel has not been touched for this long.",
+    never: "Never",
+    minutes: "{n} min",
     colorCorrection: "Color correction",
     colorCorrectionHint: "Fixes washed-out colors and clipped highlights. The screen restarts for a few seconds.",
     actions: "Actions",
@@ -114,12 +156,10 @@ const els = {
   panelSwitch: $("panelSwitch"),
   statStatus: $("statStatus"),
   statScreen: $("statScreen"),
-  statBrightness: $("statBrightness"),
   statVersion: $("statVersion"),
-  screenPanel: $("screenPanel"),
-  power: $("powerBtn"),
-  bri: $("briRange"),
-  briOut: $("briOut"),
+  displayPanel: $("displayPanel"),
+  themeGrid: $("themeGrid"),
+  timeout: $("timeoutSel"),
   cc: $("ccSwitch"),
   restart: $("restartBtn"),
   modal: $("modal"),
@@ -140,10 +180,7 @@ function applyPreferences() {
   const lang = String(platformConfig.language || "").replace("_", "-");
   state.language = lang.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
   document.documentElement.lang = state.language;
-  // the host may hand back { theme: "dark" } instead of "dark"
-  const v = platformConfig.theme;
-  const theme = v && typeof v === "object" && "theme" in v ? v.theme : v;
-  document.documentElement.dataset.theme = String(theme || "").toLowerCase() === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = resolvedTheme();
   document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
   render();
 }
@@ -185,22 +222,46 @@ function render() {
   els.statStatus.textContent = t(on ? (s.panel.active ? "running" : "starting") : "stopped");
   els.statStatus.classList.toggle("ok", on && s.panel.active);
   els.statScreen.textContent = t(d.on ? "screenOn" : "screenOff");
-  els.statBrightness.textContent = d.on && d.brightness != null ? `${d.brightness}%` : "-";
   els.statVersion.textContent = s.version || "-";
 
-  // Screen controls only make sense while the panel app runs.
-  els.screenPanel.classList.toggle("off", !on);
-  els.power.disabled = !on || !d.present;
-  els.power.textContent = t(d.on ? "turnOffScreen" : "wakeScreen");
-  els.bri.disabled = !on || !d.present;
-  els.bri.min = d.min_on ?? 10;
-  if (!state.dragging) {
-    els.bri.value = d.on ? d.brightness : d.on_level;
-    els.briOut.textContent = `${els.bri.value}%`;
-  }
+  // Display settings only make sense while the panel app runs.
+  els.displayPanel.classList.toggle("off", !on);
+  renderThemes(s.theme, !on);
+  renderTimeout(s.screen_timeout_s ?? 0, !on);
   els.cc.disabled = !on;
   els.cc.checked = !!s.color_correction;
   els.restart.disabled = !on;
+}
+
+// Cards are built once (and again on a language change); later renders only
+// move the selection.
+function renderThemes(current, disabled) {
+  if (els.themeGrid.dataset.lang !== state.language) {
+    els.themeGrid.dataset.lang = state.language;
+    els.themeGrid.innerHTML = THEMES.map((th) => `
+      <button class="theme-card" type="button" role="radio" data-theme-id="${th.id}">
+        <img src="${th.img}" alt="" width="110" height="220" loading="lazy">
+        <span class="theme-name">${t("theme_" + th.id)}</span>
+      </button>`).join("");
+  }
+  for (const card of els.themeGrid.querySelectorAll(".theme-card")) {
+    card.setAttribute("aria-checked", String(card.dataset.themeId === current));
+    card.disabled = disabled;
+  }
+}
+
+function renderTimeout(current, disabled) {
+  const sel = els.timeout;
+  if (sel.dataset.lang !== state.language) {
+    sel.dataset.lang = state.language;
+    sel.innerHTML = TIMEOUTS.map((v) => `<option value="${v}">${v ? t("minutes", { n: v / 60 }) : t("never")}</option>`).join("");
+  }
+  // A value set elsewhere that is not in the list still shows.
+  if (!TIMEOUTS.includes(current) && !sel.querySelector(`option[value="${current}"]`)) {
+    sel.insertAdjacentHTML("beforeend", `<option value="${current}">${t("minutes", { n: Math.round(current / 60) })}</option>`);
+  }
+  if (document.activeElement !== sel) sel.value = String(current);
+  sel.disabled = disabled;
 }
 
 // ---- dialog + toast ----
@@ -255,21 +316,16 @@ els.panelSwitch.addEventListener("change", async () => {
   await run(() => api("admin/panel", "PUT", { enabled: want }), t(want ? "panelOn" : "panelOff"));
 });
 
-els.power.addEventListener("click", () => {
-  const on = !!(state.status && state.status.display.on);
-  run(() => api("display/power", "PUT", { on: !on }));
+els.themeGrid.addEventListener("click", (e) => {
+  const card = e.target.closest(".theme-card");
+  if (!card || card.disabled || card.getAttribute("aria-checked") === "true") return;
+  // Selected at once; the next load() confirms (or reverts on failure).
+  renderThemes(card.dataset.themeId, false);
+  run(() => api("settings/theme", "PUT", { theme: card.dataset.themeId }), t("themeSaved"));
 });
 
-let briTimer = 0;
-els.bri.addEventListener("input", () => {
-  state.dragging = true;
-  els.briOut.textContent = `${els.bri.value}%`;
-  clearTimeout(briTimer);
-  briTimer = setTimeout(() => api("display/brightness", "PUT", { value: Number(els.bri.value) }).catch((e) => showToast(t("failed", { msg: e.message }), true)), 150);
-});
-els.bri.addEventListener("change", () => {
-  state.dragging = false;
-  setTimeout(load, 400);
+els.timeout.addEventListener("change", () => {
+  run(() => api("settings/screen-timeout", "PUT", { seconds: Number(els.timeout.value) }), t("saved"));
 });
 
 els.cc.addEventListener("change", async () => {
@@ -295,8 +351,12 @@ async function initPlatform() {
     platformConfig = { ...platformConfig, ...(await withTimeout(sdk.getPlatformConfig(), 2000)) };
     applyPreferences();
   } catch {
-    // opened outside the fnOS desktop, or no reply: keep the browser defaults
+    // opened outside the fnOS desktop, or no reply (the iOS app): follow the
+    // browser's language and dark-mode setting
+    applyPreferences();
   }
+  // The system setting only counts while the host has not named a theme.
+  darkQuery?.addEventListener?.("change", () => { if (!hostTheme(platformConfig.theme)) applyPreferences(); });
   if (sdk.isWeb === true && sdk.isStandaloneWeb === false) {
     try {
       sdk.$on("os/theme", (theme) => {
@@ -317,5 +377,5 @@ applyPreferences();
 load();
 initPlatform();
 setInterval(() => {
-  if (!state.dragging && els.modal.classList.contains("hidden")) load();
+  if (els.modal.classList.contains("hidden")) load();
 }, 5000);

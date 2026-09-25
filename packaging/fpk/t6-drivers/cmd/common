@@ -36,7 +36,7 @@ Before=$T6_SERVICES
 [Service]
 Type=oneshot
 ExecStart=$TRIM_APPDEST/install-dkms.sh --repair --boot
-# A build takes ~30 s; the EC keeps the fans on its own curve meanwhile.
+# Until the driver loads, fans retain the EC's fixed power-on duty.
 TimeoutStartSec=10min
 
 [Install]

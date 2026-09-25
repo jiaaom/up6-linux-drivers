@@ -16,9 +16,9 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
-RuntimeDirectory=t6-ledd
-# Keep /run/t6-ledd across service restarts so the once-per-boot beep marker
-# survives upgrades/reloads (it is still cleared on reboot; /run is tmpfs).
+RuntimeDirectory=t6-ledd t6-display
+# Keep boot markers and the shared display lock inode across service restarts.
+# Both directories are cleared on reboot because /run is tmpfs.
 RuntimeDirectoryPreserve=yes
 # LEDs and the beeper live under /sys; the config is rewritten in place.
 ReadWritePaths=/sys/class/leds /sys/devices /etc/t6-ledd.toml

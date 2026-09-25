@@ -14,6 +14,7 @@ Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 |---|---|---|
 | [`kernel/t6-platform-dkms/`](kernel/t6-platform-dkms/) | `t6_platform` | EC platform driver: fans, LCD backlight, LEDs, beeper, buttons, battery |
 | [`kernel/focaltech-ft8722-dkms/`](kernel/focaltech-ft8722-dkms/) | `ft8722_ts` | front-panel touchscreen |
+| [`kernel/ite-it6616-dkms/`](kernel/ite-it6616-dkms/) | `ite_it6616` | HDMI-to-MIPI DSI bridge |
 
 ### Userspace daemons (Rust, any Debian)
 
@@ -89,7 +90,7 @@ packages (.fpk) to `build/`:
 
 | package | contents |
 |---|---|
-| `t6-drivers.fpk` | the two DKMS modules + `install-dkms.sh`, built and loaded on install; a `t6-drivers-check` unit rebuilds them at boot after a kernel update |
+| `t6-drivers.fpk` | the three DKMS modules + `install-dkms.sh`, built and loaded on install; a `t6-drivers-check` unit rebuilds them at boot after a kernel update |
 | `t6-control.fpk` | the `t6-fand`, `t6-ledd` and `t6-webd` daemons (Control Center web app); depends on `t6-drivers` |
 | `t6-panel.fpk` | the front-panel backend (`t6-paneld`) + the Electron kiosk shell, started on boot; depends on `t6-control` |
 

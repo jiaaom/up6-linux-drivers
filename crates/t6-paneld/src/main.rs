@@ -14,6 +14,7 @@
 
 mod api;
 mod autologin;
+mod backlight;
 mod firmware;
 mod fnos;
 mod gateway;
@@ -120,10 +121,15 @@ async fn main() {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         fnos::auto_sign_in().await;
     });
+    backlight::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (t6-ledd, which runs first, restores the saved brightness).
     if !settings::load().panel_enabled() {
-        let _ = t6_hw_rs::display::Display::new().set_power(false);
+        match tokio::task::spawn_blocking(|| t6_hw_rs::display::Display::new().set_power(false)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => eprintln!("display startup: {e}"),
+            Err(e) => eprintln!("display startup worker failed: {e}"),
+        }
     }
     // Port of the local shell, reported to the gateway surface so "sign out"
     // knows where to return.

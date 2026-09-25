@@ -6,18 +6,29 @@ static int t6_backlight_update_status(struct backlight_device *backlight)
 {
 	struct t6_platform *priv = bl_get_data(backlight);
 	int brightness = backlight_get_brightness(backlight);
+	int ret;
 
 	if (brightness < 0 || brightness > 100)
 		return -ERANGE;
-	return t6_ec_write(priv, 0xa3, brightness);
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	ret = t6_ec_write(priv, 0xa3, brightness);
+	t6_platform_op_end(priv);
+	return ret;
 }
 
 static int t6_backlight_get_brightness(struct backlight_device *backlight)
 {
 	struct t6_platform *priv = bl_get_data(backlight);
 	u8 raw;
-	int ret = t6_ec_read(priv, 0xa3, &raw);
+	int ret;
 
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	ret = t6_ec_read(priv, 0xa3, &raw);
+	t6_platform_op_end(priv);
 	if (ret)
 		return ret;
 	if (raw > 100)

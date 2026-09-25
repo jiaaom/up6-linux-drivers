@@ -9,11 +9,16 @@ use std::path::{Path, PathBuf};
 pub enum Auto {
     /// Always this colour.
     Fixed(&'static str),
+    /// Dark while the screen is on, white while it is off, red blink when
+    /// overheating; see `power.rs`.
+    Power,
     /// White while a drive sits in the bay (1-based).
     BayPresent(u8),
-    /// Blue while a Bluetooth adapter is present and not rfkill-blocked.
+    /// Bluetooth status (connected, discoverable, fault); see
+    /// `bluetooth.rs`. Drawn by the daemon from the Bluetooth monitor.
     Bluetooth,
-    /// Blue while a wireless interface is up.
+    /// Wi-Fi status (online, weak, connecting, hotspot, not usable, fault);
+    /// see `wifi.rs`. Drawn by the daemon from the Wi-Fi monitor.
     Wifi,
     /// Driven by the driver's charge control / the EC; never written here.
     ChargeControl,
@@ -26,6 +31,10 @@ pub struct Device {
     pub leds: &'static [&'static str],
     /// Colour name -> LEDs that are on. `off` must be first.
     pub colors: &'static [(&'static str, &'static [&'static str])],
+    /// Colours offered for `manual` mode; `None` = every colour. Status
+    /// LEDs (power, Wi-Fi, Bluetooth) only offer "off": a fixed colour
+    /// would hide the status they show.
+    pub manual: Option<&'static [&'static str]>,
     pub auto: Option<Auto>,
     /// What `auto` does, for the UI.
     pub auto_desc: &'static str,
@@ -53,6 +62,7 @@ macro_rules! bay {
             label: concat!("Bay ", $n),
             leds: &[$w, $r],
             colors: &[("off", &[]), ("white", &[$w]), ("red", &[$r])],
+            manual: None,
             auto: Some(Auto::BayPresent($n)),
             auto_desc: "white while a drive is installed",
         }
@@ -65,8 +75,9 @@ pub const CATALOG: &[Device] = &[
         label: "Power button",
         leds: &["t6:system:white", "t6:system:red", "t6:system:green"],
         colors: &[("off", &[]), ("white", &["t6:system:white"]), ("red", &["t6:system:red"]), ("green", &["t6:system:green"])],
-        auto: Some(Auto::Fixed("white")),
-        auto_desc: "white while running",
+        manual: Some(&["off"]),
+        auto: Some(Auto::Power),
+        auto_desc: "white while the screen is off, red blink when overheating",
     },
     bay!(1, "bay1", "t6:bay0:white", "t6:bay0:red"),
     bay!(2, "bay2", "t6:bay1:white", "t6:bay1:red"),
@@ -82,6 +93,7 @@ pub const CATALOG: &[Device] = &[
         // all three is a rainbow, and "off" is a real host-controlled dark
         // state (enable bit, no colour). Default off.
         colors: rgb_colors!("t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"),
+        manual: None,
         auto: Some(Auto::Fixed("off")),
         auto_desc: "off",
     },
@@ -90,16 +102,18 @@ pub const CATALOG: &[Device] = &[
         label: "Bluetooth",
         leds: &["t6:bt:red", "t6:bt:green", "t6:bt:blue"],
         colors: rgb_colors!("t6:bt:red", "t6:bt:green", "t6:bt:blue"),
+        manual: Some(&["off"]),
         auto: Some(Auto::Bluetooth),
-        auto_desc: "blue while Bluetooth is enabled",
+        auto_desc: "shows the Bluetooth status",
     },
     Device {
         id: "wifi",
         label: "Wi-Fi",
         leds: &["t6:wifi:red", "t6:wifi:green", "t6:wifi:blue"],
         colors: rgb_colors!("t6:wifi:red", "t6:wifi:green", "t6:wifi:blue"),
+        manual: Some(&["off"]),
         auto: Some(Auto::Wifi),
-        auto_desc: "blue while a wireless link is up",
+        auto_desc: "shows the Wi-Fi status",
     },
     Device {
         id: "battery",
@@ -108,6 +122,7 @@ pub const CATALOG: &[Device] = &[
         // No manual colours: the charge-control worker rewrites the
         // register every 30 s, so a manual setting could not stick.
         colors: &[],
+        manual: None,
         auto: Some(Auto::ChargeControl),
         auto_desc: "dark on mains, orange on battery (charge control)",
     },
@@ -130,19 +145,28 @@ impl Device {
         }
     }
 
+    /// Colours that `manual` mode may use.
+    pub fn manual_colors(&self) -> Vec<&'static str> {
+        match self.manual {
+            Some(m) => m.to_vec(),
+            None => self.colors.iter().map(|(n, _)| *n).collect(),
+        }
+    }
+
     pub fn leds_for(&self, color: &str) -> Option<&'static [&'static str]> {
         self.colors.iter().find(|(n, _)| *n == color).map(|(_, l)| *l)
     }
 
-    /// Colour the automatic rule wants right now, or `None` to leave the
-    /// LED untouched.
+    /// Colour the automatic rule wants right now, or `None` when the rule
+    /// is not a plain sysfs check (Bluetooth, Wi-Fi, battery) or leaves the
+    /// LED alone.
     pub fn auto_color(&self) -> Option<&'static str> {
         match self.auto? {
             Auto::Fixed(c) => Some(c),
             Auto::BayPresent(n) => Some(if sources::bay_present(n) { "white" } else { "off" }),
-            Auto::Bluetooth => Some(if sources::bluetooth_on() { "blue" } else { "off" }),
-            Auto::Wifi => Some(if sources::wifi_up() { "blue" } else { "off" }),
-            Auto::ChargeControl => None,
+            // White: what the LED is left at when the daemon exits.
+            Auto::Power => Some("white"),
+            Auto::Bluetooth | Auto::Wifi | Auto::ChargeControl => None,
         }
     }
 }
@@ -179,34 +203,6 @@ pub mod sources {
 
     fn read_trim(p: PathBuf) -> Option<String> {
         std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
-    }
-
-    pub fn bluetooth_on() -> bool {
-        let has_adapter = std::fs::read_dir("/sys/class/bluetooth")
-            .map(|it| it.flatten().any(|e| e.file_name().to_string_lossy().starts_with("hci")))
-            .unwrap_or(false);
-        if !has_adapter {
-            return false;
-        }
-        // Blocked if any bluetooth rfkill switch is soft- or hard-blocked.
-        let blocked = std::fs::read_dir("/sys/class/rfkill")
-            .map(|it| {
-                it.flatten()
-                    .filter(|e| read_trim(e.path().join("type")).as_deref() == Some("bluetooth"))
-                    .any(|e| read_trim(e.path().join("soft")).as_deref() == Some("1") || read_trim(e.path().join("hard")).as_deref() == Some("1"))
-            })
-            .unwrap_or(false);
-        !blocked
-    }
-
-    pub fn wifi_up() -> bool {
-        std::fs::read_dir("/sys/class/net")
-            .map(|it| {
-                it.flatten()
-                    .filter(|e| e.path().join("wireless").is_dir())
-                    .any(|e| read_trim(e.path().join("operstate")).as_deref() == Some("up"))
-            })
-            .unwrap_or(false)
     }
 
     /// AC adapter connected. `None` if no adapter is exposed.
@@ -263,7 +259,11 @@ pub mod sources {
     fn bay_of_block(dev: &str) -> Option<u8> {
         let disk = whole_disk(dev);
         let real = std::fs::canonicalize(format!("/sys/block/{disk}/device")).ok()?;
-        let path = real.to_string_lossy();
+        bay_of_path(&real.to_string_lossy())
+    }
+
+    /// Which bay a sysfs device path (below its PCIe root port) belongs to.
+    pub fn bay_of_path(path: &str) -> Option<u8> {
         BAY_ROOT_PORTS.iter().find(|(_, port)| path.contains(port)).map(|(bay, _)| *bay)
     }
 

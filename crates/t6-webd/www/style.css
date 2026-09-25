@@ -387,6 +387,14 @@ pre.log {
 .devices td.eff { width: 26%; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .devices select { max-width: 100%; }
 .dot { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 1px solid rgba(0, 0, 0, .15); border-radius: 50%; vertical-align: -2px; }
+.dot.fx-blink { animation: led-blink 2s steps(1) infinite; }
+.dot.fx-heartbeat { animation: led-heartbeat 1.2s steps(1) infinite; }
+@keyframes led-blink { 50% { opacity: .15; } }
+@keyframes led-heartbeat { 0% { opacity: 1; } 8.3% { opacity: .15; } 16.7% { opacity: 1; } 25% { opacity: .15; } }
+.radio-led + .radio-led { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.radio-led .led-status { margin: 6px 0 0; font-size: 13px; }
+.radio-led .led-legend { margin: 4px 0 0; font-weight: 500; line-height: 1.45; }
+@media (prefers-reduced-motion: reduce) { .dot.fx-blink, .dot.fx-heartbeat { animation: none; } }
 
 /* ---- fan curves ---- */
 .curve { display: block; width: 100%; height: 180px; margin-top: 8px; touch-action: none; cursor: crosshair; }

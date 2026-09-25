@@ -7,13 +7,16 @@
 //! control socket so the file has one writer.
 
 mod beeper;
+mod bluetooth;
+mod button;
 mod config;
 mod control;
-mod display;
 mod devices;
 mod events;
 mod leds;
+mod power;
 mod schedule;
+mod wifi;
 
 use beeper::{Beeper, Pattern};
 use config::{Config, DeviceSetting, Mode};
@@ -27,13 +30,16 @@ use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
 use signal_hook::flag;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const DEFAULT_CONFIG: &str = "/etc/t6-ledd.toml";
 const RUN_DIR: &str = "/run/t6-ledd";
-const RENDER_TICK: Duration = Duration::from_millis(100);
+/// Fine enough for the 100 ms heartbeat pulses.
+const RENDER_TICK: Duration = Duration::from_millis(50);
 const POLICY_EVERY: Duration = Duration::from_secs(2);
+/// The power LED follows the screen: check the backlight this often.
+const SCREEN_EVERY: Duration = Duration::from_millis(250);
 
 fn log(msg: &str) {
     println!("{msg}");
@@ -54,10 +60,22 @@ struct Daemon {
     config_error: Option<String>,
     beeper: Beeper,
     events: EventWatcher,
+    /// Latest Wi-Fi status, kept up to date by the Wi-Fi monitor thread.
+    wifi: Arc<Mutex<wifi::Report>>,
+    /// Shared with the power button thread (`power_button_screen`).
+    button_screen: Arc<AtomicBool>,
+    power_monitor: power::Monitor,
+    /// Power LED status from the last policy pass.
+    power: power::Report,
+    bt_monitor: bluetooth::Monitor,
+    /// Bluetooth status from the last policy pass.
+    bt: bluetooth::Report,
 }
 
 impl Daemon {
     fn new(cfg: Config, config_path: PathBuf, run_dir: PathBuf, config_error: Option<String>) -> Self {
+        let button_screen = Arc::new(AtomicBool::new(cfg.power_button_screen));
+        button::spawn(Arc::clone(&button_screen), log);
         Daemon {
             cfg,
             config_path,
@@ -69,7 +87,17 @@ impl Daemon {
             config_error,
             beeper: Beeper::new(),
             events: EventWatcher::default(),
+            wifi: wifi::spawn(),
+            button_screen,
+            power_monitor: power::Monitor::default(),
+            power: power::Report { screen_on: power::screen_on(), overheat: None },
+            bt_monitor: bluetooth::Monitor::default(),
+            bt: bluetooth::Report { state: bluetooth::State::Off, reason: "starting", adapter: None, connections: 0 },
         }
+    }
+
+    fn wifi_report(&self) -> wifi::Report {
+        self.wifi.lock().map(|g| g.clone()).unwrap_or_else(|e| e.into_inner().clone())
     }
 
     fn night_active(&self) -> (bool, &'static str) {
@@ -94,6 +122,9 @@ impl Daemon {
         let (night, _) = self.night_active();
         self.faults = if self.cfg.bay_fault_blink { sources::drive_faults() } else { BTreeSet::new() };
 
+        let wifi = self.wifi_report();
+        self.bt = self.bt_monitor.sample(Instant::now());
+        self.power = self.power_monitor.sample(Instant::now());
         let mut plan = Vec::with_capacity(CATALOG.len());
         for dev in CATALOG {
             if dev.auto == Some(Auto::ChargeControl) {
@@ -108,6 +139,26 @@ impl Daemon {
                     Effect::off()
                 } else {
                     Effect::Solid("white".into())
+                }
+            } else if dev.auto == Some(Auto::Wifi) && self.cfg.setting(dev.id).mode == Mode::Auto {
+                // Wi-Fi faults stay red in night mode, like drive faults.
+                if night && wifi.state != wifi::State::Fault {
+                    Effect::off()
+                } else {
+                    wifi.state.effect()
+                }
+            } else if dev.auto == Some(Auto::Power) && self.cfg.setting(dev.id).mode == Mode::Auto {
+                // Overheat blinks red in night mode too.
+                if night && self.power.overheat.is_none() {
+                    Effect::off()
+                } else {
+                    self.power.effect()
+                }
+            } else if dev.auto == Some(Auto::Bluetooth) && self.cfg.setting(dev.id).mode == Mode::Auto {
+                if night && self.bt.state != bluetooth::State::Fault {
+                    Effect::off()
+                } else {
+                    self.bt.state.effect()
                 }
             } else if night {
                 Effect::off()
@@ -162,7 +213,7 @@ impl Daemon {
                     "mode": s.mode,
                     "color": s.color,
                     "effective": effective,
-                    "colors": d.colors.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
+                    "colors": d.manual_colors(),
                     "auto": d.auto.is_some(),
                     "auto_desc": d.auto_desc,
                     "bay": d.is_bay(),
@@ -175,6 +226,7 @@ impl Daemon {
             "night": { "active": night, "reason": reason, "manual": self.cfg.night.manual, "schedule": self.cfg.night.schedule },
             "bays_enabled": self.cfg.bays_enabled,
             "bay_fault_blink": self.cfg.bay_fault_blink,
+            "power_button_screen": self.cfg.power_button_screen,
             "faults": self.faults.iter().copied().collect::<Vec<u8>>(),
             "bays_present": (1u8..=6).filter(|n| sources::bay_present(*n)).collect::<Vec<u8>>(),
             "tray_speed": self.cfg.tray_speed,
@@ -184,6 +236,9 @@ impl Daemon {
                 "drive_fault": self.cfg.beep.drive_fault,
             },
             "config_error": self.config_error,
+            "wifi": self.wifi_report().to_json(),
+            "bluetooth": self.bt.to_json(),
+            "power": self.power.to_json(),
             "devices": devices,
         });
         let tmp = self.run_dir.join("status.json.tmp");
@@ -236,6 +291,13 @@ impl Daemon {
                 self.write_status();
                 Ok("ok".into())
             }
+            ["power-button", on @ ("on" | "off")] => {
+                self.cfg.power_button_screen = *on == "on";
+                self.button_screen.store(self.cfg.power_button_screen, Ordering::Relaxed);
+                self.save()?;
+                self.write_status();
+                Ok("ok".into())
+            }
             ["tray-speed", speed] => {
                 if !config::TRAY_SPEEDS.contains(speed) {
                     return Err(format!("tray-speed must be one of {:?}", config::TRAY_SPEEDS));
@@ -279,6 +341,7 @@ impl Daemon {
         match Config::load(&self.config_path) {
             Ok(c) => {
                 self.cfg = c;
+                self.button_screen.store(self.cfg.power_button_screen, Ordering::Relaxed);
                 self.config_error = None;
                 self.bank.invalidate();
                 self.refresh_now();
@@ -304,8 +367,15 @@ impl Daemon {
 
     /// Leave the LEDs in their automatic state and silence the beeper.
     fn park(&mut self) {
+        let wifi = self.wifi_report().state.effect();
+        let bt = self.bt.state.effect();
         for dev in CATALOG {
-            if let Some(c) = dev.auto_color() {
+            let color = match dev.auto {
+                Some(Auto::Wifi) => Some(wifi.base_color()),
+                Some(Auto::Bluetooth) => Some(bt.base_color()),
+                _ => dev.auto_color(),
+            };
+            if let Some(c) = color {
                 let _ = self.bank.set(dev, c);
             }
         }
@@ -391,6 +461,7 @@ fn main() {
     daemon.write_status();
     log("t6-ledd started");
     let mut last_policy = Instant::now();
+    let mut last_screen = Instant::now();
 
     // Short beep once per boot, like the stock firmware. The marker lives in
     // the runtime dir (tmpfs, cleared on reboot but kept across service
@@ -402,8 +473,8 @@ fn main() {
     if first_this_boot {
         // Restore the built-in display to its persisted boot state (on at the
         // remembered level, unless the user chose to keep it off at boot).
-        match display::apply_boot() {
-            Ok(v) => log(&format!("display set to {v} at boot")),
+        match t6_hw_rs::display::Display::new().apply_boot() {
+            Ok((level, on)) => log(&format!("display set to {level} ({}) at boot", if on { "on" } else { "off" })),
             Err(e) => log(&format!("display boot: {e}")),
         }
         if daemon.cfg.beep.startup {
@@ -426,6 +497,12 @@ fn main() {
                 let _ = req.reply.send(reply);
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                if last_screen.elapsed() >= SCREEN_EVERY {
+                    last_screen = Instant::now();
+                    if power::screen_on() != daemon.power.screen_on {
+                        daemon.refresh_now();
+                    }
+                }
                 daemon.render();
                 if last_policy.elapsed() >= POLICY_EVERY {
                     daemon.evaluate();

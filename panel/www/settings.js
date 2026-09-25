@@ -42,7 +42,7 @@ function closePage(){
 }
 document.getElementById('subDone').addEventListener('click',closePage);
 document.getElementById('subBack').addEventListener('click',closePage);
-var TIMEOUTS=[[0,'Never'],[60,'1 min'],[300,'5 min'],[900,'15 min']];
+var TIMEOUTS=[[0,'Never'],[60,'1 min'],[300,'5 min'],[900,'15 min'],[1800,'30 min']];
 var LANGS=[['en','English'],['ja','日本語'],['zh','简体中文']];
 var FAN_PRESETS=[['silent','Silent'],['balance','Balanced'],['performance','Performance'],['custom','Custom']];
 function buildSettings(){
@@ -200,11 +200,18 @@ function showConfirm(title,msg,okText,danger,cb){
    (single taps do nothing, so a stray touch won't wake the panel). On the real
    panel the FT8722 still reports touches with the backlight off, so the
    double-tap lands even though the screen is dark. No passcode. */
-var idleTimer=null, sleepEl=document.getElementById('sleep'), asleep=false, lastTap=0, powerSetAt=0;
+var idleTimer=null, sleepEl=document.getElementById('sleep'), asleep=false, powerSetAt=0;
 function currentTimeout(){return (LAST&&LAST.screen&&LAST.screen.timeout_s)||0;}
 function setPower(on){powerSetAt=Date.now();fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on})}).catch(function(){});}
-function goSleep(){if(asleep)return;asleep=true;clearTimeout(idleTimer);sleepEl.classList.add('on');setPower(false);}
-function wake(){if(!asleep)return;asleep=false;sleepEl.classList.remove('on');setPower(true);armIdle();}
+function goSleep(){if(asleep)return;asleep=true;clearTimeout(idleTimer);showSleep();setPower(false);}
+function wake(){if(!asleep)return;asleep=false;hideSleep();setPower(true);armIdle();}
+/* Overlay on/off. Hiding also swallows clicks for a moment, so the tap that
+   woke the panel (or a finger still on the glass) can't land on whatever is
+   underneath. */
+var swallowUntil=0;
+function showSleep(){sleepEl.classList.add('on');tapState=null;}
+function hideSleep(){sleepEl.classList.remove('on');tapState=null;swallowUntil=Date.now()+350;}
+document.addEventListener('click',function(e){if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();}},true);
 function armIdle(){clearTimeout(idleTimer);var s=currentTimeout();if(s>0&&!asleep)idleTimer=setTimeout(goSleep,s*1000);}
 function onActivity(){if(!asleep)armIdle();} // activity resets the idle timer only while awake
 /* The backlight can also be switched by someone else — off-after-boot, the web
@@ -214,15 +221,48 @@ function onActivity(){if(!asleep)armIdle();} // activity resets the idle timer o
    browser viewing the panel remotely shouldn't black out because the physical
    screen did. Our own switches are left alone for a few seconds so a poll that
    was already in flight can't undo them. */
-var IS_KIOSK=/Electron\//.test(navigator.userAgent);
+var IS_KIOSK=/Electron\//.test(navigator.userAgent), syncLater=null, lastDisp=null;
 function syncBacklight(disp){
-  if(!IS_KIOSK||!disp||typeof disp.on!=='boolean'||Date.now()-powerSetAt<4000)return;
-  if(!disp.on&&!asleep){asleep=true;clearTimeout(idleTimer);sleepEl.classList.add('on');}
-  else if(disp.on&&asleep){asleep=false;sleepEl.classList.remove('on');armIdle();}
+  if(!IS_KIOSK||!disp||typeof disp.on!=='boolean')return;
+  lastDisp=disp;
+  // Just after our own switch, a reply that was already in flight may be
+  // stale: look again once the grace period is over instead of dropping it
+  // (the power button may really have flipped the screen meanwhile).
+  var wait=4000-(Date.now()-powerSetAt);
+  if(wait>0){clearTimeout(syncLater);syncLater=setTimeout(function(){syncBacklight(lastDisp);},wait);return;}
+  if(!disp.on&&!asleep){asleep=true;clearTimeout(idleTimer);showSleep();}
+  else if(disp.on&&asleep){asleep=false;hideSleep();armIdle();}
+}
+/* Pushed by t6-paneld on every backlight change (front power button, T6
+   Control Center, a desktop...), so the overlay follows at once; the
+   /api/panel poll stays as a fallback. EventSource reconnects by itself. */
+if(IS_KIOSK&&window.EventSource){
+  new EventSource('api/display/events').onmessage=function(e){try{syncBacklight(JSON.parse(e.data));}catch(_){}};
 }
 document.getElementById('sleepBtn').addEventListener('click',goSleep);
-// double-tap the dark overlay to wake
-sleepEl.addEventListener('pointerdown',function(e){var t=Date.now();if(t-lastTap<400)wake();lastTap=t;e.preventDefault();});
+/* Double-tap the dark overlay to wake. A tap is a full press + release of the
+   primary contact; the second must start 40-400 ms after the first ended and
+   near it. That keeps a single tap from waking the panel when the touch
+   controller reports a bounce (down/up/down within a few ms) or a second
+   contact. The panel wakes on the second release, while the overlay is still
+   there, so that tap cannot click the UI underneath. */
+var tapState=null, tapDown=null;
+sleepEl.addEventListener('pointerdown',function(e){
+  e.preventDefault();
+  if(!e.isPrimary)return;
+  tapDown={t:Date.now(),x:e.clientX,y:e.clientY};
+});
+sleepEl.addEventListener('pointerup',function(e){
+  e.preventDefault();
+  if(!e.isPrimary||!tapDown)return;
+  var now=Date.now(), d=tapDown; tapDown=null;
+  if(now-d.t>500){tapState=null;return;}                       // a press, not a tap
+  var p=tapState, near=p&&Math.hypot(d.x-p.x,d.y-p.y)<Math.max(60,innerWidth*0.12);
+  if(p&&d.t-p.up>=40&&d.t-p.up<=400&&near){tapState=null;wake();return;}
+  if(p&&d.t-p.up<40)return;                                     // bounce: keep the first tap
+  tapState={up:now,x:d.x,y:d.y};
+});
+sleepEl.addEventListener('pointercancel',function(){tapDown=null;});
 ['pointerdown','keydown'].forEach(function(ev){document.getElementById('stage').addEventListener(ev,onActivity,{passive:true});});
 var putTimer=null;
 function putBrightness(v){

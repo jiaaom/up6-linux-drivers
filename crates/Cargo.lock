@@ -967,9 +967,11 @@ name = "t6-ledd"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "libc",
  "serde",
  "serde_json",
  "signal-hook",
+ "t6-hw-rs",
  "toml",
 ]
 

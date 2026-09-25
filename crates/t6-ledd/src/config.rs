@@ -21,6 +21,9 @@ pub struct Config {
     /// master switch and night mode).
     #[serde(default = "yes")]
     pub bay_fault_blink: bool,
+    /// The front power button switches the built-in screen on and off.
+    #[serde(default = "yes")]
+    pub power_button_screen: bool,
     /// Tray light breathing speed: "slow" | "normal" | "fast".
     #[serde(default = "default_tray_speed")]
     pub tray_speed: String,
@@ -112,6 +115,7 @@ impl Default for Config {
         Config {
             bays_enabled: true,
             bay_fault_blink: true,
+            power_button_screen: true,
             tray_speed: default_tray_speed(),
             beep: BeepConfig::default(),
             night: Night::default(),
@@ -123,7 +127,8 @@ impl Default for Config {
 impl Config {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        let cfg: Config = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut cfg: Config = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        cfg.drop_retired_colors();
         cfg.validate()?;
         Ok(cfg)
     }
@@ -134,6 +139,21 @@ impl Config {
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let body = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(path, format!("{HEADER}{body}")).map_err(|e| format!("cannot write {}: {e}", path.display()))
+    }
+
+    /// A fixed colour saved before the LED became a status light (power,
+    /// Wi-Fi, Bluetooth) goes back to automatic instead of failing the
+    /// whole file.
+    fn drop_retired_colors(&mut self) {
+        self.devices.retain(|id, s| {
+            let Some(dev) = devices::by_id(id) else { return true };
+            let retired = s.mode == Mode::Manual
+                && s.color.as_deref().is_some_and(|c| dev.leds_for(c).is_some() && !dev.manual_colors().contains(&c));
+            if retired {
+                println!("{id}: fixed colour {:?} is no longer offered; back to automatic", s.color.as_deref().unwrap_or(""));
+            }
+            !retired
+        });
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -165,11 +185,32 @@ impl DeviceSetting {
             }
             Mode::Manual => {
                 let c = self.color.as_deref().ok_or_else(|| format!("{}: manual mode needs a colour", dev.id))?;
-                if !dev.colors.iter().any(|(name, _)| *name == c) {
-                    return Err(format!("{}: unknown colour {c:?}", dev.id));
+                if !dev.manual_colors().contains(&c) {
+                    return Err(format!("{}: colour {c:?} not available (choose from {:?})", dev.id, dev.manual_colors()));
                 }
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retired_status_led_colours_fall_back_to_auto() {
+        let mut cfg: Config = toml::from_str(
+            "[devices]\nwifi = { mode = \"manual\", color = \"yellow\" }\nbt = { mode = \"manual\", color = \"off\" }\nrgb = { mode = \"manual\", color = \"blue\" }\n",
+        )
+        .unwrap();
+        cfg.drop_retired_colors();
+        assert!(cfg.validate().is_ok());
+        assert!(!cfg.devices.contains_key("wifi"));
+        assert_eq!(cfg.setting("bt").color.as_deref(), Some("off"));
+        assert_eq!(cfg.setting("rgb").color.as_deref(), Some("blue"));
+        // Setting a retired colour now is refused.
+        let wifi = devices::by_id("wifi").unwrap();
+        assert!(DeviceSetting { mode: Mode::Manual, color: Some("blue".into()) }.validate_for(wifi).is_err());
     }
 }

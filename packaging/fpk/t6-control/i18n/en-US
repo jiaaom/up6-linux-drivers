@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Control Center"
 desc="Fan curves, LEDs, display brightness, battery charge limits and beeper of the UnifyDrive UP6 / ZSpace T6. Requires T6 Drivers."
-changelog="1.0.1: “Also remove settings” on uninstall now works (it also clears the battery charge band); the AC power-loss beep is a single beep. 1.0.0: first stable release. 0.2.6: Dashboard hero with the device photo, host name and four at-a-glance tiles (drivers & services, CPU temperature, fan profile, battery); the drivers card only shows when something needs attention, and a check-only repair run reads “nothing needed fixing”. 0.2.5: package renamed from t6control to t6-control (uninstall the old one first; settings are kept); charge limits as large selection cards; access level shown on the Dashboard; fixes a stale page in Safari and the fnOS mobile app. 0.2.4: redesigned to match the fnOS desktop — sidebar navigation, follows the desktop dark/light theme and language (English and 简体中文). 0.2.3: Dashboard drivers & services card that detects missing or unloaded drivers and failed services, with one-click driver repair (needs T6 Drivers 0.2.0)."
+changelog="1.0.2: coordinated panel sleep/wake with safe backlight ordering; serialized display controls; IT6616 driver health reporting and safer driver upgrades."
 
 [entry]
 title="T6 Control Center"

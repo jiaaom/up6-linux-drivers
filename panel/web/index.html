@@ -37,22 +37,27 @@
         <div class="stats-grid">
           <div class="stat"><span data-i18n="status">Status</span><strong id="statStatus">-</strong></div>
           <div class="stat"><span data-i18n="screen">Screen</span><strong id="statScreen">-</strong></div>
-          <div class="stat"><span data-i18n="brightness">Brightness</span><strong id="statBrightness">-</strong></div>
           <div class="stat"><span data-i18n="version">Version</span><strong id="statVersion">-</strong></div>
         </div>
       </section>
 
-      <section class="panel" id="screenPanel">
+      <section class="panel" id="displayPanel">
         <div class="section-head">
-          <h2 data-i18n="screen">Screen</h2>
-          <button id="powerBtn" class="ghost-btn" type="button" disabled>Turn off screen</button>
+          <h2 data-i18n="display">Display</h2>
+        </div>
+        <div class="row theme-row">
+          <div class="row-label">
+            <span data-i18n="theme">Theme</span>
+            <p class="hint" data-i18n="themeHint">The look of the front-panel app. It changes on the screen within a few seconds.</p>
+          </div>
+          <div class="theme-grid" id="themeGrid" role="radiogroup"></div>
         </div>
         <div class="row">
-          <div class="row-label"><span data-i18n="brightness">Brightness</span></div>
-          <div class="slider-wrap">
-            <input id="briRange" type="range" min="10" max="100" step="1" disabled>
-            <output id="briOut">-</output>
+          <div class="row-label">
+            <span data-i18n="screenTimeout">Screen timeout</span>
+            <p class="hint" data-i18n="screenTimeoutHint">Turn the screen off after the front panel has not been touched for this long.</p>
           </div>
+          <select id="timeoutSel" disabled></select>
         </div>
         <div class="row">
           <div class="row-label">

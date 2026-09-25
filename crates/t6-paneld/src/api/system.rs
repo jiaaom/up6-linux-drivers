@@ -31,7 +31,9 @@ pub(super) struct BrightnessReq {
 }
 
 pub(super) async fn put_brightness(Json(req): Json<BrightnessReq>) -> Response {
-    match Display::new().set_brightness(req.value) {
+    let result = tokio::task::spawn_blocking(move || Display::new().set_brightness(req.value))
+        .await.unwrap_or_else(|e| Err(format!("display worker failed: {e}")));
+    match result {
         Ok(v) => Json(serde_json::json!({ "brightness": v })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
@@ -43,10 +45,27 @@ pub(super) struct PowerReq {
 }
 
 pub(super) async fn put_power(Json(req): Json<PowerReq>) -> Response {
-    match Display::new().set_power(req.on) {
+    let result = tokio::task::spawn_blocking(move || Display::new().set_power(req.on))
+        .await.unwrap_or_else(|e| Err(format!("display worker failed: {e}")));
+    match result {
         Ok(v) => Json(serde_json::json!({ "brightness": v, "on": req.on })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
+}
+
+/// Server-sent events: `{"on":bool}` now and on every change of the screen
+/// state, whoever switched it.
+pub(super) async fn display_events() -> axum::response::sse::Sse<impl futures_util::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
+    use axum::response::sse::{Event, KeepAlive, Sse};
+    let rx = crate::backlight::subscribe();
+    let stream = futures_util::stream::unfold((rx, true), |(mut rx, first)| async move {
+        if !first && rx.changed().await.is_err() {
+            return None;
+        }
+        let on = *rx.borrow_and_update();
+        Some((Ok(Event::default().data(serde_json::json!({ "on": on }).to_string())), (rx, false)))
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 #[derive(Deserialize)]

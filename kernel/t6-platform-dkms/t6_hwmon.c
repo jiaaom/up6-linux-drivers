@@ -53,25 +53,42 @@ static int t6_read_pwm(struct t6_platform *priv, u8 address, long *value)
 	return 0;
 }
 
-static int t6_write_pwm(struct t6_platform *priv, u8 address, long value)
+static int t6_write_pwm(struct t6_platform *priv, int channel, long value)
 {
 	u8 percent;
+	bool host;
+	int ret;
 
 	if (value < 0 || value > 255)
 		return -ERANGE;
 	percent = DIV_ROUND_CLOSEST((unsigned int)value * 100, 255);
 	if (percent < t6_min_pwm_percent)
 		return -ERANGE;
-	return t6_ec_write(priv, address, percent);
+	if (!priv->fan_manual)
+		return -EBUSY;
+	ret = t6_ec_get_host_control(priv, &host);
+	if (ret)
+		return ret;
+	if (!host) {
+		ret = t6_fan_take_control(priv, false);
+		if (ret)
+			return ret;
+	}
+	mutex_lock(&priv->fan_lock);
+	if (!priv->fan_manual) {
+		ret = -EBUSY;
+		goto out;
+	}
+	ret = t6_ec_write(priv, t6_pwm_addresses[channel], percent);
+	if (!ret)
+		priv->fan_pwm[channel] = percent;
+out:
+	mutex_unlock(&priv->fan_lock);
+	return ret;
 }
 
-/*
- * EC 0x59 bit 3 is one global switch: 1 = host PWM values apply (manual),
- * 2 = EC-owned. All three pwmN_enable nodes report the same bit, and the
- * same bit gates the LCD backlight and LEDs, so pwmN_enable=2 freezes those too.
- * The EC does not recompute a duty when the bit is cleared; fans hold the
- * last PWM value.
- */
+/* The EC has no automatic curve mode exposed by this driver: 1 is manual,
+ * while 0 is the safe full-speed fallback shared by all three channels. */
 static int t6_read_pwm_enable(struct t6_platform *priv, long *value)
 {
 	bool host;
@@ -79,36 +96,57 @@ static int t6_read_pwm_enable(struct t6_platform *priv, long *value)
 
 	if (ret)
 		return ret;
-	*value = host ? 1 : 2;
+	*value = host && priv->fan_manual ? 1 : 0;
 	return 0;
 }
 
 static int t6_write_pwm_enable(struct t6_platform *priv, long value)
 {
-	if (value != 1 && value != 2)
-		return -EINVAL;
-	return t6_ec_set_host_control(priv, value == 1);
+	if (value == 1)
+		return t6_fan_take_control(priv, false);
+	if (value == 0)
+		return t6_fan_full_speed(priv);
+	return -EINVAL;
 }
-
 static int t6_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
-			 u32 attr, int channel, long *value)
+				 u32 attr, int channel, long *value)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
+	int ret;
 
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
 	if (type == hwmon_temp && attr == hwmon_temp_input) {
 		if (channel < 0 || channel >= ARRAY_SIZE(t6_temp_addresses))
-			return -EOPNOTSUPP;
-		return t6_read_temp(priv, t6_temp_addresses[channel], value);
+			ret = -EOPNOTSUPP;
+		else
+			ret = t6_read_temp(priv, t6_temp_addresses[channel], value);
+		goto out;
 	}
-	if (channel < 0 || channel >= 3)
-		return -EOPNOTSUPP;
-	if (type == hwmon_fan && attr == hwmon_fan_input)
-		return t6_ec_read_rpm(priv, t6_rpm_addresses[channel], value);
-	if (type == hwmon_pwm && attr == hwmon_pwm_input)
-		return t6_read_pwm(priv, t6_pwm_addresses[channel], value);
+	if (channel < 0 || channel >= T6_FAN_COUNT) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
+	if (type == hwmon_fan && attr == hwmon_fan_input) {
+		mutex_lock(&priv->fan_lock);
+		ret = t6_ec_read_rpm(priv, t6_rpm_addresses[channel], value);
+		mutex_unlock(&priv->fan_lock);
+		goto out;
+	}
+	if (type == hwmon_pwm && attr == hwmon_pwm_input) {
+		mutex_lock(&priv->fan_lock);
+		ret = t6_read_pwm(priv, t6_pwm_addresses[channel], value);
+		mutex_unlock(&priv->fan_lock);
+		goto out;
+	}
 	if (type == hwmon_pwm && attr == hwmon_pwm_enable)
-		return t6_read_pwm_enable(priv, value);
-	return -EOPNOTSUPP;
+		ret = t6_read_pwm_enable(priv, value);
+	else
+		ret = -EOPNOTSUPP;
+out:
+	t6_platform_op_end(priv);
+	return ret;
 }
 
 static int t6_hwmon_read_string(struct device *dev,
@@ -129,17 +167,27 @@ static int t6_hwmon_read_string(struct device *dev,
 }
 
 static int t6_hwmon_write(struct device *dev, enum hwmon_sensor_types type,
-			  u32 attr, int channel, long value)
+				u32 attr, int channel, long value)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
+	int ret;
 
-	if (type != hwmon_pwm || channel < 0 || channel >= 3)
-		return -EOPNOTSUPP;
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	if (type != hwmon_pwm || channel < 0 || channel >= T6_FAN_COUNT) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
 	if (attr == hwmon_pwm_input)
-		return t6_write_pwm(priv, t6_pwm_addresses[channel], value);
-	if (attr == hwmon_pwm_enable)
-		return t6_write_pwm_enable(priv, value);
-	return -EOPNOTSUPP;
+		ret = t6_write_pwm(priv, channel, value);
+	else if (attr == hwmon_pwm_enable)
+		ret = t6_write_pwm_enable(priv, value);
+	else
+		ret = -EOPNOTSUPP;
+out:
+	t6_platform_op_end(priv);
+	return ret;
 }
 
 static umode_t t6_hwmon_is_visible(const void *data,

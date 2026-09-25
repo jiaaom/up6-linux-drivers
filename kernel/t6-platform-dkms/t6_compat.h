@@ -17,4 +17,13 @@
 #define T6_BATTERY_HOOK_ARG
 #endif
 
+
+/* platform_driver.remove became void in the 6.11 driver-core API. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+#define T6_PLATFORM_REMOVE_RET void
+#define T6_PLATFORM_REMOVE_RETURN() return
+#else
+#define T6_PLATFORM_REMOVE_RET int
+#define T6_PLATFORM_REMOVE_RETURN() return 0
+#endif
 #endif

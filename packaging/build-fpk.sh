@@ -16,7 +16,7 @@ CRATES=$REPO/crates
 KERNEL=$REPO/kernel
 BUILD_DIR=$REPO/build
 STAGE_DIR=$BUILD_DIR/fpk
-DKMS_PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms)
+DKMS_PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms ite-it6616-dkms)
 
 log() { printf '==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -32,11 +32,15 @@ stage() {
 }
 
 payload_t6_drivers() {
-    local app=$1/app dir
+    local app=$1/app dir file
     for dir in "${DKMS_PACKAGES[@]}"; do
         mkdir -p "$app/$dir"
-        cp "$KERNEL/$dir"/{Makefile,dkms.conf,*.c,README.md} "$app/$dir/"
-        cp "$KERNEL/$dir"/*.h "$app/$dir/" 2>/dev/null || true
+        cp "$KERNEL/$dir"/{Makefile,dkms.conf,README.md} "$app/$dir/"
+        for file in "$KERNEL/$dir"/*.c "$KERNEL/$dir"/*.h; do
+            [ -f "$file" ] || continue
+            case "$file" in *.mod.c) continue ;; esac
+            cp "$file" "$app/$dir/"
+        done
     done
     cp "$SCRIPT_DIR/install-dkms.sh" "$app/"
 }

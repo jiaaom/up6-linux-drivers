@@ -7,8 +7,13 @@ static ssize_t t6_battery_u16(struct device *dev, u8 address, char *buf)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
 	u16 value;
-	int ret = t6_ec_read_u16_le(priv, address, &value);
+	ssize_t ret;
 
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	ret = t6_ec_read_u16_le(priv, address, &value);
+	t6_platform_op_end(priv);
 	return ret ? ret : sysfs_emit(buf, "%u\n", value);
 }
 
@@ -16,8 +21,13 @@ static ssize_t t6_battery_u8(struct device *dev, u8 address, char *buf)
 {
 	struct t6_platform *priv = dev_get_drvdata(dev);
 	u8 value;
-	int ret = t6_ec_read(priv, address, &value);
+	ssize_t ret;
 
+	ret = t6_platform_op_begin(priv);
+	if (ret)
+		return ret;
+	ret = t6_ec_read(priv, address, &value);
+	t6_platform_op_end(priv);
 	return ret ? ret : sysfs_emit(buf, "%u\n", value);
 }
 

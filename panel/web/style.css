@@ -290,24 +290,75 @@ button:disabled {
   opacity: 0.58;
 }
 
-/* ---- brightness ---- */
-.slider-wrap {
+/* ---- select ---- */
+select {
+  min-width: 120px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+select:disabled {
+  opacity: 0.5;
+}
+
+/* ---- theme picker ---- */
+.theme-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.theme-grid {
   display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  width: min(360px, 55%);
-}
-
-.slider-wrap input {
-  flex: 1;
-  accent-color: var(--accent);
-}
-
-.slider-wrap output {
-  width: 42px;
-  color: var(--muted);
+  gap: 8px;
+  padding: 8px 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
   font-weight: 700;
-  text-align: right;
+  cursor: pointer;
+}
+
+.theme-card:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+}
+
+.theme-card[aria-checked="true"] {
+  border-color: var(--accent);
+}
+
+.theme-card[aria-checked="true"] .theme-name::before {
+  content: "✓ ";
+  color: var(--accent);
+}
+
+.theme-card:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.theme-card img {
+  display: block;
+  width: 110px;
+  height: 220px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
 /* ---- dialog + toast ---- */

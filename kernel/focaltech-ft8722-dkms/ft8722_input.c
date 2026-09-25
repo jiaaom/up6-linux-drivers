@@ -153,6 +153,28 @@ static void ft8722_report_pen(struct ft8722 *ts)
 	input_sync(ts->pen);
 }
 
+/*
+ * A frame with too many contacts is the controller's phantom state, never a
+ * hand: drop it (releasing whatever the previous frame reported) and, if
+ * phantom frames keep coming, ask the core to recalibrate the controller.
+ * The occasional small frame in between does not end the run; a pause does.
+ */
+static void ft8722_phantom_frame(struct ft8722 *ts)
+{
+	u32 now = ft8722_now_ms();
+
+	if (!ts->phantom)
+		ft8722_release_touch(ts);
+	ts->phantom = true;
+	if (!ts->phantom_run || now - ts->phantom_last_ms > FT8722_PHANTOM_GAP_MS) {
+		ts->phantom_run = true;
+		ts->phantom_since_ms = now;
+	}
+	ts->phantom_last_ms = now;
+	if (now - ts->phantom_since_ms >= FT8722_PHANTOM_RUN_MS)
+		ft8722_phantom_detected(ts, now - ts->phantom_since_ms);
+}
+
 static int ft8722_read_rest(struct ft8722 *ts, size_t need)
 {
 	if (need <= FT8722_FRAME_LEN)
@@ -193,6 +215,14 @@ irqreturn_t ft8722_input_irq(int irq, void *data)
 
 	type = ts->buf[1] >> 4;
 	n = ts->buf[1] & 0x0f;
+
+	if (ft8722_deghost &&
+	    (type == FT8722_EV_DEFAULT || type == FT8722_EV_V2) &&
+	    n >= FT8722_PHANTOM_CONTACTS && n <= FT8722_MAX_FINGERS) {
+		ft8722_phantom_frame(ts);
+		return IRQ_HANDLED;
+	}
+	ts->phantom = false;
 
 	switch (type) {
 	case FT8722_EV_DEFAULT:

@@ -12,11 +12,15 @@
 #include <linux/types.h>
 
 /* Registers */
+#define FT8722_REG_MODE		0x00	/* device mode */
 #define FT8722_REG_TOUCH	0x01	/* start of the event frame */
 #define FT8722_REG_CHIP_ID_H	0xa3
 #define FT8722_REG_CHIP_ID_L	0x9f
 #define FT8722_REG_FW_VER	0xa6
 #define FT8722_REG_VENDOR_ID	0xa8
+
+#define FT8722_MODE_WORK	0x00
+#define FT8722_MODE_FACTORY	0x40
 
 /* Panel geometry the controller reports in (portrait 1080x2160, 68x136 mm active area measured on the T6) */
 #define FT8722_MAX_X		1079
@@ -25,6 +29,18 @@
 #define FT8722_HEIGHT_MM	136
 #define FT8722_RES_PX_PER_MM	((FT8722_MAX_X + 1) / FT8722_WIDTH_MM)	/* 15 */
 #define FT8722_MAX_FINGERS	10
+
+/*
+ * Phantom state: after some panel sleep-outs (the FT8722 is a TDDI) the
+ * touch half streams frames of 8-10 weak contacts spread over the whole
+ * panel until it is recalibrated. Real use never reached more than 5
+ * contacts on this 68 mm wide panel (1300+ frames incl. five fingers and a
+ * palm), phantom frames were >= 7 in 99 % of 2200+; see
+ * docs/ft8722-touchscreen.md. A round trip through factory mode clears it.
+ */
+#define FT8722_PHANTOM_CONTACTS	7
+#define FT8722_PHANTOM_GAP_MS	200	/* a longer pause ends a phantom run */
+#define FT8722_PHANTOM_RUN_MS	500	/* run length that triggers recovery */
 
 /*
  * Frame: the vendor reads FT8722_FRAME_LEN bytes from FT8722_REG_TOUCH and

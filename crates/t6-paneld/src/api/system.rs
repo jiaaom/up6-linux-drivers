@@ -76,7 +76,10 @@ pub(super) struct TimeoutReq {
 
 pub(super) async fn put_screen_timeout(Json(req): Json<TimeoutReq>) -> Response {
     match crate::settings::set_screen_timeout(req.seconds) {
-        Ok(s) => Json(serde_json::json!({ "timeout_s": s.screen_timeout_s })).into_response(),
+        Ok(s) => {
+            crate::idle::settings_changed();
+            Json(serde_json::json!({ "timeout_s": s.screen_timeout_s })).into_response()
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }

@@ -7,7 +7,11 @@
 //!     like a dead panel after a reboot).
 //!
 //! On/off preserves the brightness with `bl_power` and, when the optional
-//! IT6616 driver is present, sleeps/wakes the panel behind a dark backlight.
+//! IT6616 driver is present, switches the panel's display off/on (DCS 0x28 /
+//! 0x29) behind a dark backlight. Never sleep-in (0x10): the panel is an
+//! FT8722 TDDI, whose touch half stops scanning while asleep (no double-tap
+//! wake) and often recalibrates badly on sleep-out, leaving it reporting
+//! phantom multi-touch until the next sleep/wake (see docs/ft8722-touchscreen.md).
 //! The runtime toggle never changes the next boot's state. t6-ledd applies
 //! this file once per boot (`apply_boot`). All mutations share a process-wide
 //! and cross-process advisory lock; callers must run them off async workers.
@@ -204,8 +208,8 @@ impl Display {
     }
 
     /// Set the live display state.  When the IT6616 driver is present, the
-    /// backlight is switched off before panel sleep and switched on only after
-    /// the panel has woken, so DCS-induced flicker is hidden.
+    /// backlight is switched off before the panel display goes off and
+    /// switched on only after it is back on, so DCS-induced flicker is hidden.
     pub fn set_power(&self, on: bool) -> Result<u32, String> {
         let _lock = self.lock()?;
         self.set_power_locked(on, None)
@@ -217,9 +221,9 @@ impl Display {
             None => self.read_u32("brightness").ok_or("backlight not available (t6_platform loaded?)")?,
         };
         // Blank even when brightness was zero: restoring a nonzero level
-        // before wake would otherwise illuminate a sleeping/uncertain panel.
+        // before display-on would otherwise illuminate an off/uncertain panel.
         self.write_attr("bl_power", BL_OFF)?;
-        self.bridge_set_panel(if on { "on" } else { "sleep" })
+        self.bridge_set_panel(if on { "on" } else { "off" })
             .map_err(|e| format!("{e}; backlight remains off; retry screen on to recover"))?;
         let restored = if on && level == 0 { self.settings().on_level } else { level };
         if boot_level.is_some() || restored != level {

@@ -18,6 +18,7 @@ mod backlight;
 mod firmware;
 mod fnos;
 mod gateway;
+mod idle;
 mod panel;
 mod settings;
 mod www;
@@ -122,6 +123,7 @@ async fn main() {
         fnos::auto_sign_in().await;
     });
     backlight::start();
+    idle::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (t6-ledd, which runs first, restores the saved brightness).
     if !settings::load().panel_enabled() {

@@ -171,7 +171,6 @@ function buildSettings(){
       var s=parseInt(o.dataset.s,10);
       if(LAST&&LAST.screen)LAST.screen.timeout_s=s; else if(LAST)LAST.screen={timeout_s:s};
       fetch('api/settings/screen-timeout',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({seconds:s})}).catch(function(){});
-      armIdle();
     });
   });
   // System actions (no-login; confirm first)
@@ -195,16 +194,17 @@ function showConfirm(title,msg,okText,danger,cb){
 }
 
 /* ---------- screen off (sleep) + wake ----------
-   The home sleep button — and the idle timeout — turn the real backlight off
-   (PUT /api/display/power) and show a black overlay. Double-tap wakes it
+   The home sleep button turns the real backlight off (PUT /api/display/power)
+   and shows a black overlay. The idle timeout lives in t6-paneld (idle.rs,
+   which watches the touchscreen itself); its switch-off reaches us through
+   syncBacklight like any other. Double-tap wakes it
    (single taps do nothing, so a stray touch won't wake the panel). On the real
    panel the FT8722 still reports touches with the backlight off, so the
    double-tap lands even though the screen is dark. No passcode. */
-var idleTimer=null, sleepEl=document.getElementById('sleep'), asleep=false, powerSetAt=0;
-function currentTimeout(){return (LAST&&LAST.screen&&LAST.screen.timeout_s)||0;}
+var sleepEl=document.getElementById('sleep'), asleep=false, powerSetAt=0;
 function setPower(on){powerSetAt=Date.now();fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on})}).catch(function(){});}
-function goSleep(){if(asleep)return;asleep=true;clearTimeout(idleTimer);showSleep();setPower(false);}
-function wake(){if(!asleep)return;asleep=false;hideSleep();setPower(true);armIdle();}
+function goSleep(){if(asleep)return;asleep=true;showSleep();setPower(false);}
+function wake(){if(!asleep)return;asleep=false;hideSleep();setPower(true);}
 /* Overlay on/off. Hiding also swallows clicks for a moment, so the tap that
    woke the panel (or a finger still on the glass) can't land on whatever is
    underneath. */
@@ -212,8 +212,6 @@ var swallowUntil=0;
 function showSleep(){sleepEl.classList.add('on');tapState=null;}
 function hideSleep(){sleepEl.classList.remove('on');tapState=null;swallowUntil=Date.now()+350;}
 document.addEventListener('click',function(e){if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();}},true);
-function armIdle(){clearTimeout(idleTimer);var s=currentTimeout();if(s>0&&!asleep)idleTimer=setTimeout(goSleep,s*1000);}
-function onActivity(){if(!asleep)armIdle();} // activity resets the idle timer only while awake
 /* The backlight can also be switched by someone else — off-after-boot, the web
    console, another client — so each /api/panel poll reconciles the overlay with
    the real state: dark screen → asleep (double-tap wakes it, instead of taps
@@ -230,8 +228,8 @@ function syncBacklight(disp){
   // (the power button may really have flipped the screen meanwhile).
   var wait=4000-(Date.now()-powerSetAt);
   if(wait>0){clearTimeout(syncLater);syncLater=setTimeout(function(){syncBacklight(lastDisp);},wait);return;}
-  if(!disp.on&&!asleep){asleep=true;clearTimeout(idleTimer);showSleep();}
-  else if(disp.on&&asleep){asleep=false;hideSleep();armIdle();}
+  if(!disp.on&&!asleep){asleep=true;showSleep();}
+  else if(disp.on&&asleep){asleep=false;hideSleep();}
 }
 /* Pushed by t6-paneld on every backlight change (front power button, T6
    Control Center, a desktop...), so the overlay follows at once; the
@@ -263,7 +261,6 @@ sleepEl.addEventListener('pointerup',function(e){
   tapState={up:now,x:d.x,y:d.y};
 });
 sleepEl.addEventListener('pointercancel',function(){tapDown=null;});
-['pointerdown','keydown'].forEach(function(ev){document.getElementById('stage').addEventListener(ev,onActivity,{passive:true});});
 var putTimer=null;
 function putBrightness(v){
   clearTimeout(putTimer);

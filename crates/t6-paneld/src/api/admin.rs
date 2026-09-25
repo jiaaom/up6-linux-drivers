@@ -86,6 +86,7 @@ pub(super) async fn put_panel(headers: HeaderMap, Json(req): Json<PanelReq>) -> 
         }
         Ok(kiosk_active())
     }).await.unwrap_or_else(|e| Err(format!("panel worker failed: {e}")));
+    crate::idle::settings_changed();
     match res {
         Ok(active) => Json(serde_json::json!({ "enabled": req.enabled, "active": active })).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),

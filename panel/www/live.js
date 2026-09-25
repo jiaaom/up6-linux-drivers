@@ -138,7 +138,6 @@ function cacheStorage(st){var k=JSON.stringify(st);if(k===storageSaved)return;st
 // is loaded): restore the saved layout before the first poll so the widgets
 // don't reshuffle once the server's copy arrives. Returns true if it rendered.
 function restoreHomeFromCache(){return applyLayout(homeCacheLoad().dashboard);}
-var idleArmed=false;
 /* ---------- home health banner ("All systems normal") ----------
    Composed from three sources, most severe wins:
    1. HW_STATUS — t6-paneld's local hardware check every 2 s (temps, fans,
@@ -181,7 +180,6 @@ document.querySelector('#home .kick').addEventListener('click',function(){
 function refresh(d){
   if(!d)return;
   LAST=d;
-  if(!idleArmed){idleArmed=true;armIdle();} // start the idle timer once data exists
   syncBacklight(d.display); // backlight switched off/on elsewhere → match the sleep overlay
   if(!layoutApplied&&d.dashboard){layoutApplied=true;applyLayout(d.dashboard);homeCacheSave({dashboard:d.dashboard});} // restore saved widget layout
   // settings.json is the source of truth for the theme; theme.js has already

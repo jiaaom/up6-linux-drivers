@@ -141,7 +141,6 @@ pub fn build() -> Value {
         "display": {
             "on": disp.on,
             "brightness": disp.brightness,
-            "on_level": disp.on_level,
         },
         // Panel-app (device) settings, persisted by t6-paneld.
         "screen": {

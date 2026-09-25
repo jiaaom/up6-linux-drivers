@@ -506,4 +506,4 @@ MODULE_DESCRIPTION("ZSpace T6 EC platform driver");
 MODULE_AUTHOR("T6 driver project");
 MODULE_LICENSE("GPL");
 MODULE_SOFTDEP("pre: pinctrl_meteorlake");
-MODULE_VERSION("0.9.13");
+MODULE_VERSION("0.9.14");

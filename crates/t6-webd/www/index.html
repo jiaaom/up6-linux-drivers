@@ -92,21 +92,8 @@
 
         <section id="leds" class="page" hidden>
           <p class="notice" id="leds-notice" hidden></p>
+          <p class="meta" id="leds-note" hidden></p>
           <div class="cards wide">
-            <div class="panel">
-              <div class="section-head"><h3 data-i18n="nightMode">Night mode</h3><span class="meta" id="night-state"></span></div>
-              <p class="help" data-i18n="nightHelp">Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.</p>
-              <label class="switch"><input type="checkbox" id="night-manual"><i></i><span data-i18n="nightNow">Night mode now</span></label>
-              <div class="schedule">
-                <label class="switch"><input type="checkbox" id="night-sched"><i></i><span data-i18n="everyDayFrom">Every day from</span></label>
-                <input type="time" id="night-start" value="23:00"> <span class="meta" data-i18n="to">to</span>
-                <input type="time" id="night-end" value="07:00">
-              </div>
-              <div class="actions" id="night-actions" hidden>
-                <button class="ghost-btn" type="button" id="night-revert" data-i18n="revert">Revert</button>
-                <button class="primary-btn" type="button" id="night-apply" data-i18n="apply">Apply</button>
-              </div>
-            </div>
             <div class="panel">
               <div class="section-head"><h3 data-i18n="bayLeds">Bay LEDs</h3><span class="meta" id="bay-summary"></span></div>
               <p class="help" data-i18n="bayHelp">Bays light white when a drive is present. A drive reported faulty blinks red.</p>
@@ -123,22 +110,57 @@
                 <p class="meta led-legend" data-i18n="powerLegend"></p>
               </div>
               <div class="radio-led" data-id="wifi">
-                <label class="switch"><input type="checkbox" class="radio-show"><i></i><span data-i18n="showWifi">Show Wi-Fi status</span></label>
+                <div class="radio-head"><span class="radio-name" data-i18n="wifiLed">Wi-Fi LED</span>
+                  <div class="segmented radio-mode"><button type="button" data-v="auto" data-i18n="modeAll">All states</button><button type="button" data-v="quiet" data-i18n="modeQuiet">Alerts only</button><button type="button" data-v="off" data-i18n="modeOff">Off</button></div></div>
                 <p class="led-status"></p>
+                <label class="switch"><input type="checkbox" id="wifi-hotspot"><i></i><span data-i18n="showHotspot">Show hotspot status</span></label>
                 <p class="meta led-legend" data-i18n="wifiLegend"></p>
               </div>
               <div class="radio-led" data-id="bt">
-                <label class="switch"><input type="checkbox" class="radio-show"><i></i><span data-i18n="showBt">Show Bluetooth status</span></label>
+                <div class="radio-head"><span class="radio-name" data-i18n="btLed">Bluetooth LED</span>
+                  <div class="segmented radio-mode"><button type="button" data-v="auto" data-i18n="modeAll">All states</button><button type="button" data-v="quiet" data-i18n="modeQuiet">Alerts only</button><button type="button" data-v="off" data-i18n="modeOff">Off</button></div></div>
                 <p class="led-status"></p>
                 <p class="meta led-legend" data-i18n="btLegend"></p>
               </div>
             </div>
+            <div class="panel" id="tray-card" data-speed="normal">
+              <div class="section-head"><h3 data-i18n="trayLight">Tray light</h3></div>
+              <p class="help" data-i18n="trayHelp">A decorative light. One colour breathes, two colours take turns, all three make a rainbow.</p>
+              <p class="led-status" id="tray-status"></p>
+              <div class="tray-picker" role="radiogroup">
+                <div class="tray-group">
+                  <div class="tray-chips"><button type="button" class="tray-chip" role="radio" data-v="off"><i class="chip chip-off"></i><span data-i18n="trayOff">Off</span></button></div>
+                </div>
+                <div class="tray-group">
+                  <div class="tray-chips"><button type="button" class="tray-chip" role="radio" data-v="red"><i class="chip chip-red"></i><span data-i18n="trayRed">Red</span></button><button type="button" class="tray-chip" role="radio" data-v="green"><i class="chip chip-green"></i><span data-i18n="trayGreen">Green</span></button><button type="button" class="tray-chip" role="radio" data-v="blue"><i class="chip chip-blue"></i><span data-i18n="trayBlue">Blue</span></button></div>
+                  <span class="tray-group-label" data-i18n="trayBreathe">Breathe</span>
+                </div>
+                <div class="tray-group">
+                  <div class="tray-chips"><button type="button" class="tray-chip" role="radio" data-v="yellow"><i class="chip chip-cycle chip-rg"></i><span data-i18n="trayRG">R + G</span></button><button type="button" class="tray-chip" role="radio" data-v="cyan"><i class="chip chip-cycle chip-gb"></i><span data-i18n="trayGB">G + B</span></button><button type="button" class="tray-chip" role="radio" data-v="magenta"><i class="chip chip-cycle chip-rb"></i><span data-i18n="trayRB">R + B</span></button></div>
+                  <span class="tray-group-label" data-i18n="trayCycle">Cycle</span>
+                </div>
+                <div class="tray-group">
+                  <div class="tray-chips"><button type="button" class="tray-chip" role="radio" data-v="white"><i class="chip chip-rainbow"></i><span data-i18n="trayRainbow">Rainbow</span></button></div>
+                </div>
+              </div>
+              <div class="tray-speed-row"><span data-i18n="speed">Speed</span>
+                <div class="segmented" id="tray-speed"><button type="button" data-v="slow" data-i18n="slow">Slow</button><button type="button" data-v="normal" data-i18n="normal">Normal</button><button type="button" data-v="fast" data-i18n="fast">Fast</button></div></div>
+            </div>
+            <div class="panel">
+              <div class="section-head"><h3 data-i18n="nightMode">Night mode</h3><span class="meta" id="night-state"></span></div>
+              <p class="help" data-i18n="nightHelp">Switches every LED off (the battery LED keeps signalling a power failure). Turn it on by hand, or give it a daily window.</p>
+              <label class="switch"><input type="checkbox" id="night-manual"><i></i><span data-i18n="nightNow">Night mode now</span></label>
+              <div class="schedule">
+                <label class="switch"><input type="checkbox" id="night-sched"><i></i><span data-i18n="everyDayFrom">Every day from</span></label>
+                <input type="time" id="night-start" value="23:00"> <span class="meta" data-i18n="to">to</span>
+                <input type="time" id="night-end" value="07:00">
+              </div>
+              <div class="actions" id="night-actions" hidden>
+                <button class="ghost-btn" type="button" id="night-revert" data-i18n="revert">Revert</button>
+                <button class="primary-btn" type="button" id="night-apply" data-i18n="apply">Apply</button>
+              </div>
+            </div>
           </div>
-          <details class="advanced panel">
-            <summary data-i18n="perLed">Advanced — per-LED control</summary>
-            <p class="meta" id="leds-note"></p>
-            <table class="devices" id="led-devices"></table>
-          </details>
         </section>
 
         <section id="beeper" class="page" hidden>
@@ -168,14 +190,9 @@
             <div class="section-head"><h3 data-i18n="backlight">Backlight</h3><span class="meta" id="bl-note"></span></div>
             <p class="help" data-i18n="backlightHelp">Front LCD backlight. The level is applied immediately and remembered across reboots.</p>
             <label class="switch"><input type="checkbox" id="bl-power"><i></i><span id="bl-power-label" data-i18n="off">Off</span></label>
-            <label class="slider"><span data-i18n="level">Level</span><input type="range" id="bl-slider" min="10" max="100" step="1"><b id="bl-value"></b></label>
+            <label class="slider"><span data-i18n="level">Level</span><input type="range" id="bl-slider" min="1" max="100" step="1"><b id="bl-value"></b></label>
             <label class="switch"><input type="checkbox" id="bl-button"><i></i><span data-i18n="powerButtonScreen">The power button switches the screen on and off</span></label>
             <p class="help" data-i18n="powerButtonHelp">Like a phone's side button. The screen reacts about a second after you let go. A desktop running on the screen also locks its session.</p>
-            <details class="advanced">
-              <summary data-i18n="advanced">Advanced</summary>
-              <label class="switch"><input type="checkbox" id="bl-off-boot"><i></i><span data-i18n="offAfterBoot">Always turn off the built-in display after boot</span></label>
-              <p class="help" data-i18n="offAfterBootHelp">For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.</p>
-            </details>
           </div>
         </section>
 

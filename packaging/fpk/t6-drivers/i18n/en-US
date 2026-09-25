@@ -1,4 +1,4 @@
 [common]
 display_name="T6 Drivers"
 desc="Kernel drivers (DKMS) for the UnifyDrive UP6 / ZSpace T6 / PA60: fans, temperatures, LEDs, backlight, beeper, keys, battery charge control, touchscreen and HDMI-to-DSI panel bridge."
-changelog="1.1.1: touchscreen deghosting (ft8722_ts 0.1.4): phantom multi-touch frames are dropped and a stuck controller is recalibrated automatically; can be turned off with the deghost module parameter. 1.1.0: fixes fan handover, charge-control recovery, touch errors and LED concurrency; adds platform suspend/resume handling; modularizes the touch and display-bridge drivers. Includes IT6616 panel sleep/wake."
+changelog="1.2.0: the battery LED turns red on battery below 10 %, with or without a charge band (t6-platform 0.9.14). 1.1.1: touchscreen deghosting (ft8722_ts 0.1.4): phantom multi-touch frames are dropped and a stuck controller is recalibrated automatically; can be turned off with the deghost module parameter. 1.1.0: fixes fan handover, charge-control recovery, touch errors and LED concurrency; adds platform suspend/resume handling; modularizes the touch and display-bridge drivers. Includes IT6616 panel sleep/wake."

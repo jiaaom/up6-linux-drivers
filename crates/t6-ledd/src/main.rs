@@ -2,8 +2,8 @@
 //!
 //! Single owner of the `t6:*` LEDs and the beeper. Every LED is either in
 //! `auto` mode (a rule evaluated every cycle) or `manual` (a fixed colour);
-//! a bay master switch and a night mode (manual or scheduled) override
-//! them. Settings live in `/etc/t6-ledd.toml`, changed only through the
+//! the Wi-Fi and Bluetooth LEDs also have `quiet` (alerts only). A bay
+//! master switch and a night mode (manual or scheduled) override them. Settings live in `/etc/t6-ledd.toml`, changed only through the
 //! control socket so the file has one writer.
 
 mod beeper;
@@ -140,13 +140,14 @@ impl Daemon {
                 } else {
                     Effect::Solid("white".into())
                 }
-            } else if dev.auto == Some(Auto::Wifi) && self.cfg.setting(dev.id).mode == Mode::Auto {
-                // Wi-Fi faults stay red in night mode, like drive faults.
-                if night && wifi.state != wifi::State::Fault {
-                    Effect::off()
-                } else {
-                    wifi.state.effect()
-                }
+            } else if dev.auto == Some(Auto::Wifi) {
+                let s = wifi.state;
+                let normal = matches!(s, wifi::State::Online | wifi::State::Weak)
+                    || (s == wifi::State::Hotspot && !self.cfg.wifi_hotspot);
+                status_effect(self.cfg.setting(dev.id).mode, night, s == wifi::State::Fault, normal, s.effect())
+            } else if dev.auto == Some(Auto::Bluetooth) {
+                let s = self.bt.state;
+                status_effect(self.cfg.setting(dev.id).mode, night, s == bluetooth::State::Fault, s == bluetooth::State::Connected, s.effect())
             } else if dev.auto == Some(Auto::Power) && self.cfg.setting(dev.id).mode == Mode::Auto {
                 // Overheat blinks red in night mode too.
                 if night && self.power.overheat.is_none() {
@@ -154,19 +155,13 @@ impl Daemon {
                 } else {
                     self.power.effect()
                 }
-            } else if dev.auto == Some(Auto::Bluetooth) && self.cfg.setting(dev.id).mode == Mode::Auto {
-                if night && self.bt.state != bluetooth::State::Fault {
-                    Effect::off()
-                } else {
-                    self.bt.state.effect()
-                }
             } else if night {
                 Effect::off()
             } else {
                 let s = self.cfg.setting(dev.id);
                 let color = match s.mode {
                     Mode::Manual => s.color.unwrap_or_else(|| "off".into()),
-                    Mode::Auto => dev.auto_color().unwrap_or("off").to_string(),
+                    Mode::Auto | Mode::Quiet => dev.auto_color().unwrap_or("off").to_string(),
                 };
                 Effect::Solid(color)
             };
@@ -227,6 +222,7 @@ impl Daemon {
             "bays_enabled": self.cfg.bays_enabled,
             "bay_fault_blink": self.cfg.bay_fault_blink,
             "power_button_screen": self.cfg.power_button_screen,
+            "wifi_hotspot": self.cfg.wifi_hotspot,
             "faults": self.faults.iter().copied().collect::<Vec<u8>>(),
             "bays_present": (1u8..=6).filter(|n| sources::bay_present(*n)).collect::<Vec<u8>>(),
             "tray_speed": self.cfg.tray_speed,
@@ -262,6 +258,8 @@ impl Daemon {
                 let dev = devices::by_id(id).ok_or_else(|| format!("unknown device {id:?}"))?;
                 let setting = if *value == "auto" {
                     DeviceSetting { mode: Mode::Auto, color: None }
+                } else if *value == "quiet" {
+                    DeviceSetting { mode: Mode::Quiet, color: None }
                 } else {
                     DeviceSetting { mode: Mode::Manual, color: Some(value.to_string()) }
                 };
@@ -296,6 +294,12 @@ impl Daemon {
                 self.button_screen.store(self.cfg.power_button_screen, Ordering::Relaxed);
                 self.save()?;
                 self.write_status();
+                Ok("ok".into())
+            }
+            ["wifi-hotspot", on @ ("on" | "off")] => {
+                self.cfg.wifi_hotspot = *on == "on";
+                self.save()?;
+                self.refresh_now();
                 Ok("ok".into())
             }
             ["tray-speed", speed] => {
@@ -365,14 +369,16 @@ impl Daemon {
         }
     }
 
-    /// Leave the LEDs in their automatic state and silence the beeper.
+    /// Leave the LEDs in their automatic state and silence the beeper. The
+    /// status LEDs keep what they show now (their mode and night mode
+    /// included), without animation.
     fn park(&mut self) {
-        let wifi = self.wifi_report().state.effect();
-        let bt = self.bt.state.effect();
+        let shown = |id: &str| self.plan.iter().find(|(d, _)| d.id == id).map(|(_, e)| e.base_color());
         for dev in CATALOG {
             let color = match dev.auto {
-                Some(Auto::Wifi) => Some(wifi.base_color()),
-                Some(Auto::Bluetooth) => Some(bt.base_color()),
+                Some(Auto::Wifi | Auto::Bluetooth) => shown(dev.id),
+                // The tray light has no rule: dark, as before it had none.
+                None => Some("off"),
                 _ => dev.auto_color(),
             };
             if let Some(c) = color {
@@ -380,6 +386,19 @@ impl Daemon {
             }
         }
         let _ = self.beeper.silence();
+    }
+}
+
+/// A Wi-Fi or Bluetooth LED. A fault is an alarm: red in every mode, night
+/// mode included. Otherwise dark at night or when switched off, and in
+/// `quiet` mode while working normally (`normal`).
+fn status_effect(mode: Mode, night: bool, fault: bool, normal: bool, effect: Effect) -> Effect {
+    if fault {
+        effect
+    } else if night || mode == Mode::Manual || (mode == Mode::Quiet && normal) {
+        Effect::off()
+    } else {
+        effect
     }
 }
 
@@ -471,12 +490,6 @@ fn main() {
     let first_this_boot = !boot_marker.exists();
     let _ = std::fs::write(&boot_marker, b"1\n");
     if first_this_boot {
-        // Restore the built-in display to its persisted boot state (on at the
-        // remembered level, unless the user chose to keep it off at boot).
-        match t6_hw_rs::display::Display::new().apply_boot() {
-            Ok((level, on)) => log(&format!("display set to {level} ({}) at boot", if on { "on" } else { "off" })),
-            Err(e) => log(&format!("display boot: {e}")),
-        }
         if daemon.cfg.beep.startup {
             if let Err(e) = daemon.beeper.short() {
                 log(&format!("startup beep: {e}"));
@@ -519,4 +532,27 @@ fn main() {
     let _ = std::fs::remove_file(run_dir.join("status.json"));
     let _ = std::fs::remove_file(run_dir.join("ctl"));
     log("t6-ledd stopped, LEDs left in automatic state");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_led_modes() {
+        let blue = || Effect::Solid("blue".into());
+        let red = || Effect::Solid("red".into());
+        let on = |m, night, fault, normal, e: Effect| status_effect(m, night, fault, normal, e).describe();
+        // auto: every state, dark at night
+        assert_eq!(on(Mode::Auto, false, false, true, blue()), "blue");
+        assert_eq!(on(Mode::Auto, true, false, true, blue()), "off");
+        // quiet: dark while normal, other states shown
+        assert_eq!(on(Mode::Quiet, false, false, true, blue()), "off");
+        assert_eq!(on(Mode::Quiet, false, false, false, Effect::Solid("yellow".into())), "yellow");
+        // off: dark, but a fault still shows, in every mode and at night
+        assert_eq!(on(Mode::Manual, false, false, false, Effect::Solid("yellow".into())), "off");
+        for m in [Mode::Auto, Mode::Quiet, Mode::Manual] {
+            assert_eq!(on(m, true, true, false, red()), "red");
+        }
+    }
 }

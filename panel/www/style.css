@@ -351,6 +351,44 @@
   .setrow.tap{cursor:pointer}
   .chev{opacity:.4;font-size:18px}
   .lbl.danger{color:var(--danger)}
+  /* Indicator lights page (leds.js) */
+  .led-sub{font-size:14.5px;color:var(--ink-3);margin-top:3px}
+  .led-foot{font-size:14px;color:var(--ink-4);margin:7px 4px 0;line-height:1.35}
+  .led-gap{margin-top:12px}
+  .led-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:9px;vertical-align:1px;
+    border:var(--line) solid var(--hair-strong)}
+  .led-dot.off{background:transparent}
+  .led-dot.fx{animation:led-pulse 1.2s ease-in-out infinite}
+  @keyframes led-pulse{50%{opacity:.25}}
+  #ledTray{--tray-period:4s}
+  #ledTray[data-speed="slow"]{--tray-period:6s}
+  #ledTray[data-speed="fast"]{--tray-period:2.5s}
+  .led-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
+  .led-chip{display:flex;flex-direction:column;align-items:center;gap:7px;padding:10px 2px 8px;border-radius:14px;
+    border:var(--line) solid transparent;font-size:14.5px;color:var(--ink-3);transition:transform .1s,background .12s}
+  .led-chip:active{transform:scale(.94)}
+  .led-chip.on{background:var(--accent-soft2);border-color:var(--accent-border);color:var(--accent-text);font-weight:600}
+  .led-chip .chip{position:relative;display:block;width:40px;height:40px;border-radius:50%;border:var(--line) solid var(--hair-strong)}
+  .chip-off{background:linear-gradient(135deg,transparent 45%,var(--ink-4) 45% 55%,transparent 55%),var(--fill-2)}
+  .chip-red{background:#ef4444}.chip-green{background:#22c55e}.chip-blue{background:#3b82f6}
+  .chip-rg{--a:#ef4444;--b:#22c55e}.chip-gb{--a:#22c55e;--b:#3b82f6}.chip-rb{--a:#ef4444;--b:#3b82f6}
+  .chip-cycle{background:linear-gradient(90deg,var(--a) 50%,var(--b) 50%)}
+  .chip-rainbow{background:conic-gradient(#ef4444,#eab308,#22c55e,#06b6d4,#3b82f6,#d946ef,#ef4444)}
+  /* The chosen effect plays a preview at the chosen speed. */
+  .led-chip.on :is(.chip-red,.chip-green,.chip-blue){animation:tray-breathe var(--tray-period) ease-in-out infinite}
+  .led-chip.on .chip-cycle{background:var(--a);animation:tray-breathe var(--tray-period) ease-in-out infinite}
+  .led-chip.on .chip-cycle::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--b);
+    animation:tray-turns calc(var(--tray-period)*2) steps(1) infinite}
+  .led-chip.on .chip-rainbow{animation:tray-hue calc(var(--tray-period)*2) linear infinite}
+  @keyframes tray-breathe{0%,100%{opacity:.3}50%{opacity:1}}
+  @keyframes tray-turns{0%{opacity:0}50%{opacity:1}}
+  @keyframes tray-hue{to{filter:hue-rotate(360deg)}}
+  #ledSpeed .segopt.dim{opacity:.45}
+  .led-step{display:flex;align-items:center;gap:6px}
+  .led-stepbtn{width:44px;height:40px;border-radius:11px;background:var(--fill-2);border:var(--line) solid var(--hair);
+    display:flex;align-items:center;justify-content:center;font-size:21px;color:var(--ink-2);transition:transform .1s}
+  .led-stepbtn:active{transform:scale(.92)}
+  .led-time{min-width:64px;text-align:center;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
   #confirm{position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
     background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .24s}
   #confirm.on{opacity:1;pointer-events:auto}

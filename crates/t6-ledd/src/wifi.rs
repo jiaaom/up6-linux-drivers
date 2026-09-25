@@ -11,12 +11,13 @@
 //!   weak        cyan            online, but the signal is below -75 dBm
 //!   connecting  cyan, slow blink  NetworkManager is connecting (at most 60 s)
 //!   hotspot     blue heartbeat  this machine is an access point
-//!   limited     yellow          on, but not usable (not connected, no IP,
-//!                               no internet)
-//!   fault       red             hardware or software fault (shown in night
-//!                               mode too)
+//!   limited     yellow          connected, but not usable (no IP, sign-in
+//!                               page, no internet)
+//!   fault       red             hardware or software fault (shown in every
+//!                               mode, night mode too)
 //!   off         dark            turned off on purpose, no Wi-Fi hardware,
-//!                               or no Wi-Fi network saved
+//!                               no Wi-Fi network saved, or no saved network
+//!                               in range (nothing to fix from here)
 
 use crate::leds::Effect;
 use std::io::{BufRead, BufReader, Read};
@@ -318,7 +319,7 @@ impl Monitor {
             20 => Report::new(State::Fault, "unavailable"),
             30 | 120 => {
                 if configured {
-                    Report::new(State::Limited, "not-connected")
+                    Report::new(State::Off, "not-connected")
                 } else {
                     Report::new(State::Off, "not-configured")
                 }
@@ -328,7 +329,7 @@ impl Monitor {
                 if now.duration_since(since) < CONNECTING_MAX {
                     with_conn(Report::new(State::Connecting, "connecting"))
                 } else {
-                    with_conn(Report::new(State::Limited, "not-connected"))
+                    with_conn(Report::new(State::Off, "not-connected"))
                 }
             }
             100 if d.access_point => with_conn(Report::new(State::Hotspot, "hotspot")),
@@ -664,7 +665,8 @@ mod tests {
         assert_eq!(m.classify_nm(&i, &dev(100, 3), true, t).reason, "no-internet");
         assert_eq!(m.classify_nm(&i, &NmDevice { has_ip: false, ..dev(100, 1) }, true, t).reason, "no-ip");
         assert_eq!(m.classify_nm(&i, &NmDevice { access_point: true, ..dev(100, 1) }, true, t).state, State::Hotspot);
-        assert_eq!(m.classify_nm(&i, &dev(30, 0), true, t).state, State::Limited);
+        assert_eq!(m.classify_nm(&i, &dev(30, 0), true, t).state, State::Off);
+        assert_eq!(m.classify_nm(&i, &dev(30, 0), true, t).reason, "not-connected");
         assert_eq!(m.classify_nm(&i, &dev(30, 0), false, t).state, State::Off);
         assert_eq!(m.classify_nm(&i, &dev(20, 0), true, t).state, State::Fault);
     }
@@ -676,7 +678,7 @@ mod tests {
         let i = iface(None);
         assert_eq!(m.classify_nm(&i, &dev(70, 0), true, t).state, State::Connecting);
         assert_eq!(m.classify_nm(&i, &dev(70, 0), true, t + Duration::from_secs(59)).state, State::Connecting);
-        assert_eq!(m.classify_nm(&i, &dev(70, 0), true, t + Duration::from_secs(61)).state, State::Limited);
+        assert_eq!(m.classify_nm(&i, &dev(70, 0), true, t + Duration::from_secs(61)).state, State::Off);
     }
 
     #[test]
@@ -728,8 +730,8 @@ mod tests {
         // Switching Wi-Fi off shows at once.
         assert_eq!(m.debounce(Report::new(State::Off, "disabled"), s(1)).state, State::Off);
         // Back on: ~3 s "disconnected" while scanning stays dark.
-        assert_eq!(m.debounce(Report::new(State::Limited, "not-connected"), s(2)).state, State::Off);
-        assert_eq!(m.debounce(Report::new(State::Limited, "not-connected"), s(5)).state, State::Off);
+        assert_eq!(m.debounce(Report::new(State::Off, "not-connected"), s(2)).state, State::Off);
+        assert_eq!(m.debounce(Report::new(State::Off, "not-connected"), s(5)).state, State::Off);
         assert_eq!(m.debounce(Report::new(State::Connecting, "connecting"), s(5)).state, State::Connecting);
         assert_eq!(m.debounce(Report::new(State::Online, "connected"), s(6)).state, State::Online);
     }

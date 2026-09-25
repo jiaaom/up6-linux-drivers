@@ -14,6 +14,9 @@
  * policy" and leave the bits clear. Anything else hands charging to this
  * driver: a periodic poll of the EC state of charge (0x7c) sets bit 6 when
  * SoC <= start and clears it when SoC >= end.
+ *
+ * Independently of the band, the battery LED turns red while the pack runs
+ * below T6_BATLED_LOW_SOC on battery.
  */
 #include <acpi/battery.h>
 #include <linux/bitfield.h>
@@ -39,12 +42,15 @@
  * Battery LED. While the host inhibits charging the EC blinks this LED green
  * on its own; taking host control (bit 0) stops that but also stops the
  * EC's orange-on-battery indication, so the driver renders that itself
- * while a band is active and hands the LED back (0x00) otherwise.
+ * while a band is active and hands the LED back (0x00) otherwise. A low
+ * pack on battery is red in either case (the EC has no low indication).
  */
 #define T6_BATLED_REG 0xa1
 #define T6_BATLED_EC 0x00
 #define T6_BATLED_DARK 0x01
 #define T6_BATLED_ORANGE 0x03
+#define T6_BATLED_RED 0x09
+#define T6_BATLED_LOW_SOC 10
 
 /* One pack, one platform device; the battery attributes have no other way back to priv. */
 static struct t6_platform *t6_chg;
@@ -59,27 +65,59 @@ bool t6_charge_owns_battery_led(struct t6_platform *priv)
 	bool active;
 
 	mutex_lock(&priv->charge_lock);
-	active = t6_charge_host_active(priv);
+	active = t6_charge_host_active(priv) || priv->batled_low;
 	mutex_unlock(&priv->charge_lock);
 	return active;
 }
 
-static int t6_charge_set_led(struct t6_platform *priv, u8 ctrl)
+static bool t6_charge_on_battery(u8 ctrl)
 {
+	return FIELD_GET(T6_CHG_STATUS_MASK, ctrl) == T6_CHG_STATUS_BATTERY;
+}
+
+/*
+ * Without a band the LED belongs to the EC (or to a manual LED-class
+ * setting) unless it is lit red here. @handback writes EC ownership back
+ * anyway, for a band that just ended.
+ */
+static int t6_charge_set_led(struct t6_platform *priv, u8 ctrl, u8 soc,
+			     bool handback)
+{
+	bool battery = t6_charge_on_battery(ctrl);
+	bool low = battery && soc < T6_BATLED_LOW_SOC;
 	u8 want, cur;
 	int ret;
 
-	if (!t6_charge_host_active(priv))
+	if (low)
+		want = T6_BATLED_RED;
+	else if (t6_charge_host_active(priv))
+		want = battery ? T6_BATLED_ORANGE : T6_BATLED_DARK;
+	else if (handback || priv->batled_low)
 		want = T6_BATLED_EC;
-	else if (FIELD_GET(T6_CHG_STATUS_MASK, ctrl) == T6_CHG_STATUS_BATTERY)
-		want = T6_BATLED_ORANGE;
 	else
-		want = T6_BATLED_DARK;
+		return 0;
 
 	ret = t6_ec_read(priv, T6_BATLED_REG, &cur);
-	if (ret)
-		return ret;
-	return cur == want ? 0 : t6_ec_write(priv, T6_BATLED_REG, want);
+	if (!ret && cur != want)
+		ret = t6_ec_write(priv, T6_BATLED_REG, want);
+	if (!ret)
+		priv->batled_low = low;
+	return ret;
+}
+
+/* No band: only the LED, following the charge down while on battery. */
+static int t6_charge_led_update(struct t6_platform *priv, bool *rearm)
+{
+	u8 ctrl = 0, soc = 0;
+	int ret;
+
+	ret = t6_ec_read(priv, T6_CHG_REG, &ctrl);
+	if (!ret)
+		ret = t6_ec_read(priv, T6_SOC_REG, &soc);
+	if (!ret)
+		ret = t6_charge_set_led(priv, ctrl, soc, false);
+	*rearm = ret || priv->batled_low || t6_charge_on_battery(ctrl);
+	return ret;
 }
 
 static int t6_charge_apply(struct t6_platform *priv)
@@ -101,7 +139,9 @@ static int t6_charge_apply(struct t6_platform *priv)
 		ret = t6_ec_update_bits(priv, T6_CHG_REG,
 					T6_CHG_OWNER | T6_CHG_ENABLE, 0);
 		if (!ret)
-			ret = t6_charge_set_led(priv, ctrl);
+			ret = t6_ec_read(priv, T6_SOC_REG, &soc);
+		if (!ret)
+			ret = t6_charge_set_led(priv, ctrl, soc, true);
 		priv->charge_recovery_pending = !!ret;
 		return ret;
 	}
@@ -121,7 +161,7 @@ static int t6_charge_apply(struct t6_platform *priv)
 				T6_CHG_OWNER | T6_CHG_ENABLE, ctrl);
 	if (ret)
 		return ret;
-	ret = t6_charge_set_led(priv, ctrl);
+	ret = t6_charge_set_led(priv, ctrl, soc, true);
 	priv->charge_recovery_pending = false;
 	return ret;
 }
@@ -137,24 +177,24 @@ static int t6_charge_return_to_ec(struct t6_platform *priv)
 	if (ret)
 		return ret;
 	ret = t6_ec_read(priv, T6_BATLED_REG, &led);
-	if (ret)
-		return ret;
-	return led == T6_BATLED_EC ? 0 : t6_ec_write(priv, T6_BATLED_REG,
-							T6_BATLED_EC);
+	if (!ret && led != T6_BATLED_EC)
+		ret = t6_ec_write(priv, T6_BATLED_REG, T6_BATLED_EC);
+	if (!ret)
+		priv->batled_low = false;
+	return ret;
 }
 
-/* AC plug/unplug reaches us through the ACPI battery/adapter drivers within a second. */
+/*
+ * AC plug/unplug reaches us through the ACPI battery/adapter drivers within
+ * a second. Also without a band: unplugging starts the low-battery watch.
+ */
 static int t6_charge_psy_notify(struct notifier_block *nb, unsigned long event,
 				void *data)
 {
 	struct t6_platform *priv = container_of(nb, struct t6_platform,
 						charge_psy_nb);
 
-	if (event == PSY_EVENT_PROP_CHANGED &&
-	    READ_ONCE(priv->online) &&
-	    (READ_ONCE(priv->charge_start) != 0 ||
-	     READ_ONCE(priv->charge_end) != 100 ||
-	     READ_ONCE(priv->charge_recovery_pending)))
+	if (event == PSY_EVENT_PROP_CHANGED && READ_ONCE(priv->online))
 		mod_delayed_work(system_freezable_wq, &priv->charge_work, 0);
 	return NOTIFY_OK;
 }
@@ -163,21 +203,23 @@ static void t6_charge_work(struct work_struct *work)
 {
 	struct t6_platform *priv = container_of(work, struct t6_platform,
 						charge_work.work);
+	bool rearm;
 	int ret;
 
 	if (t6_platform_op_begin(priv))
 		return;
 	mutex_lock(&priv->charge_lock);
-	if (!t6_charge_host_active(priv) && !priv->charge_recovery_pending) {
-		mutex_unlock(&priv->charge_lock);
-		t6_platform_op_end(priv);
-		return;
+	if (t6_charge_host_active(priv) || priv->charge_recovery_pending) {
+		ret = t6_charge_apply(priv);
+		rearm = t6_charge_host_active(priv) ||
+			priv->charge_recovery_pending;
+	} else {
+		ret = t6_charge_led_update(priv, &rearm);
 	}
-	ret = t6_charge_apply(priv);
 	if (ret)
 		dev_warn_ratelimited(&priv->pdev->dev,
 				     "charge control update failed: %d\n", ret);
-	if (t6_charge_host_active(priv) || priv->charge_recovery_pending)
+	if (rearm)
 		mod_delayed_work(system_freezable_wq, &priv->charge_work,
 				 msecs_to_jiffies(T6_CHG_POLL_MS));
 	mutex_unlock(&priv->charge_lock);
@@ -245,12 +287,15 @@ int t6_charge_suspend(struct t6_platform *priv)
 	return ret;
 }
 
+/* Also at probe, once the device is online. */
 int t6_charge_resume(struct t6_platform *priv)
 {
 	int ret;
 
 	mutex_lock(&priv->charge_lock);
 	if (!t6_charge_host_active(priv) && !priv->charge_recovery_pending) {
+		/* Came up on battery: start the low-battery watch without an AC event. */
+		mod_delayed_work(system_freezable_wq, &priv->charge_work, 0);
 		mutex_unlock(&priv->charge_lock);
 		return 0;
 	}
@@ -389,6 +434,7 @@ int t6_charge_register(struct t6_platform *priv)
 	priv->charge_end = 100;
 	priv->charge_enabled = false;
 	priv->charge_recovery_pending = false;
+	priv->batled_low = false;
 	WRITE_ONCE(t6_chg, priv);
 
 	/* Start from EC policy regardless of what a previous owner left behind. */

@@ -53,6 +53,26 @@ int main(void)
  assert(t6_charge_resume(&p)==0);
  assert((registers[0x57]&0x60)==0x60);
  puts("Charge failure rearm, failed EC handback, inactive LED and PM hysteresis: PASS");
+ struct t6_led bat={.priv=&p,.address=0xa1,.on_value=0x41,.mode=T6_LED_FULL_BYTE};
+ #define POWER_EVENT() do { t6_charge_psy_notify(&p.charge_psy_nb,PSY_EVENT_PROP_CHANGED,NULL); run_charge_work(&p); } while(0)
+ registers[0x57]=(registers[0x57]&~0x0c)|0x08;registers[0x7c]=9; /* band 50/70, on battery, low */
+ POWER_EVENT();
+ assert(registers[0xa1]==0x09 && t6_charge_owns_battery_led(&p));
+ registers[0x7c]=10;run_charge_work(&p);
+ assert(registers[0xa1]==0x03);
+ assert(t6_charge_set_threshold(&p,false,100)==0 && t6_charge_set_threshold(&p,true,0)==0);
+ assert(registers[0xa1]==0x00 && !t6_charge_owns_battery_led(&p));
+ registers[0x7c]=9;POWER_EVENT(); /* no band: red too, and kept watching */
+ assert(registers[0xa1]==0x09 && t6_charge_owns_battery_led(&p) && p.charge_work.pending);
+ assert(t6_led_set_blocking(&bat.cdev,1)==-EBUSY);
+ registers[0x57]=(registers[0x57]&~0x0c)|0x04;POWER_EVENT(); /* back on AC */
+ assert(registers[0xa1]==0x00 && !t6_charge_owns_battery_led(&p) && !p.charge_work.pending);
+ registers[0xa1]=0x41;POWER_EVENT(); /* a manual colour without a band is left alone */
+ assert(registers[0xa1]==0x41);
+ registers[0x57]=(registers[0x57]&~0x0c)|0x08;registers[0x7c]=50;POWER_EVENT();
+ assert(registers[0xa1]==0x41 && p.charge_work.pending);
+ registers[0xa1]=0x00;
+ puts("Low-battery red LED with and without a band, EC handback: PASS");
  struct t6_led red={.priv=&p,.address=0x50,.on_value=8,.mode=T6_LED_FULL_BYTE};
  struct t6_led white={.priv=&p,.address=0x50,.on_value=1,.mode=T6_LED_FULL_BYTE};
  assert(t6_led_set_blocking(&red.cdev,1)==0);

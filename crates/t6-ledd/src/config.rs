@@ -24,6 +24,10 @@ pub struct Config {
     /// The front power button switches the built-in screen on and off.
     #[serde(default = "yes")]
     pub power_button_screen: bool,
+    /// Show the Wi-Fi hotspot heartbeat (otherwise the LED stays dark while
+    /// this machine is a hotspot).
+    #[serde(default = "yes")]
+    pub wifi_hotspot: bool,
     /// Tray light breathing speed: "slow" | "normal" | "fast".
     #[serde(default = "default_tray_speed")]
     pub tray_speed: String,
@@ -61,8 +65,12 @@ pub struct DeviceSetting {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
+    /// The automatic rule; for a status LED, every state.
     #[default]
     Auto,
+    /// Status LEDs (Wi-Fi, Bluetooth) only: dark while working normally,
+    /// every other state as in `auto`.
+    Quiet,
     Manual,
 }
 
@@ -110,16 +118,20 @@ impl BeepConfig {
     }
 }
 
+/// A fresh install: the Wi-Fi and Bluetooth LEDs stay dark while working
+/// normally. A file without these entries (an upgrade) keeps `auto`.
 impl Default for Config {
     fn default() -> Self {
+        let quiet = || DeviceSetting { mode: Mode::Quiet, color: None };
         Config {
             bays_enabled: true,
             bay_fault_blink: true,
             power_button_screen: true,
+            wifi_hotspot: true,
             tray_speed: default_tray_speed(),
             beep: BeepConfig::default(),
             night: Night::default(),
-            devices: BTreeMap::new(),
+            devices: BTreeMap::from([("bt".into(), quiet()), ("wifi".into(), quiet())]),
         }
     }
 }
@@ -141,9 +153,10 @@ impl Config {
         std::fs::write(path, format!("{HEADER}{body}")).map_err(|e| format!("cannot write {}: {e}", path.display()))
     }
 
-    /// A fixed colour saved before the LED became a status light (power,
-    /// Wi-Fi, Bluetooth) goes back to automatic instead of failing the
-    /// whole file.
+    /// Settings an older version could save, instead of failing the whole
+    /// file: a fixed colour saved before the LED became a status light
+    /// (power, Wi-Fi, Bluetooth) goes back to automatic, and `auto` on a
+    /// device that no longer has a rule (the tray light) to its default.
     fn drop_retired_colors(&mut self) {
         self.devices.retain(|id, s| {
             let Some(dev) = devices::by_id(id) else { return true };
@@ -152,7 +165,7 @@ impl Config {
             if retired {
                 println!("{id}: fixed colour {:?} is no longer offered; back to automatic", s.color.as_deref().unwrap_or(""));
             }
-            !retired
+            !retired && !(s.mode == Mode::Auto && dev.auto.is_none())
         });
     }
 
@@ -170,8 +183,12 @@ impl Config {
         Ok(())
     }
 
+    /// A device's setting; unset, its rule, or off when it has none.
     pub fn setting(&self, id: &str) -> DeviceSetting {
-        self.devices.get(id).cloned().unwrap_or_default()
+        self.devices.get(id).cloned().unwrap_or_else(|| match devices::by_id(id) {
+            Some(dev) if dev.auto.is_none() => DeviceSetting { mode: Mode::Manual, color: Some("off".into()) },
+            _ => DeviceSetting::default(),
+        })
     }
 }
 
@@ -181,6 +198,11 @@ impl DeviceSetting {
             Mode::Auto => {
                 if dev.auto.is_none() {
                     return Err(format!("{}: no automatic mode", dev.id));
+                }
+            }
+            Mode::Quiet => {
+                if !dev.has_quiet() {
+                    return Err(format!("{}: no alerts-only mode", dev.id));
                 }
             }
             Mode::Manual => {
@@ -212,5 +234,33 @@ mod tests {
         // Setting a retired colour now is refused.
         let wifi = devices::by_id("wifi").unwrap();
         assert!(DeviceSetting { mode: Mode::Manual, color: Some("blue".into()) }.validate_for(wifi).is_err());
+    }
+
+    #[test]
+    fn tray_auto_from_older_versions_becomes_off() {
+        let mut cfg: Config = toml::from_str("[devices]\nrgb = { mode = \"auto\" }\n").unwrap();
+        cfg.drop_retired_colors();
+        assert!(cfg.validate().is_ok());
+        assert_eq!(cfg.setting("rgb"), DeviceSetting { mode: Mode::Manual, color: Some("off".into()) });
+    }
+
+    #[test]
+    fn quiet_is_for_wifi_and_bluetooth_only() {
+        let quiet = DeviceSetting { mode: Mode::Quiet, color: None };
+        assert!(quiet.validate_for(devices::by_id("wifi").unwrap()).is_ok());
+        assert!(quiet.validate_for(devices::by_id("bt").unwrap()).is_ok());
+        assert!(quiet.validate_for(devices::by_id("power").unwrap()).is_err());
+        assert!(quiet.validate_for(devices::by_id("rgb").unwrap()).is_err());
+    }
+
+    #[test]
+    fn fresh_install_is_quiet_upgrade_keeps_auto() {
+        let fresh = Config::default();
+        assert!(fresh.validate().is_ok());
+        assert_eq!(fresh.setting("wifi").mode, Mode::Quiet);
+        assert_eq!(fresh.setting("bt").mode, Mode::Quiet);
+        let upgraded: Config = toml::from_str("bays_enabled = true\n").unwrap();
+        assert_eq!(upgraded.setting("wifi").mode, Mode::Auto);
+        assert!(upgraded.wifi_hotspot);
     }
 }

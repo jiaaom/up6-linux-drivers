@@ -32,6 +32,8 @@ struct t6_platform {
 	unsigned int charge_end;
 	bool charge_enabled;
 	bool charge_recovery_pending;
+	/* The battery LED is lit red for a low pack (see t6_charge_set_led). */
+	bool batled_low;
 	/* Tray RGB (0xa2) breathing-speed nibble applied with every colour. */
 	u8 tray_speed;
 };

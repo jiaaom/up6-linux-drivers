@@ -74,7 +74,15 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/hwinfo"), get(get_hwinfo))
         // Local resource monitor (CPU/mem/GPU/NPU/disks/procs) — sysfs+procfs, no login.
         .route(&p("/api/sysmon"), get(get_sysmon))
+        // Indicator LEDs (t6-ledd), the same settings as the Control Center
+        // LED page. Device-level, no login (physical-access model).
+        .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/night"), put(put_led_night))
+        .route(&p("/api/leds/bays"), put(put_led_bays))
+        .route(&p("/api/leds/bay-fault-blink"), put(put_led_bay_fault_blink))
+        .route(&p("/api/leds/wifi-hotspot"), put(put_led_wifi_hotspot))
+        .route(&p("/api/leds/tray-speed"), put(put_led_tray_speed))
+        .route(&p("/api/leds/{device}"), put(put_led))
         .route(&p("/api/settings/ssh"), put(put_ssh))
         // Fan profile (silent/balance/performance/custom). Device-level, no login.
         .route(&p("/api/fan"), get(get_fan))

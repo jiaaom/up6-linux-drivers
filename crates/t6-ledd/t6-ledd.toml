@@ -3,10 +3,19 @@
 #
 # bays_enabled  master switch for the six bay LEDs
 # [night]       manual = true forces night mode; schedule = "23:00-07:00"
-# [devices.<id>] mode = "auto" | "manual", color = "<name>" for manual
+# wifi_hotspot  show the Wi-Fi hotspot heartbeat
+# [devices.<id>] mode = "auto" | "manual", color = "<name>" for manual;
+#   wifi and bt also take "quiet" (dark while working normally)
 #   ids: power, bay1..bay6, rgb, bt, wifi (battery is always automatic)
 
 bays_enabled = true
+wifi_hotspot = true
 
 [night]
 manual = false
+
+[devices.bt]
+mode = "quiet"
+
+[devices.wifi]
+mode = "quiet"

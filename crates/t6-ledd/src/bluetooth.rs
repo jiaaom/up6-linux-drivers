@@ -7,8 +7,8 @@
 //!   discoverable  blue heartbeat  the adapter can be found (pairing)
 //!   connected     blue            at least one device is connected
 //!   fault         red             Bluetooth hardware without a working
-//!                                 adapter, or hard-blocked (shown in night
-//!                                 mode too)
+//!                                 adapter, or hard-blocked (shown in every
+//!                                 mode, night mode too)
 //!   off           dark            idle, powered off (e.g. no BlueZ),
 //!                                 switched off, or no Bluetooth hardware
 

@@ -49,7 +49,7 @@ function buildSettings(){
   var bri=(LAST&&LAST.display&&LAST.display.brightness!=null)?LAST.display.brightness:50;
   var to=(LAST&&LAST.screen&&LAST.screen.timeout_s!=null)?LAST.screen.timeout_s:0;
   var lang=(LAST&&LAST.language)||'en';
-  var ledsOn=!(LAST&&LAST.leds&&LAST.leds.night); // indicator lights active when night mode is off
+  var ledsNight=!!(LAST&&LAST.leds&&LAST.leds.night); // night mode active (manual or its daily window)
   var sshOn=!!(LAST&&LAST.ssh&&LAST.ssh.enabled);
   var ccOn=!(LAST&&LAST.screen&&LAST.screen.color_correction===false); // default on
   var appVer=(LAST&&LAST.app&&LAST.app.version)||'—'; // installed package version (t6-paneld)
@@ -70,7 +70,7 @@ function buildSettings(){
       '<div class="seg" id="themeSeg">'+THEMES.map(function(t){return '<div class="segopt'+(t===theme?' on':'')+'" data-th="'+t+'">'+(t==='dark'?'Dark':'Light')+'</div>';}).join('')+'</div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Hardware</div><div class="card">'+
-      '<div class="setrow"><div class="lbl">Device indicator lights</div><div class="etoggle'+(ledsOn?' on':'')+'" id="ledToggle"><div class="knob"></div></div></div>'+
+      '<div class="setrow tap" id="ledsRow"><div class="lbl">Indicator lights</div><div class="setval">'+(ledsNight?'Night mode':'On')+' <span class="chev">›</span></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Cooling</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Fan profile</div></div>'+
@@ -103,12 +103,8 @@ function buildSettings(){
       setTheme(o.dataset.th);
     });
   });
-  // Device indicator lights -> t6-ledd night mode (off = lights stay dark)
-  document.getElementById('ledToggle').addEventListener('click',function(){
-    var nowOn=!this.classList.contains('on');this.classList.toggle('on',nowOn);
-    var night=!nowOn;if(LAST&&LAST.leds)LAST.leds.night=night;
-    fetch('api/leds/night',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:night})}).catch(function(){});
-  });
+  // Indicator lights -> the full LED page (leds.js)
+  document.getElementById('ledsRow').addEventListener('click',openLeds);
   // SSH on/off (systemctl via t6-paneld). Security-relevant → confirm first.
   var sshT=document.getElementById('sshToggle');
   if(sshT)sshT.addEventListener('click',function(){
@@ -212,7 +208,7 @@ var swallowUntil=0;
 function showSleep(){sleepEl.classList.add('on');tapState=null;}
 function hideSleep(){sleepEl.classList.remove('on');tapState=null;swallowUntil=Date.now()+350;}
 document.addEventListener('click',function(e){if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();}},true);
-/* The backlight can also be switched by someone else — off-after-boot, the web
+/* The backlight can also be switched by someone else — the power button, the web
    console, another client — so each /api/panel poll reconciles the overlay with
    the real state: dark screen → asleep (double-tap wakes it, instead of taps
    landing on an invisible UI); lit screen → overlay dropped. Kiosk only: a
@@ -270,7 +266,7 @@ function putBrightness(v){
 }
 function initSlider(initial){
   var s=document.getElementById('briSlider'),fill=s.querySelector('.fill'),val=document.getElementById('briVal');
-  function apply(v){v=Math.max(10,Math.min(100,Math.round(v)));fill.style.width=v+'%';val.textContent=v+'%';return v;}
+  function apply(v){v=Math.max(1,Math.min(100,Math.round(v)));fill.style.width=v+'%';val.textContent=v+'%';return v;}
   apply(initial);
   var dragging=false;
   function toVal(clientX){var r=s.getBoundingClientRect();return ((clientX-r.left)/r.width)*100;}

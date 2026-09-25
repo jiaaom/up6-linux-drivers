@@ -125,7 +125,7 @@ async fn main() {
     backlight::start();
     idle::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
-    // boot too (t6-ledd, which runs first, restores the saved brightness).
+    // boot too (it comes up lit; systemd-backlight restores the level).
     if !settings::load().panel_enabled() {
         match tokio::task::spawn_blocking(|| t6_hw_rs::display::Display::new().set_power(false)).await {
             Ok(Ok(_)) => {}

@@ -1,4 +1,4 @@
-# t6-platform 0.9.13
+# t6-platform 0.9.14
 
 The module exposes three labelled fan RPM/PWM channels and four EC
 temperature sensors through hwmon
@@ -26,7 +26,8 @@ the primary battery API. The driver adds the standard
 `charge_control_start_threshold` / `charge_control_end_threshold` attributes
 to `BAT0` (default `0/100` = EC policy; see
 `../docs/battery-charge-control.md`). No other battery-control writes are
-performed.
+performed. The battery LED turns red on battery below 10 % (EC state of
+charge), with or without a band, and goes back to the EC on AC.
 
 All EC operations are mutex-protected and return transport errors. Probe
 writes only the three fan PWM registers, `0x59` bit 3, and clears `0x57`

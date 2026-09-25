@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 /// Automatic behaviour of a device.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Auto {
-    /// Always this colour.
-    Fixed(&'static str),
     /// Dark while the screen is on, white while it is off, red blink when
     /// overheating; see `power.rs`.
     Power,
@@ -91,11 +89,11 @@ pub const CATALOG: &[Device] = &[
         leds: &["t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"],
         // Effect light: a single colour breathes, two cycle between them,
         // all three is a rainbow, and "off" is a real host-controlled dark
-        // state (enable bit, no colour). Default off.
+        // state (enable bit, no colour). No automatic rule; default off.
         colors: rgb_colors!("t6:rgb:red", "t6:rgb:green", "t6:rgb:blue"),
         manual: None,
-        auto: Some(Auto::Fixed("off")),
-        auto_desc: "off",
+        auto: None,
+        auto_desc: "",
     },
     Device {
         id: "bt",
@@ -124,7 +122,7 @@ pub const CATALOG: &[Device] = &[
         colors: &[],
         manual: None,
         auto: Some(Auto::ChargeControl),
-        auto_desc: "dark on mains, orange on battery (charge control)",
+        auto_desc: "dark on mains, orange on battery, red below 10 % (charge control)",
     },
 ];
 
@@ -133,6 +131,11 @@ pub fn by_id(id: &str) -> Option<&'static Device> {
 }
 
 impl Device {
+    /// Status LEDs that offer the "alerts only" mode.
+    pub fn has_quiet(&self) -> bool {
+        matches!(self.auto, Some(Auto::Wifi | Auto::Bluetooth))
+    }
+
     pub fn is_bay(&self) -> bool {
         matches!(self.auto, Some(Auto::BayPresent(_)))
     }
@@ -162,7 +165,6 @@ impl Device {
     /// LED alone.
     pub fn auto_color(&self) -> Option<&'static str> {
         match self.auto? {
-            Auto::Fixed(c) => Some(c),
             Auto::BayPresent(n) => Some(if sources::bay_present(n) { "white" } else { "off" }),
             // White: what the LED is left at when the daemon exits.
             Auto::Power => Some("white"),

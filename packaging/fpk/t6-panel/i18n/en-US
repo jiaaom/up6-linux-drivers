@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Front Panel"
 desc="Front touch-screen app for the UnifyDrive UP6 / ZSpace T6: dashboard, screen and network info, device settings. Requires T6 Control Center."
-changelog="1.0.3: the screen timeout now runs in the backend and watches the touchscreen itself, so the screen still turns off if the panel app hangs or restarts; screen off no longer sleeps the panel (phantom touches, no double-tap wake). 1.0.2: panel sleep/wake with safe backlight ordering; display errors are reported without illuminating an uncertain panel; corrected kiosk start/stop sequencing."
+changelog="1.2.0: Settings → Indicator lights has the full LED settings of the Control Center (bays, status LEDs, tray light, night mode with its daily window); brightness goes down to 1 %. 1.0.3: the screen timeout now runs in the backend and watches the touchscreen itself, so the screen still turns off if the panel app hangs or restarts; screen off no longer sleeps the panel (phantom touches, no double-tap wake). 1.0.2: panel sleep/wake with safe backlight ordering; display errors are reported without illuminating an uncertain panel; corrected kiosk start/stop sequencing."
 
 [entry]
 title="T6 Front Panel"

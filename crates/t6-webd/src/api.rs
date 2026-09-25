@@ -79,13 +79,13 @@ pub fn router(prefix: &str) -> Router<AppState> {
         .route(&p("/api/display"), get(get_display))
         .route(&p("/api/display/brightness"), get(get_display).put(put_brightness))
         .route(&p("/api/display/power"), axum::routing::put(put_display_power))
-        .route(&p("/api/display/off-after-boot"), axum::routing::put(put_display_off_after_boot))
         .route(&p("/api/leds"), get(get_leds))
         .route(&p("/api/leds/bays"), axum::routing::put(put_bays))
         .route(&p("/api/leds/power-button"), axum::routing::put(put_power_button))
         .route(&p("/api/leds/bay-fault-blink"), axum::routing::put(put_bay_fault_blink))
         .route(&p("/api/leds/night"), axum::routing::put(put_night))
         .route(&p("/api/leds/tray-speed"), axum::routing::put(put_tray_speed))
+        .route(&p("/api/leds/wifi-hotspot"), axum::routing::put(put_wifi_hotspot))
         .route(&p("/api/leds/{device}"), axum::routing::put(put_led))
         .route(&p("/api/beep"), axum::routing::post(post_beep))
         .route(&p("/api/beep/event"), axum::routing::put(put_beep_event))
@@ -238,19 +238,6 @@ async fn put_display_power(State(s): State<AppState>, headers: HeaderMap, Json(b
     Ok(Json(json!({ "ok": true, "on": b.on, "brightness": v })))
 }
 
-#[derive(Deserialize)]
-struct OffAfterBootBody {
-    off_after_boot: bool,
-}
-
-async fn put_display_off_after_boot(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OffAfterBootBody>) -> ApiResult {
-    require_admin(&s, &headers)?;
-    tokio::task::spawn_blocking(move || s.inner.display.set_off_after_boot(b.off_after_boot))
-        .await.map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .map_err(bad_request)?;
-    Ok(Json(json!({ "ok": true, "off_after_boot": b.off_after_boot })))
-}
-
 async fn get_leds(State(s): State<AppState>) -> ApiResult {
     s.inner.ledd.status().map(Json).ok_or_else(|| bad_request("t6-ledd is not running".into()))
 }
@@ -276,6 +263,12 @@ struct OnBody {
 async fn put_bays(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OnBody>) -> ApiResult {
     require_admin(&s, &headers)?;
     s.inner.ledd.command(if b.on { "bays on" } else { "bays off" }).map_err(bad_request)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn put_wifi_hotspot(State(s): State<AppState>, headers: HeaderMap, Json(b): Json<OnBody>) -> ApiResult {
+    require_admin(&s, &headers)?;
+    s.inner.ledd.command(if b.on { "wifi-hotspot on" } else { "wifi-hotspot off" }).map_err(bad_request)?;
     Ok(Json(json!({ "ok": true })))
 }
 

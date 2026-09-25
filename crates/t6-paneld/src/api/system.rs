@@ -26,7 +26,7 @@ pub(super) async fn get_session(State(s): State<AppState>, headers: HeaderMap) -
 
 #[derive(Deserialize)]
 pub(super) struct BrightnessReq {
-    /// 10..=100 (below 10 the panel is unreadable; 0 is "power off").
+    /// 1..=100 (0 is "power off").
     value: u32,
 }
 
@@ -156,11 +156,93 @@ pub(super) struct NightReq {
     on: bool,
 }
 
-pub(super) async fn put_led_night(Json(req): Json<NightReq>) -> Response {
-    let cmd = if req.on { "night on" } else { "night off" };
-    match t6_hw_rs::leds::Ledd::new().command(cmd) {
-        Ok(()) => Json(serde_json::json!({ "night": req.on })).into_response(),
+/// One t6-ledd command; the daemon validates and persists it.
+fn ledd(line: &str) -> Response {
+    match t6_hw_rs::leds::Ledd::new().command(line) {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+fn ledd_word(s: &str) -> Result<&str, Response> {
+    t6_hw_rs::leds::Ledd::word(s).map_err(|e| (StatusCode::BAD_REQUEST, e).into_response())
+}
+
+pub(super) async fn get_leds() -> Response {
+    match t6_hw_rs::leds::Ledd::new().status() {
+        Some(s) => Json(s).into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, "t6-ledd is not running").into_response(),
+    }
+}
+
+/// Manual night mode (`on`) and/or the daily window (`schedule`,
+/// `"HH:MM-HH:MM"`, null or "" to clear); either may be left out.
+#[derive(Deserialize)]
+pub(super) struct LedNightReq {
+    on: Option<bool>,
+    #[serde(default, deserialize_with = "some_or_null")]
+    schedule: Option<Option<String>>,
+}
+
+/// Tells an explicit `null` (clear) from a missing field (leave alone).
+fn some_or_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(d).map(Some)
+}
+
+pub(super) async fn put_led_night(Json(req): Json<LedNightReq>) -> Response {
+    if let Some(on) = req.on {
+        let r = ledd(if on { "night on" } else { "night off" });
+        if !r.status().is_success() {
+            return r;
+        }
+    }
+    if let Some(schedule) = req.schedule {
+        let spec = match schedule.as_deref().map(str::trim) {
+            None | Some("") => "off",
+            Some(w) => match ledd_word(w) {
+                Ok(w) => w,
+                Err(r) => return r,
+            },
+        };
+        return ledd(&format!("schedule {spec}"));
+    }
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+pub(super) async fn put_led_bays(Json(req): Json<NightReq>) -> Response {
+    ledd(if req.on { "bays on" } else { "bays off" })
+}
+
+pub(super) async fn put_led_bay_fault_blink(Json(req): Json<NightReq>) -> Response {
+    ledd(if req.on { "bay-fault-blink on" } else { "bay-fault-blink off" })
+}
+
+pub(super) async fn put_led_wifi_hotspot(Json(req): Json<NightReq>) -> Response {
+    ledd(if req.on { "wifi-hotspot on" } else { "wifi-hotspot off" })
+}
+
+#[derive(Deserialize)]
+pub(super) struct TraySpeedReq {
+    speed: String,
+}
+
+pub(super) async fn put_led_tray_speed(Json(req): Json<TraySpeedReq>) -> Response {
+    match ledd_word(&req.speed) {
+        Ok(w) => ledd(&format!("tray-speed {w}")),
+        Err(r) => r,
+    }
+}
+
+/// A device's mode or colour: `auto`, `quiet`, `off` or a tray colour.
+#[derive(Deserialize)]
+pub(super) struct LedReq {
+    value: String,
+}
+
+pub(super) async fn put_led(axum::extract::Path(device): axum::extract::Path<String>, Json(req): Json<LedReq>) -> Response {
+    match (ledd_word(&device), ledd_word(&req.value)) {
+        (Ok(d), Ok(v)) => ledd(&format!("set {d} {v}")),
+        (Err(r), _) | (_, Err(r)) => r,
     }
 }
 

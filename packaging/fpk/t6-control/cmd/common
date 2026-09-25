@@ -56,7 +56,7 @@ remove_settings() {
     esac
     local d
     for d in "${DAEMONS[@]}"; do rm -f "/etc/$d.toml"; done
-    # backlight settings and the battery charge band (both written by t6-webd)
+    # legacy backlight settings (pre-systemd-backlight) and the battery charge band
     rm -f /etc/t6-display.conf /etc/modprobe.d/t6-platform.conf
     logger -t t6-control "uninstall: removed fan, LED, display and charge settings"
 }

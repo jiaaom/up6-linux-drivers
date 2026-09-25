@@ -41,17 +41,15 @@ const I18N = {
     nightHelp: "Switches every LED off. Alerts stay on: the battery LED on a power failure, overheating, and drive, Wi-Fi and Bluetooth faults. Turn it on by hand, or give it a daily window.",
     nightNow: "Night mode now", everyDayFrom: "Every day from", to: "to", revert: "Revert", apply: "Apply",
     bayLeds: "Bay LEDs", bayHelp: "Bays light white when a drive is present. A drive reported faulty blinks red.",
-    showDrives: "Show drives (white)", blinkFault: "Blink red on drive fault", perLed: "Advanced — per-LED control",
+    showDrives: "Show drives (white)", blinkFault: "Blink red on drive fault",
     beepStartup: "Beep once on startup", beepAcLoss: "Beep once on AC power loss", beepDriveFault: "Beep on drive fault (RAID degraded)",
     testPatterns: "Advanced — test patterns", testHelp: "Play an EC beeper pattern now. Continuous keeps sounding until stopped.",
     beepShort: "Short", beepLong: "Long", beepDouble: "Double", beepContinuous: "Continuous", beepStop: "Stop",
     backlight: "Backlight", backlightHelp: "Front LCD backlight. The level is applied immediately and remembered across reboots.",
-    on: "On", off: "Off", offUntilReboot: "Off until next reboot", level: "Level", advanced: "Advanced",
-    offAfterBoot: "Always turn off the built-in display after boot",
+    on: "On", off: "Off", offUntilReboot: "Off until next reboot", level: "Level",
     powerButtonScreen: "The power button switches the screen on and off",
     powerButtonHelp: "Like a phone's side button. The screen reacts about a second after you let go. A desktop running on the screen also locks its session.",
     powerButtonFail: "Could not change the power button: {e}",
-    offAfterBootHelp: "For a headless setup. When on, the screen stays dark after every reboot until you turn it on here.",
     status: "Status", chargeLimits: "Charge limits",
     limitsHelp: "Charging starts when the level drops below the lower bound and stops at the upper one. Choose a range, then Apply.",
     choice7585: "Recommended for staying on mains all day", choice5070: "Longest battery life, less backup runtime",
@@ -75,15 +73,15 @@ const I18N = {
     appliedRange: "applied — charging {a}–{b} %, kept across reboots", failed: "failed: {e}",
     limitsFail: "Could not set charge limits: {e}",
     notAvailable: "not available", brightnessFail: "Could not set brightness: {e}",
-    backlightFail: "Could not switch the backlight: {e}", bootFail: "Could not change the boot setting: {e}",
+    backlightFail: "Could not switch the backlight: {e}",
     ledsDown: "t6-ledd is not running – LEDs are unmanaged.", ledsConfig: "Configuration problem (defaults in use): {e}",
     nightActive: "active ({r})", drivesIn: "drives in bay {b}", noDrives: "no drives detected",
-    driveFault: "⚠ Drive fault — bay {b} is blinking red", automatic: "Automatic – {d}", automaticShort: "automatic",
-    forcedOff: " · forced off", ledNA: " · not available", setFail: "Could not set {id}: {e}",
+    driveFault: "⚠ Drive fault — bay {b} is blinking red",
+    setFail: "Could not set {id}: {e}",
     bayFail: "Could not switch bay LEDs: {e}", faultFail: "Could not change fault alert: {e}",
     nightFail: "Could not switch night mode: {e}", schedFail: "Could not set the schedule: {e}",
     beepFail: "Beeper: {e}", beepSetFail: "Beep setting: {e}",
-    slow: "slow", normal: "normal", fast: "fast", breathSpeed: "Breathing speed",
+    slow: "Slow", normal: "Normal", fast: "Fast",
     running: "running", notRunning: "not running", loaded: "loaded", loadedV: "loaded, {v}", notLoaded: "not loaded",
     thisApp: "this app", linuxVersion: "Linux version", platformDesc: "fans, LEDs, backlight & battery driver",
     touchDesc: "touchscreen driver", bridgeDesc: "HDMI-to-DSI front-panel bridge", fandDesc: "fan control service", leddDesc: "LED & beeper service", kernel: "Kernel",
@@ -99,10 +97,13 @@ const I18N = {
     floorLbl: "floor {f} %", kickLbl: "start {p} % for {s} s",
     curvesFail: "Could not apply curves: {e}", configFail: "Could not load fan configuration: {e}",
     silent: "Silent", balance: "Balanced", performance: "Performance", custom: "Custom",
-    rgbRed: "red", rgbGreen: "green", rgbBlue: "blue", rgbYellow: "red + green (cycle)", rgbCyan: "green + blue (cycle)",
-    rgbMagenta: "red + blue (cycle)", rgbWhite: "rainbow", colorOff: "off", colorWhite: "white", colorOrange: "orange",
-    colorYellow: "yellow", colorCyan: "cyan", colorMagenta: "magenta", fxBlink: "{c}, blinking", fxHeartbeat: "{c}, heartbeat",
-    wifiLegend: "Blue: online · cyan: weak signal · cyan blinking: connecting · blue heartbeat: hotspot · yellow: on but not usable · red: fault (also at night) · off: Wi-Fi off or not set up",
+    trayLight: "Tray light", trayHelp: "A decorative light. One colour breathes, two colours take turns, all three make a rainbow.",
+    trayOff: "Off", trayRed: "Red", trayGreen: "Green", trayBlue: "Blue", trayRG: "R + G", trayGB: "G + B", trayRB: "R + B",
+    trayRainbow: "Rainbow", trayBreathe: "Breathe", trayCycle: "Take turns", speed: "Speed",
+    "tray.off": "Off", "tray.red": "Breathing red", "tray.green": "Breathing green", "tray.blue": "Breathing blue",
+    "tray.yellow": "Red and green taking turns", "tray.cyan": "Green and blue taking turns",
+    "tray.magenta": "Red and blue taking turns", "tray.white": "Rainbow",
+    wifiLegend: "Blue: online · cyan: weak signal · cyan blinking: connecting · blue heartbeat: hotspot · yellow: connected but no internet · red: fault · off: Wi-Fi off, not set up or no saved network in range. Alerts only keeps blue and cyan dark.",
     "wifi.connected": "Connected to {c}{s}", "wifi.weak-signal": "Weak signal on {c}{s}", "wifi.connecting": "Connecting to {c}…",
     "wifi.hotspot": "Hotspot {c} is on", "wifi.not-connected": "Not connected to a saved network",
     "wifi.no-ip": "Connected to {c}, but no IP address", "wifi.portal": "{c} needs a sign-in page",
@@ -111,11 +112,13 @@ const I18N = {
     "wifi.unavailable": "The Wi-Fi card is not responding", "wifi.nm-down": "NetworkManager is not running",
     "wifi.disabled": "Wi-Fi is turned off", "wifi.no-hardware": "No Wi-Fi card", "wifi.not-configured": "No Wi-Fi network saved",
     "wifi.not-managed": "Not managed by NetworkManager", "wifi.starting": "Starting…",
-    radioLeds: "Status LEDs", radioHelp: "These LEDs show what the machine is doing. Red is an alarm and stays on in night mode.",
+    radioLeds: "Status LEDs", radioHelp: "These LEDs show what the machine is doing. Red is an alarm: it shows in every mode, night mode included.",
     showPower: "Show power status", powerLegend: "Power button — off while the screen is on · white while the screen is off · red blinking: overheating (also at night)",
     "power.screenOn": "Screen is on", "power.screenOff": "Screen is off", "power.hot": "Overheating: {s} at {t} °C", bayN: "bay {n}",
-    showWifi: "Show Wi-Fi status", showBt: "Show Bluetooth status", ledKeptOff: "LED kept off", nightOff: "off for night mode",
-    btLegend: "Blue: a device is connected · blue heartbeat: discoverable (pairing) · red: fault (also at night) · off: idle, off or no Bluetooth",
+    wifiLed: "Wi-Fi LED", btLed: "Bluetooth LED", modeAll: "All states", modeQuiet: "Alerts only", modeOff: "Off",
+    showHotspot: "Show hotspot status", ledKeptOff: "LED kept off", nightOff: "off for night mode",
+    quietHidden: "dark while working normally (alerts only)", hotspotHidden: "hotspot not shown",
+    btLegend: "Blue: a device is connected · blue heartbeat: discoverable (pairing) · red: fault · off: idle, off or no Bluetooth. Alerts only keeps the connected blue dark.",
     "bt.connected": "{n} device(s) connected", "bt.discoverable": "Discoverable — waiting for a device to pair",
     "bt.idle": "On, no device connected", "bt.powered-off": "Adapter is off (is BlueZ installed?)",
     "bt.disabled": "Bluetooth is turned off", "bt.no-hardware": "No Bluetooth adapter",
@@ -135,17 +138,15 @@ const I18N = {
     nightHelp: "关闭所有指示灯。警示仍会亮：断电时的电池灯、过热，以及硬盘、Wi-Fi、蓝牙故障。可手动开启，或设定每天的时段。",
     nightNow: "立即开启夜间模式", everyDayFrom: "每天从", to: "到", revert: "还原", apply: "应用",
     bayLeds: "硬盘位指示灯", bayHelp: "有硬盘时硬盘位亮白灯；硬盘报告故障时闪红灯。",
-    showDrives: "显示硬盘（白灯）", blinkFault: "硬盘故障时闪红灯", perLed: "高级 — 单个指示灯控制",
+    showDrives: "显示硬盘（白灯）", blinkFault: "硬盘故障时闪红灯",
     beepStartup: "开机时响一声", beepAcLoss: "断开交流电时响一声", beepDriveFault: "硬盘故障时鸣响（RAID 降级）",
     testPatterns: "高级 — 测试音型", testHelp: "立即播放一种 EC 蜂鸣音型。“持续”会一直响到停止为止。",
     beepShort: "短音", beepLong: "长音", beepDouble: "双响", beepContinuous: "持续", beepStop: "停止",
     backlight: "背光", backlightHelp: "前面板液晶屏背光。亮度立即生效，重启后保留。",
-    on: "开", off: "关", offUntilReboot: "关闭（直到下次重启）", level: "亮度", advanced: "高级",
-    offAfterBoot: "开机后始终关闭内置显示屏",
+    on: "开", off: "关", offUntilReboot: "关闭（直到下次重启）", level: "亮度",
     powerButtonScreen: "按电源键开关屏幕",
     powerButtonHelp: "就像手机的锁屏键。松开按键约一秒后屏幕才会响应。如果屏幕上运行着桌面环境，它也会同时锁屏。",
     powerButtonFail: "无法更改电源键设置：{e}",
-    offAfterBootHelp: "适用于无屏使用。开启后每次重启屏幕都保持熄灭，直到在这里打开。",
     status: "状态", chargeLimits: "充电范围",
     limitsHelp: "电量低于下限时开始充电，达到上限时停止。选好范围后点击“应用”。",
     choice7585: "推荐：适合长期接电", choice5070: "电池寿命最长，停电续航较短",
@@ -168,15 +169,15 @@ const I18N = {
     appliedRange: "已应用 — 充电范围 {a}–{b} %，重启后保留", failed: "失败：{e}",
     limitsFail: "无法设置充电范围：{e}",
     notAvailable: "不可用", brightnessFail: "无法设置亮度：{e}",
-    backlightFail: "无法开关背光：{e}", bootFail: "无法修改开机设置：{e}",
+    backlightFail: "无法开关背光：{e}",
     ledsDown: "t6-ledd 未运行 — 指示灯不受管理。", ledsConfig: "配置有问题（正在使用默认值）：{e}",
     nightActive: "已开启（{r}）", drivesIn: "硬盘位 {b} 有硬盘", noDrives: "未检测到硬盘",
-    driveFault: "⚠ 硬盘故障 — 硬盘位 {b} 正在闪红灯", automatic: "自动 – {d}", automaticShort: "自动",
-    forcedOff: " · 强制关闭", ledNA: " · 不可用", setFail: "无法设置 {id}：{e}",
+    driveFault: "⚠ 硬盘故障 — 硬盘位 {b} 正在闪红灯",
+    setFail: "无法设置 {id}：{e}",
     bayFail: "无法开关硬盘位指示灯：{e}", faultFail: "无法修改故障提示：{e}",
     nightFail: "无法开关夜间模式：{e}", schedFail: "无法设置时段：{e}",
     beepFail: "蜂鸣器：{e}", beepSetFail: "蜂鸣设置：{e}",
-    slow: "慢", normal: "中", fast: "快", breathSpeed: "呼吸速度",
+    slow: "慢", normal: "中", fast: "快",
     running: "运行中", notRunning: "未运行", loaded: "已加载", loadedV: "已加载，{v}", notLoaded: "未加载",
     thisApp: "本应用", linuxVersion: "Linux 版本", platformDesc: "风扇、指示灯、背光与电池驱动",
     touchDesc: "触摸屏驱动", bridgeDesc: "前面板 HDMI-to-DSI 桥接驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", kernel: "内核",
@@ -192,10 +193,12 @@ const I18N = {
     floorLbl: "最低 {f} %", kickLbl: "启动 {p} %，持续 {s} 秒",
     curvesFail: "无法应用曲线：{e}", configFail: "无法加载风扇配置：{e}",
     silent: "静音", balance: "均衡", performance: "性能", custom: "自定义",
-    rgbRed: "红", rgbGreen: "绿", rgbBlue: "蓝", rgbYellow: "红 + 绿（循环）", rgbCyan: "绿 + 蓝（循环）",
-    rgbMagenta: "红 + 蓝（循环）", rgbWhite: "彩虹", colorOff: "关", colorWhite: "白", colorOrange: "橙",
-    colorYellow: "黄", colorCyan: "青", colorMagenta: "品红", fxBlink: "{c}，闪烁", fxHeartbeat: "{c}，心跳",
-    wifiLegend: "蓝：已联网 · 青：信号弱 · 青色闪烁：正在连接 · 蓝色心跳：热点 · 黄：已开启但不可用 · 红：故障（夜间也亮） · 熄灭：Wi-Fi 已关闭或未配置",
+    trayLight: "托盘灯", trayHelp: "装饰灯。单色呼吸，双色交替，三色为彩虹。",
+    trayOff: "关", trayRed: "红", trayGreen: "绿", trayBlue: "蓝", trayRG: "红 + 绿", trayGB: "绿 + 蓝", trayRB: "红 + 蓝",
+    trayRainbow: "彩虹", trayBreathe: "呼吸", trayCycle: "交替", speed: "速度",
+    "tray.off": "已关闭", "tray.red": "红色呼吸", "tray.green": "绿色呼吸", "tray.blue": "蓝色呼吸",
+    "tray.yellow": "红绿交替", "tray.cyan": "绿蓝交替", "tray.magenta": "红蓝交替", "tray.white": "彩虹",
+    wifiLegend: "蓝：已联网 · 青：信号弱 · 青色闪烁：正在连接 · 蓝色心跳：热点 · 黄：已连接但无法上网 · 红：故障 · 熄灭：Wi-Fi 已关闭、未配置或附近没有已保存的网络。「仅异常时」下蓝色和青色不亮。",
     "wifi.connected": "已连接 {c}{s}", "wifi.weak-signal": "{c} 信号弱{s}", "wifi.connecting": "正在连接 {c}…",
     "wifi.hotspot": "热点 {c} 已开启", "wifi.not-connected": "未连接到已保存的网络",
     "wifi.no-ip": "已连接 {c}，但没有 IP 地址", "wifi.portal": "{c} 需要网页登录",
@@ -204,11 +207,13 @@ const I18N = {
     "wifi.unavailable": "Wi-Fi 网卡无响应", "wifi.nm-down": "NetworkManager 未运行",
     "wifi.disabled": "Wi-Fi 已关闭", "wifi.no-hardware": "没有 Wi-Fi 网卡", "wifi.not-configured": "未保存任何 Wi-Fi 网络",
     "wifi.not-managed": "不受 NetworkManager 管理", "wifi.starting": "正在启动…",
-    radioLeds: "状态指示灯", radioHelp: "这些灯显示机器当前的状态。红色是警报，夜间模式下也会亮。",
+    radioLeds: "状态指示灯", radioHelp: "这些灯显示机器当前的状态。红色是警报，任何模式下都会亮，包括夜间模式。",
     showPower: "显示电源状态", powerLegend: "电源键 — 屏幕亮时熄灭 · 屏幕关闭时白色 · 红色闪烁：过热（夜间也亮）",
     "power.screenOn": "屏幕已开启", "power.screenOff": "屏幕已关闭", "power.hot": "过热：{s} {t} °C", bayN: "硬盘位 {n}",
-    showWifi: "显示 Wi-Fi 状态", showBt: "显示蓝牙状态", ledKeptOff: "指示灯保持关闭", nightOff: "夜间模式已关闭",
-    btLegend: "蓝：有设备连接 · 蓝色心跳：可被发现（配对中） · 红：故障（夜间也亮） · 熄灭：空闲、已关闭或没有蓝牙",
+    wifiLed: "Wi-Fi 指示灯", btLed: "蓝牙指示灯", modeAll: "全部状态", modeQuiet: "仅异常时", modeOff: "关闭",
+    showHotspot: "显示热点状态", ledKeptOff: "指示灯保持关闭", nightOff: "夜间模式已关闭",
+    quietHidden: "正常工作时不亮（仅异常时）", hotspotHidden: "不显示热点状态",
+    btLegend: "蓝：有设备连接 · 蓝色心跳：可被发现（配对中） · 红：故障 · 熄灭：空闲、已关闭或没有蓝牙。「仅异常时」下有设备连接时不亮。",
     "bt.connected": "已连接 {n} 个设备", "bt.discoverable": "可被发现，等待设备配对",
     "bt.idle": "已开启，没有设备连接", "bt.powered-off": "适配器未开启（是否已安装 BlueZ？）",
     "bt.disabled": "蓝牙已关闭", "bt.no-hardware": "没有蓝牙适配器",
@@ -688,12 +693,9 @@ function renderDisplay(d) {
   if (!state.blDragging) {
     $("#bl-power").checked = d.on;
     $("#bl-power-label").textContent = d.on ? t("on") : t("offUntilReboot");
-    $("#bl-slider").value = d.on ? Math.max(d.brightness || 0, d.min_on || 10) : d.on_level;
+    $("#bl-slider").value = Math.max(d.brightness || 0, d.min_on || 1);
     syncBrightnessLabel();
   }
-  const ob = $("#bl-off-boot");
-  ob.disabled = !editable;
-  if (document.activeElement !== ob) ob.checked = !!d.off_after_boot;
 }
 
 // The button is t6-ledd's (it keeps running without the front panel).
@@ -732,11 +734,6 @@ $("#bl-power").addEventListener("change", async (e) => {
   $("#bl-slider").disabled = !on;
   try {
     await api("display/power", { method: "PUT", body: { on } });
-    if (on) {
-      // Turning the screen on means you want it — cancel "always off after boot".
-      $("#bl-off-boot").checked = false;
-      await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: false } });
-    }
   } catch (err) {
     notice(t("backlightFail", { e: err.message }), "error");
   }
@@ -748,32 +745,13 @@ $("#bl-button").addEventListener("change", async (e) => {
     notice(t("powerButtonFail", { e: err.message }), "error");
   }
 });
-$("#bl-off-boot").addEventListener("change", async (e) => {
-  try {
-    await api("display/off-after-boot", { method: "PUT", body: { off_after_boot: e.target.checked } });
-  } catch (err) {
-    notice(t("bootFail", { e: err.message }), "error");
-  }
-});
 
 // ---- LEDs -----------------------------------------------------------------
 
-// The tray light is an effect controller: single colour breathes, two
-// cycle, all three is a rainbow. Friendlier names for its dropdown.
-const RGB_LABEL = { off: "colorOff", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue",
-  yellow: "rgbYellow", cyan: "rgbCyan", magenta: "rgbMagenta", white: "rgbWhite" };
-const COLOR_LABEL = { off: "colorOff", white: "colorWhite", red: "rgbRed", green: "rgbGreen", blue: "rgbBlue", orange: "colorOrange",
-  yellow: "colorYellow", cyan: "colorCyan", magenta: "colorMagenta" };
-const colorName = (id, c) => (id === "rgb" ? (RGB_LABEL[c] ? t(RGB_LABEL[c]) : c) : (COLOR_LABEL[c] ? t(COLOR_LABEL[c]) : c));
 // t6-ledd reports animated effects as "blink red" / "heartbeat blue".
 const splitEffect = (e) => {
   const m = /^(blink|heartbeat) (\w+)$/.exec(e || "");
   return m ? { fx: m[1], color: m[2] } : { fx: "", color: e };
-};
-const effectName = (id, e) => {
-  const { fx, color } = splitEffect(e);
-  const c = colorName(id, color);
-  return fx === "blink" ? t("fxBlink", { c }) : fx === "heartbeat" ? t("fxHeartbeat", { c }) : c;
 };
 
 function wifiWhy(w) {
@@ -784,8 +762,9 @@ function wifiWhy(w) {
 }
 
 const btWhy = (b) => (b ? t(`bt.${b.reason}`, { n: b.connections }) : "");
-// Status LEDs: shown in their own card (on = automatic, off = kept dark),
-// not in the per-LED table.
+// Status LEDs: shown in their own card, not in the per-LED table. Power is
+// a switch (on = automatic, off = kept dark); Wi-Fi and Bluetooth have
+// three modes (all states / alerts only / off; a fault shows in each).
 function powerWhy(p) {
   if (!p) return "";
   if (p.overheat) {
@@ -797,8 +776,11 @@ function powerWhy(p) {
 
 const LED_STATUS = {
   power: { why: (l) => powerWhy(l.power), fault: (l) => !!l.power?.overheat },
-  wifi: { why: (l) => wifiWhy(l.wifi), fault: (l) => l.wifi?.state === "fault" },
-  bt: { why: (l) => btWhy(l.bluetooth), fault: (l) => l.bluetooth?.state === "fault" },
+  wifi: { why: (l) => wifiWhy(l.wifi), fault: (l) => l.wifi?.state === "fault",
+    normal: (l) => ["online", "weak"].includes(l.wifi?.state),
+    hidden: (l) => l.wifi?.state === "hotspot" && l.wifi_hotspot === false },
+  bt: { why: (l) => btWhy(l.bluetooth), fault: (l) => l.bluetooth?.state === "fault",
+    normal: (l) => l.bluetooth?.state === "connected" },
 };
 
 function renderRadioLeds(l, editable) {
@@ -807,15 +789,31 @@ function renderRadioLeds(l, editable) {
     const d = l.devices.find((x) => x.id === id);
     box.hidden = !d || !d.available;
     if (!d) continue;
-    const on = d.mode === "auto";
+    const mode = d.mode === "manual" ? "off" : d.mode;
     const cb = $(".radio-show", box);
-    if (document.activeElement !== cb) cb.checked = on;
-    cb.disabled = !editable;
+    if (cb) {
+      if (document.activeElement !== cb) cb.checked = mode === "auto";
+      cb.disabled = !editable;
+    }
+    for (const b of box.querySelectorAll(".radio-mode button")) {
+      b.classList.toggle("active", b.dataset.v === mode);
+      b.disabled = !editable;
+    }
     const st = LED_STATUS[id];
-    const night = l.night?.active && on && !st.fault(l);
-    const tail = !on ? ` · ${t("ledKeptOff")}` : night ? ` · ${t("nightOff")}` : "";
-    $(".led-status", box).innerHTML = `${swatch(on && !night ? d.effective : "off")}${st.why(l)}${tail}`;
+    // Why a state that would light the LED is dark (t6-ledd's effective
+    // colour already includes mode and night mode).
+    let why = "";
+    if (d.effective === "off" && !st.fault(l)) {
+      if (mode === "off") why = "ledKeptOff";
+      else if (l.night?.active) why = "nightOff";
+      else if (st.hidden?.(l)) why = "hotspotHidden";
+      else if (mode === "quiet" && st.normal?.(l)) why = "quietHidden";
+    }
+    $(".led-status", box).innerHTML = `${swatch(d.effective)}${st.why(l)}${why ? ` · ${t(why)}` : ""}`;
   }
+  const hs = $("#wifi-hotspot");
+  if (document.activeElement !== hs) hs.checked = l.wifi_hotspot !== false;
+  hs.disabled = !editable;
 }
 
 const LED_SWATCH = {
@@ -839,6 +837,7 @@ function renderLeds(l) {
   if (l.config_error) box.textContent = t("ledsConfig", { e: l.config_error });
   const editable = state.admin;
   $("#leds-note").textContent = editable ? "" : t("adminRequiredChange");
+  $("#leds-note").hidden = editable;
 
   // night mode
   const n = l.night;
@@ -868,56 +867,75 @@ function renderLeds(l) {
   warn.hidden = faults.length === 0;
   if (faults.length) warn.textContent = t("driveFault", { b: faults.join(", ") });
 
-  // device rows: rebuild only when the set of devices changes
-  const table = $("#led-devices");
   renderRadioLeds(l, editable);
-  const devs = l.devices.filter((d) => !d.bay && !LED_STATUS[d.id]);
-  const key = devs.map((d) => d.id).join(",");
-  if (table.dataset.key !== key) {
-    table.dataset.key = key;
-    table.innerHTML = devs.map((d) => `
-      <tr data-id="${d.id}">
-        <td class="name">${d.label}</td>
-        <td class="eff"></td>
-        <td>${d.colors.length
-          ? `<select class="led-color">${d.auto ? `<option value="auto">${t("automatic", { d: d.auto_desc })}</option>` : ""}${d.colors.map((c) => `<option value="${c}">${colorName(d.id, c)}</option>`).join("")}</select>`
-          : `<span class="meta">${t("automatic", { d: d.auto_desc })}</span>`}${d.id === "rgb"
-          ? ` <select class="tray-speed" title="${t("breathSpeed")}"><option value="slow">${t("slow")}</option><option value="normal">${t("normal")}</option><option value="fast">${t("fast")}</option></select>`
-          : ""}</td>
-      </tr>`).join("");
-  }
-  for (const d of devs) {
-    const row = table.querySelector(`tr[data-id="${d.id}"]`);
-    const forced = n.active;
-    const eff = d.effective === "auto" ? t("automaticShort") : effectName(d.id, d.effective);
-    $(".eff", row).innerHTML = `${swatch(d.effective)}${eff}${forced ? t("forcedOff") : ""}${d.available ? "" : t("ledNA")}`;
-    const sel = $(".led-color", row);
-    if (sel) {
-      const want = d.mode === "auto" ? "auto" : d.color;
-      if (document.activeElement !== sel && sel.value !== want) sel.value = want;
-      sel.disabled = !editable;
-    }
-    const spd = $(".tray-speed", row);
-    if (spd) {
-      if (document.activeElement !== spd && l.tray_speed) spd.value = l.tray_speed;
-      spd.disabled = !editable;
-    }
-  }
+  renderTray(l, editable);
 }
 
-$("#led-devices").addEventListener("change", async (e) => {
-  const sel = e.target.closest("select");
-  if (!sel) return;
-  const id = sel.closest("tr").dataset.id;
+// The tray light is an effect controller: one colour breathes, two take
+// turns, all three is a rainbow (t6-ledd names them red..magenta, white).
+// The chip of the chosen effect plays a preview at the chosen speed.
+const TRAY_CHIP = { off: "chip-off", red: "chip-red", green: "chip-green", blue: "chip-blue",
+  yellow: "chip-cycle chip-rg", cyan: "chip-cycle chip-gb", magenta: "chip-cycle chip-rb", white: "chip-rainbow" };
+
+function renderTray(l, editable) {
+  const d = l.devices.find((x) => x.id === "rgb");
+  const card = $("#tray-card");
+  card.hidden = !d || !d.available;
+  if (!d) return;
+  const color = d.mode === "manual" && d.color ? d.color : "off";
+  const speed = l.tray_speed || "normal";
+  card.dataset.speed = speed;
+  $(".tray-picker", card).setAttribute("aria-label", t("trayLight"));
+  for (const b of card.querySelectorAll(".tray-chip")) {
+    const on = b.dataset.v === color;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-checked", on);
+    b.disabled = !editable;
+  }
+  for (const b of card.querySelectorAll("#tray-speed button")) {
+    b.classList.toggle("active", b.dataset.v === speed);
+    b.disabled = !editable || color === "off";
+  }
+  const night = l.night?.active && color !== "off";
+  $("#tray-status").innerHTML = `<i class="dot ${night ? "chip-off" : TRAY_CHIP[color] || "chip-off"}"></i>${t(`tray.${color}`)}${night ? ` · ${t("nightOff")}` : ""}`;
+}
+
+$("#tray-card").addEventListener("click", async (e) => {
+  const chip = e.target.closest(".tray-chip");
+  const spd = e.target.closest("#tray-speed button");
+  const b = chip || spd;
+  if (!b || b.disabled || b.classList.contains("active")) return;
+  // Optimistic: the next status poll confirms it.
+  for (const x of b.parentElement.closest(chip ? ".tray-picker" : "#tray-speed").querySelectorAll(chip ? ".tray-chip" : "button"))
+    x.classList.toggle("active", x === b);
+  if (spd) $("#tray-card").dataset.speed = b.dataset.v;
   try {
-    if (sel.classList.contains("tray-speed")) {
-      await api("leds/tray-speed", { method: "PUT", body: { speed: sel.value } });
-    } else {
-      await api(`leds/${id}`, { method: "PUT", body: { value: sel.value } });
-    }
+    if (chip) await api("leds/rgb", { method: "PUT", body: { value: b.dataset.v } });
+    else await api("leds/tray-speed", { method: "PUT", body: { speed: b.dataset.v } });
+    notice("");
+  } catch (err) {
+    notice(t("setFail", { id: "rgb", e: err.message }), "error");
+  }
+});
+$("#radio-leds").addEventListener("click", async (e) => {
+  const b = e.target.closest(".radio-mode button");
+  if (!b || b.classList.contains("active")) return;
+  const id = b.closest(".radio-led").dataset.id;
+  // Optimistic: the next status poll confirms it.
+  for (const x of b.parentElement.children) x.classList.toggle("active", x === b);
+  try {
+    await api(`leds/${id}`, { method: "PUT", body: { value: b.dataset.v } });
     notice("");
   } catch (err) {
     notice(t("setFail", { id, e: err.message }), "error");
+  }
+});
+$("#wifi-hotspot").addEventListener("change", async (e) => {
+  try {
+    await api("leds/wifi-hotspot", { method: "PUT", body: { on: e.target.checked } });
+    notice("");
+  } catch (err) {
+    notice(t("setFail", { id: "wifi", e: err.message }), "error");
   }
 });
 $("#radio-leds").addEventListener("change", async (e) => {

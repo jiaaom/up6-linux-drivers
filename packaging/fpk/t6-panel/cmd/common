@@ -16,7 +16,7 @@ fail() {
 }
 
 # Generate the unit from the package paths and enable it. Runs as root: the
-# panel writes the backlight, /etc/t6-display.conf and /var/lib/t6-paneld, and
+# panel writes the backlight and /var/lib/t6-paneld, and
 # drives the LED daemon's control socket.
 install_paneld() {
     cat > "$PANELD_UNIT_FILE" <<UNIT

@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Control Center"
 desc="Fan curves, LEDs, display brightness, battery charge limits and beeper of the UnifyDrive UP6 / ZSpace T6. Requires T6 Drivers."
-changelog="1.0.2: coordinated panel sleep/wake with safe backlight ordering; serialized display controls; IT6616 driver health reporting and safer driver upgrades."
+changelog="1.0.3: screen off now only switches the panel display off instead of putting it to sleep, which could leave the touchscreen reporting phantom touches and made double-tap wake impossible. 1.0.2: coordinated panel sleep/wake with safe backlight ordering; serialized display controls; IT6616 driver health reporting and safer driver upgrades."
 
 [entry]
 title="T6 Control Center"

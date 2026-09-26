@@ -1,5 +1,5 @@
 appname="t6-drivers"
-version="1.2.0"
+version="1.2.1"
 display_name="${common.display_name}"
 desc="${common.desc}"
 changelog="${common.changelog}"

@@ -179,6 +179,32 @@ resume_controls() {
     RESTART_AFTER_RELOAD=()
 }
 
+BACKLIGHT=/sys/class/backlight/t6_ec_backlight
+# Used when systemd-backlight has saved nothing usable (t6-hw-rs DEFAULT_ON).
+BACKLIGHT_DEFAULT=20
+
+# A reload while the screen is switched off (bl_power) leaves the EC level
+# at 0, which the new driver reads back as "on at level 0": a black screen
+# that looks broken. systemd-backlight restores its saved level only at
+# boot, so bring that level back here.
+restore_backlight() {
+    local i cur saved= f
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        [ -e "$BACKLIGHT/brightness" ] && break
+        sleep 0.2
+    done
+    cur=$(cat "$BACKLIGHT/brightness" 2>/dev/null) || return 0
+    [ "$cur" = 0 ] || return 0
+    for f in /var/lib/systemd/backlight/*:backlight:t6_ec_backlight; do
+        [ -f "$f" ] && saved=$(cat "$f")
+    done
+    if ! [[ $saved =~ ^[0-9]+$ ]] || [ "$saved" -lt 1 ] || [ "$saved" -gt 100 ]; then
+        saved=$BACKLIGHT_DEFAULT
+    fi
+    log "restoring the backlight to $saved"
+    echo "$saved" > "$BACKLIGHT/brightness" || log "warning: cannot restore the backlight"
+}
+
 load_modules() {
     local m
     pause_controls
@@ -186,6 +212,7 @@ load_modules() {
         unload_module "$m"
         modprobe "$m" || die "cannot load $m (see dmesg)"
     done
+    restore_backlight
     resume_controls
 }
 
@@ -269,6 +296,7 @@ do_repair() {
         modprobe "$m" || die "cannot load $m (see dmesg)"
         reloaded=yes
     done
+    [ "$reloaded" = no ] || restore_backlight
     [ "$boot" = yes ] || restart_services "$reloaded"
     log "done"
 }

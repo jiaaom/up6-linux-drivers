@@ -10,9 +10,13 @@
 //! - [`fnos_files`]   — fnOS file manager (list/search/mkdir/rename/trash/copy/move)
 //! - [`fnos_disks`]   — external drives + remote mounts, USB reconnect
 //! - [`fnos_notify`]  — fnOS health alerts + notification center
+//! - [`audio`]        — outputs + volume through PipeWire; admin repair
+//! - [`bluetooth`]    — pair/connect audio + input devices through BlueZ
 //! - [`admin`]        — package web page (gateway only): kiosk on/off, restart
 
 mod admin;
+mod audio;
+mod bluetooth;
 mod fnos_disks;
 mod fnos_files;
 mod fnos_notify;
@@ -24,7 +28,7 @@ use axum::{
     extract::{Path, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
 use serde_json::Value;
@@ -65,6 +69,19 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         // lock-screen brightness); admin-gated writes live on the gateway side.
         .route(&p("/api/display/brightness"), put(put_brightness))
         .route(&p("/api/display/power"), put(put_power))
+        .route(&p("/api/display/timeout-hold"), put(put_timeout_hold))
+        .route(&p("/api/audio"), get(audio::get_audio))
+        .route(&p("/api/audio/default"), put(audio::put_default))
+        .route(&p("/api/audio/volume"), put(audio::put_volume))
+        .route(&p("/api/bluetooth"), get(bluetooth::get_bluetooth))
+        .route(&p("/api/bluetooth/power"), put(bluetooth::put_power))
+        .route(&p("/api/bluetooth/scan"), post(bluetooth::post_scan))
+        .route(&p("/api/bluetooth/prompt"), post(bluetooth::post_prompt))
+        .route(&p("/api/bluetooth/device/{addr}"), delete(bluetooth::delete_device))
+        .route(&p("/api/bluetooth/device/{addr}/pair"), post(bluetooth::post_pair))
+        .route(&p("/api/bluetooth/device/{addr}/connect"), post(bluetooth::post_connect))
+        .route(&p("/api/bluetooth/device/{addr}/disconnect"), post(bluetooth::post_disconnect))
+        .route(&p("/api/bluetooth/device/{addr}/audio"), post(bluetooth::post_audio))
         .route(&p("/api/display/events"), get(display_events))
         .route(&p("/api/settings/screen-timeout"), put(put_screen_timeout))
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
@@ -160,7 +177,8 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
             .route(&p("/admin/{file}"), get(admin_file))
             .route(&p("/api/admin/status"), get(admin::get_status))
             .route(&p("/api/admin/panel"), put(admin::put_panel))
-            .route(&p("/api/admin/panel/restart"), post(admin::post_restart));
+            .route(&p("/api/admin/panel/restart"), post(admin::post_restart))
+            .route(&p("/api/admin/audio/repair"), post(audio::post_repair));
     }
     r.with_state(state)
 }

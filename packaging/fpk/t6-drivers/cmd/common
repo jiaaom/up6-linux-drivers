@@ -1,9 +1,44 @@
 # Shared helpers for the t6-drivers lifecycle scripts (sourced, not executed).
 
+# dkms, modprobe etc. live in sbin; don't rely on App Center's PATH having it.
+export PATH="/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+
 # Report a user-facing error (shown by App Center) and exit.
 fail() {
     echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
     exit 1
+}
+
+# Install system packages the way App Center runs us: as root, without a
+# terminal. Waits for another apt/dpkg run instead of failing on its lock,
+# and refreshes the package lists once if the first attempt fails (stale
+# lists are the usual cause). apt's output goes to `journalctl -t t6-drivers-apt`.
+APT_TAG=t6-drivers-apt
+apt_try_install() {
+    local opts=(-y -q --no-install-recommends -o DPkg::Lock::Timeout=120)
+    export DEBIAN_FRONTEND=noninteractive
+    logger -t "$APT_TAG" "apt-get install $*"
+    apt-get "${opts[@]}" install "$@" 2>&1 | logger -t "$APT_TAG"
+    [ "${PIPESTATUS[0]}" -eq 0 ] && return 0
+    apt-get -q -o DPkg::Lock::Timeout=120 update 2>&1 | logger -t "$APT_TAG"
+    apt-get "${opts[@]}" install "$@" 2>&1 | logger -t "$APT_TAG"
+    return "${PIPESTATUS[0]}"
+}
+
+# Build prerequisites. dkms is an ordinary Debian package: install it if
+# missing, and only ask the user when that fails. The kernel headers ship with
+# FygoOS itself; if they are gone that is a system problem we can't repair, so
+# just say so.
+check_build_prereqs() {
+    if ! command -v dkms >/dev/null; then
+        logger -t t6-drivers "dkms missing; installing"
+        apt_try_install dkms
+        command -v dkms >/dev/null || fail "DKMS is needed to build the drivers, and installing it automatically failed (details: journalctl -t $APT_TAG).
+Run as root over SSH, then install again:
+apt install dkms"
+    fi
+    [ -d "/lib/modules/$(uname -r)/build" ] || fail "The kernel headers for $(uname -r) are missing.
+They are part of FygoOS itself, so this is a system problem T6 Drivers cannot fix. Update or repair FygoOS, then install again."
 }
 
 # Run install-dkms.sh from the installed package directory, forwarding its

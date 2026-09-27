@@ -42,30 +42,28 @@ Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 
 ### For running
 
-- **DKMS and kernel headers** for the running kernel. The modules are compiled
-  on the device, at install and again at boot after a kernel update:
+- **FygoOS / fnOS packages** take care of their own dependencies: they automatically install what is missing.
+- **Plain Debian** (kernel modules): DKMS and headers for the running kernel,
   `sudo apt install dkms linux-headers-$(uname -r)`.
-- Front-panel kiosk (`t6-panel`): **weston**: `sudo apt install weston`.
-- Optional, **GPU acceleration** for the kiosk: the backports GL stack. Without
-  it the kiosk falls back to software rendering and uses a lot more CPU.
-
-  ```bash
-  sudo apt install -t bookworm-backports \
-    libgl1-mesa-dri libegl-mesa0 libglx-mesa0 libgbm1
-  ```
-
-- Optional, Wi-Fi **hotspot**: NetworkManager's shared mode needs
-  `dnsmasq-base` and `iptables` for the access point's DHCP and NAT:
-  `sudo apt install dnsmasq-base iptables`.
+- Optional, Wi-Fi **hotspot**: `sudo apt install dnsmasq-base iptables` (DHCP
+  and NAT for NetworkManager's shared mode).
 
 ### For building
 
-- **Rust** toolchain (via [rustup](https://rustup.rs)) for the daemons and web backends.
-- FygoOS packages only:
-  - [`fygopack`](https://developer.fygonas.com/docs/cli/fygopack/);
-  - for `t6-panel`, a **Node.js** toolchain to fetch the Electron runtime:
-    `cd panel/app && npm ci`.
+- **Rust** toolchain (via [rustup](https://rustup.rs)).
+- FygoOS packages: [`fygopack`](https://developer.fygonas.com/docs/cli/fygopack/).
+- `t6-panel` additionally:
+  - **Node.js** to fetch the Electron runtime: `cd panel/app && npm ci`;
+  - for weston-appliance-shell, the video player's mpv bundle and libva:
 
+    ```bash
+    sudo apt install -t bookworm-backports libweston-14-dev weston-dev
+    sudo apt install meson ninja-build patchelf libdrm-dev libwayland-dev \
+      libx11-dev libxext-dev libxfixes-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev
+    ```
+
+    (mpv's Debian packages and the libva source are committed, so no
+    downloads are needed.)
 
 ## Install For Plain Debian (skip for FygoOS!)
 
@@ -92,7 +90,7 @@ packages (.fpk) to `build/`:
 |---|---|
 | `t6-drivers.fpk` | the three DKMS modules + `install-dkms.sh`, built and loaded on install; a `t6-drivers-check` unit rebuilds them at boot after a kernel update |
 | `t6-control.fpk` | the `t6-fand`, `t6-ledd` and `t6-webd` daemons (Control Center web app); depends on `t6-drivers` |
-| `t6-panel.fpk` | the front-panel backend (`t6-paneld`) + the Electron kiosk shell, started on boot; depends on `t6-control` |
+| `t6-panel.fpk` | the front-panel backend (`t6-paneld`), the Electron kiosk, its weston shell ([`weston-appliance-shell`](weston-appliance-shell/)), a bundled mpv video/music player and the PipeWire sound-server setup, started on boot; depends on `t6-control` |
 
 Install them from the App Center's manual-installation entry, or with
 `appcenter-cli install-fpk <file>`.
@@ -103,8 +101,11 @@ Install them from the App Center's manual-installation entry, or with
 ```
 kernel/       DKMS kernel modules
 crates/       Cargo workspace with all Rust userspace (shared target/ and lockfile)
-panel/        front-panel UI (www/), its admin page (web/) and the Electron kiosk shell (app/)
-packaging/    install-dkms.sh, build-fpk.sh and the FygoOS package skeletons (fpk/)
+panel/        front-panel UI (www/), its admin page (web/), the Electron kiosk shell (app/),
+              the video player's config (mpv/) and sound-server rules (audio/)
+weston-appliance-shell/  weston shell plugin that stacks and rotates the panel's windows
+packaging/    install-dkms.sh, build-fpk.sh, the FygoOS package skeletons (fpk/) and the
+              pinned mpv/libva sources (mpv/)
 assets/       README images
 ```
 

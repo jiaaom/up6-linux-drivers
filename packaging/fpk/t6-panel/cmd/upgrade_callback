@@ -1,5 +1,6 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
 install_paneld
+install_audio
 install_kiosk
 exit 0

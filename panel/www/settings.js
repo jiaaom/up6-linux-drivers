@@ -71,6 +71,10 @@ function buildSettings(){
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Hardware</div><div class="card">'+
       '<div class="setrow tap" id="ledsRow"><div class="lbl">Indicator lights</div><div class="setval">'+(ledsNight?'Night mode':'On')+' <span class="chev">›</span></div></div>'+
+      '<div class="hairrow"></div>'+
+      '<div class="setrow tap" id="audioRow"><div class="lbl">Audio</div><div class="setval"><span class="chev">›</span></div></div>'+
+      '<div class="hairrow"></div>'+
+      '<div class="setrow tap" id="btRow"><div class="lbl">Bluetooth</div><div class="setval"><span class="chev">›</span></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Cooling</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Fan profile</div></div>'+
@@ -105,6 +109,8 @@ function buildSettings(){
   });
   // Indicator lights -> the full LED page (leds.js)
   document.getElementById('ledsRow').addEventListener('click',openLeds);
+  document.getElementById('audioRow').addEventListener('click',openAudio);
+  document.getElementById('btRow').addEventListener('click',openBluetooth);
   // SSH on/off (systemctl via t6-paneld). Security-relevant → confirm first.
   var sshT=document.getElementById('sshToggle');
   if(sshT)sshT.addEventListener('click',function(){

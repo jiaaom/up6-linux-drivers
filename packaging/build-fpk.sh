@@ -17,6 +17,10 @@ KERNEL=$REPO/kernel
 BUILD_DIR=$REPO/build
 STAGE_DIR=$BUILD_DIR/fpk
 DKMS_PACKAGES=(t6-platform-dkms focaltech-ft8722-dkms ite-it6616-dkms)
+# weston-appliance-shell (the panel's weston shell): a self-contained project
+# kept in this repo (own meson build, MIT license), so it can be split out
+# with `git subtree split` if it is ever published on its own.
+ASH_SRC=${ASH_SRC:-$REPO/weston-appliance-shell}
 
 log() { printf '==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -59,6 +63,22 @@ payload_t6_control() {
        "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" "$app/"
 }
 
+# Build weston-appliance-shell into $1 (module + control tool + license).
+# Needs meson, ninja and the libweston/weston dev headers matching the
+# weston the panel runs (Debian: libweston-14-dev, weston-dev).
+build_appliance_shell() {
+    local out=$1 bdir=$BUILD_DIR/appliance-shell
+    [ -f "$ASH_SRC/meson.build" ] || die "weston-appliance-shell not found at $ASH_SRC (set ASH_SRC)"
+    command -v meson >/dev/null && command -v ninja >/dev/null \
+        || die "meson and ninja are needed to build weston-appliance-shell"
+    log "building weston-appliance-shell"
+    rm -rf "$bdir"
+    { meson setup "$bdir" "$ASH_SRC" --buildtype=release && ninja -C "$bdir"; } >/dev/null \
+        || die "weston-appliance-shell build failed"
+    mkdir -p "$out"
+    cp "$bdir/appliance-shell.so" "$ASH_SRC/tools/appliance-shell-ctl" "$ASH_SRC/LICENSE" "$out/"
+}
+
 payload_t6_panel() {
     local app=$1/app
     mkdir -p "$app/bin" "$app/www" "$app/app/node_modules"
@@ -77,6 +97,17 @@ payload_t6_panel() {
         || die "panel/app/node_modules/electron missing — run 'npm ci' in panel/app first"
     log "bundling Electron runtime (~280 MB)"
     cp -a "$REPO/panel/app/node_modules/electron" "$app/app/node_modules/electron"
+    # The video player: mpv from the pinned Debian packages (packaging/mpv),
+    # plus its config and launcher (panel/mpv; see its README).
+    log "bundling mpv"
+    "$SCRIPT_DIR/mpv/bundle-mpv.sh" "$app/mpv" >/dev/null
+    cp -r "$REPO/panel/mpv/config" "$REPO/panel/mpv/run-mpv.sh" "$app/mpv/"
+    # Sound server config (WirePlumber rules), read via XDG_CONFIG_HOME by the
+    # t6-audio units (fpk/t6-panel/cmd/common).
+    mkdir -p "$app/audio/config"
+    cp -r "$REPO/panel/audio/wireplumber" "$app/audio/config/"
+    # The weston shell that stacks the player above the panel (run-kiosk.sh).
+    build_appliance_shell "$app/shell"
 }
 
 build_package() {

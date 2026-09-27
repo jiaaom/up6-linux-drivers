@@ -930,3 +930,28 @@
   .fm-dest{color:var(--ink-2);font-weight:500}
   .fm-cnt{color:var(--ink-3)}
   #files .fm-acts{padding-top:0}
+
+/* Audio sub-page (audio.js) */
+.aud-kind{font-size:.72em;opacity:.55;margin-left:6px;letter-spacing:.02em}
+.aud-check{color:var(--accent,#3b82f6);font-weight:700;font-size:1.15em}
+/* Settings → Bluetooth */
+.bt-dev{gap:14px}
+.bt-dev .lbl{flex:1;min-width:0}
+.bt-ico{flex:none;color:var(--ink-2)}
+.bt-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-sub{font-size:14px;font-weight:400;color:var(--ink-3);margin-top:2px}
+.bt-sub.on{color:var(--ok)}
+.bt-pair{color:var(--accent)}
+.bt-near{display:flex;justify-content:space-between;align-items:baseline}
+.bt-scan{text-transform:none;letter-spacing:0;color:var(--ink-3)}
+.bt-rescan{text-transform:none;letter-spacing:0;color:var(--accent);padding:6px 0 6px 16px;margin:-6px 0}
+.bt-hidden .lbl{font-size:15px;font-weight:400;color:var(--ink-3)}
+#btCode{position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .24s}
+#btCode.on{opacity:1;pointer-events:auto}
+.bt-code{display:flex;justify-content:center;gap:8px;margin-top:18px}
+.bt-code span{width:40px;height:54px;border-radius:10px;background:var(--fill-2);display:flex;align-items:center;justify-content:center;
+  font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
+.bt-code span.typed{background:var(--accent);color:var(--card-raised)}
+.bt-codein{margin-top:18px;width:100%;box-sizing:border-box;height:56px;border-radius:12px;border:var(--line) solid var(--hair-strong);
+  background:var(--fill-2);color:var(--ink);font:inherit;font-size:28px;letter-spacing:.3em;text-align:center}

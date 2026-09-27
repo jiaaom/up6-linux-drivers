@@ -388,6 +388,7 @@ select:disabled {
 }
 
 #modalBody {
+  white-space: pre-line;
   margin-bottom: 16px;
   line-height: 1.6;
 }
@@ -420,3 +421,10 @@ select:disabled {
     flex-direction: column;
   }
 }
+
+/* Audio section: installed packages */
+.comp-list { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 4px; }
+.comp-list li { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.15)); }
+.comp-list .ver { opacity: .7; font-variant-numeric: tabular-nums; }
+.comp-list .ver.missing { color: var(--danger-text); opacity: 1; }
+.hint.warn { color: var(--danger-text); }

@@ -1,7 +1,5 @@
 #!/bin/bash
 # Check build prerequisites before anything is copied.
 . "$(dirname "$0")/common"
-
-command -v dkms >/dev/null || fail "dkms is not installed on this system."
-[ -d "/lib/modules/$(uname -r)/build" ] || fail "Kernel headers for $(uname -r) are missing."
+check_build_prereqs
 exit 0

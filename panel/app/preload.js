@@ -13,6 +13,14 @@ contextBridge.exposeInMainWorld('previewBridge', {
   close: () => ipcRenderer.invoke('preview:close'),
 });
 
+// Video player (bundled mpv, a separate Wayland window above this one; see
+// main.js). `open` starts it on an absolute file path; `onClosed` fires when
+// it exits and the panel is on top again.
+contextBridge.exposeInMainWorld('playerBridge', {
+  open: (path) => ipcRenderer.invoke('player:open', { path }),
+  onClosed: (cb) => ipcRenderer.on('player:closed', () => cb()),
+});
+
 // Colour theme (see www/theme.js). The renderer owns the choice; main needs it
 // for the two surfaces the renderer can't paint: the BrowserWindow's own
 // background (visible on a scroll overshoot / before first paint) and the

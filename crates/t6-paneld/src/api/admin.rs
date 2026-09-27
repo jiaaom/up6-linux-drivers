@@ -14,11 +14,11 @@ use crate::gateway::User;
 
 pub(crate) const KIOSK_UNIT: &str = "t6-panel-kiosk.service";
 
-fn forbidden() -> Response {
+pub(super) fn forbidden() -> Response {
     (StatusCode::FORBIDDEN, "administrator sign-in required").into_response()
 }
 
-fn is_admin(h: &HeaderMap) -> bool {
+pub(super) fn is_admin(h: &HeaderMap) -> bool {
     let u = User::from_headers(h);
     u.username.is_some() && u.is_admin
 }

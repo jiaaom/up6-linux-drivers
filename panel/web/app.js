@@ -29,7 +29,7 @@ function resolvedTheme() {
 // First paint already in the right theme, before the host answers (or not).
 document.documentElement.dataset.theme = resolvedTheme();
 
-const state = { language: "en-US", status: null };
+const state = { language: "en-US", status: null, audio: null };
 
 // Front-panel themes, in picker order. A new theme needs an entry here, its
 // strings in I18N, a theme-<id>.png preview (240x480, a capture of the home
@@ -74,6 +74,23 @@ const I18N = {
     actions: "操作",
     restartPanel: "重启面板应用",
     restartPanelHint: "面板卡住或显示异常时使用，无需重启整台设备。",
+    audio: "音频",
+    audioHint: "前面板通过 PipeWire 播放声音。T6 没有内置喇叭：请连接 USB 音箱或通过 HDMI 连接电视，并在下方或面板的 设置 → 音频 中选择。",
+    soundServer: "声音服务",
+    audioOutput: "输出",
+    audioOutputHint: "面板上视频的声音从这里播放。播放到默认输出的应用（如 Audio Player）也会跟随。",
+    bluetoothSvc: "蓝牙",
+    noOutput: "无（静音播放）",
+    notInstalled: "未安装",
+    repairAudio: "修复音频",
+    repairAudioHint: "从 Debian backports 重新安装 PipeWire，并重启声音服务。",
+    repair: "修复",
+    repairTitle: "修复音频？",
+    repairBody: "将以管理员权限：\n1. 从 Debian backports 重新安装 PipeWire、WirePlumber、pipewire-pulse、蓝牙音频插件（需要联网，已安装则不会重复下载）；\n2. 重启面板的声音服务。\n正在播放的视频会中断约一秒。其他应用和系统设置不受影响。",
+    repairing: "正在修复…",
+    repairOk: "音频已修复",
+    repairFailed: "修复失败：{msg}",
+    pulseConflict: "检测到 PulseAudio（通常由蓝牙、音频播放器等应用安装），它与面板的声音服务冲突。请先卸载安装它的应用。",
     restart: "重启",
     cancel: "取消",
     confirm: "确定",
@@ -125,6 +142,23 @@ const I18N = {
     actions: "Actions",
     restartPanel: "Restart panel app",
     restartPanelHint: "For a frozen or misbehaving panel, without rebooting the OS.",
+    audio: "Audio",
+    audioHint: "The front panel plays sound through PipeWire. Choose the audio output below or on the panel under Settings → Audio.",
+    soundServer: "Sound server",
+    audioOutput: "Output",
+    audioOutputHint: "Where the panel's videos play their sound. Apps that play to the default output (such as Audio Player) follow it too.",
+    bluetoothSvc: "Bluetooth",
+    noOutput: "None (plays silently)",
+    notInstalled: "not installed",
+    repairAudio: "Repair audio",
+    repairAudioHint: "Reinstall PipeWire from Debian backports and restart the sound server.",
+    repair: "Repair",
+    repairTitle: "Repair audio?",
+    repairBody: "This will, as administrator:\n1. Reinstall PipeWire, WirePlumber, pipewire-pulse and the Bluetooth audio plugin from Debian backports (needs internet; nothing is downloaded if they are already installed).\n2. Restart the panel's sound server.\nA video that is playing pauses for about a second. Other apps and system settings are not touched.",
+    repairing: "Repairing…",
+    repairOk: "Audio repaired",
+    repairFailed: "Repair failed: {msg}",
+    pulseConflict: "PulseAudio is installed (usually by the Bluetooth or Audio Player apps) and conflicts with the panel's sound server. Uninstall the app that installed it first.",
     restart: "Restart",
     cancel: "Cancel",
     confirm: "OK",
@@ -162,6 +196,12 @@ const els = {
   timeout: $("timeoutSel"),
   cc: $("ccSwitch"),
   restart: $("restartBtn"),
+  statAudio: $("statAudio"),
+  output: $("outputSel"),
+  statBt: $("statBt"),
+  audioWarn: $("audioWarn"),
+  audioComps: $("audioComps"),
+  repair: $("repairBtn"),
   modal: $("modal"),
   modalTitle: $("modalTitle"),
   modalBody: $("modalBody"),
@@ -207,6 +247,11 @@ async function load() {
     state.status = null;
     els.summary.textContent = e.message;
   }
+  try {
+    state.audio = await api("audio");
+  } catch (e) {
+    state.audio = null;
+  }
   render();
 }
 
@@ -231,6 +276,59 @@ function render() {
   els.cc.disabled = !on;
   els.cc.checked = !!s.color_correction;
   els.restart.disabled = !on;
+  renderAudio();
+}
+
+// Audio: sound-server health, the chosen output and the installed packages;
+// the Repair button reinstalls them in the background and polls until done.
+let repairing = false;
+function renderAudio() {
+  const a = state.audio;
+  if (!a) return;
+  els.statAudio.textContent = t(a.running ? "running" : "stopped");
+  els.statAudio.classList.toggle("ok", a.running);
+  renderOutputs(a.outputs || []);
+  els.statBt.textContent = t(a.services && a.services.bluetooth ? "running" : "stopped");
+  els.statBt.classList.toggle("ok", !!(a.services && a.services.bluetooth));
+  els.audioWarn.hidden = !a.pulseaudio;
+  els.audioWarn.textContent = a.pulseaudio ? t("pulseConflict") : "";
+  els.audioComps.innerHTML = "";
+  for (const [pkg, ver] of Object.entries(a.components || {})) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = pkg;
+    const v = document.createElement("span");
+    v.textContent = ver || t("notInstalled");
+    v.className = ver ? "ver" : "ver missing";
+    li.append(name, v);
+    els.audioComps.append(li);
+  }
+  const busy = repairing || (a.repair && a.repair.state === "running");
+  els.repair.disabled = busy || a.pulseaudio;
+  els.repair.textContent = t(busy ? "repairing" : "repair");
+}
+
+// The options are rebuilt only when the list changes, and left alone while
+// the list is open, so the 5 s refresh never closes it under the cursor.
+function renderOutputs(outputs) {
+  const sel = els.output;
+  if (document.activeElement === sel) return;
+  const cur = outputs.find((o) => o.default);
+  // No default among them (nothing plugged in, or the silent fallback sink):
+  // say so with a placeholder that cannot be picked.
+  const key = state.language + "|" + (cur ? "" : "none|") + outputs.map((o) => o.id + ":" + o.name).join(",");
+  if (sel.dataset.key !== key) {
+    sel.dataset.key = key;
+    sel.innerHTML = "";
+    if (!cur) {
+      const none = new Option(t("noOutput"), "");
+      none.disabled = true;
+      sel.add(none);
+    }
+    for (const o of outputs) sel.add(new Option(o.name, String(o.id)));
+  }
+  sel.value = cur ? String(cur.id) : "";
+  sel.disabled = !outputs.length;
 }
 
 // Cards are built once (and again on a language change); later renders only
@@ -328,6 +426,12 @@ els.timeout.addEventListener("change", () => {
   run(() => api("settings/screen-timeout", "PUT", { seconds: Number(els.timeout.value) }), t("saved"));
 });
 
+els.output.addEventListener("change", () => {
+  const id = Number(els.output.value);
+  if (!id) return;
+  run(() => api("audio/default", "PUT", { id }), t("saved"));
+});
+
 els.cc.addEventListener("change", async () => {
   const want = els.cc.checked;
   if (!(await confirmDialog(t(want ? "ccOnTitle" : "ccOffTitle"), t("ccBody"), t("restart")))) {
@@ -340,6 +444,30 @@ els.cc.addEventListener("change", async () => {
 els.restart.addEventListener("click", async () => {
   if (!(await confirmDialog(t("restartTitle"), t("restartBody"), t("restart")))) return;
   await run(() => api("admin/panel/restart", "POST"), t("restarting"));
+});
+
+// The repair runs in the background (apt + service restarts). With the
+// packages already in place it can finish in a second or two, so show
+// "Repairing…" at once and poll until the backend reports the outcome.
+els.repair.addEventListener("click", async () => {
+  if (!(await confirmDialog(t("repairTitle"), t("repairBody"), t("repair")))) return;
+  repairing = true;
+  renderAudio();
+  try {
+    await api("admin/audio/repair", "POST");
+    let r;
+    do {
+      await new Promise((ok) => setTimeout(ok, 1500));
+      state.audio = await api("audio");
+      r = state.audio.repair;
+    } while (r && r.state === "running");
+    if (r && r.state === "failed") showToast(t("repairFailed", { msg: r.message }), true);
+    else showToast(t("repairOk"));
+  } catch (e) {
+    showToast(t("repairFailed", { msg: e.message }), true);
+  }
+  repairing = false;
+  await load();
 });
 
 // ---- start ----

@@ -40,11 +40,31 @@ if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
     RANGE="Full"
   fi
   python3 "$APP_DIR/set-drm-prop.py" auto HDMI-A-1 "Broadcast RGB" "$RANGE" || true
-  weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --config="$APP_DIR/weston.ini" &
-  for _ in $(seq 1 40); do
-    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
-    sleep 0.25
-  done
+
+  # Start weston with the given shell; true once its socket is up.
+  start_weston() {
+    weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 \
+      --config="$APP_DIR/weston.ini" --shell="$1" &
+    WESTON_PID=$!
+    for _ in $(seq 1 40); do
+      [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && return 0
+      kill -0 "$WESTON_PID" 2>/dev/null || return 1
+      sleep 0.25
+    done
+    return 1
+  }
+
+  # weston-appliance-shell (../shell, built from /weston-appliance-shell in
+  # this repo) stacks the video player above the panel by the [appliance-rule]s in
+  # weston.ini and can rotate it. It is built for one libweston major; if it
+  # can't load (weston was upgraded), fall back to weston's own kiosk-shell:
+  # the panel and player still work, only rotation doesn't.
+  SHELL_SO="$APP_DIR/../shell/appliance-shell.so"
+  if ! { [ -f "$SHELL_SO" ] && start_weston "$SHELL_SO"; }; then
+    [ -f "$SHELL_SO" ] && echo "run-kiosk: appliance-shell failed to start weston, falling back to kiosk-shell" >&2
+    kill "${WESTON_PID:-}" 2>/dev/null || true
+    start_weston kiosk-shell.so || true
+  fi
 fi
 
 # --no-sandbox: the shell runs as root on the appliance; the Chromium sandbox

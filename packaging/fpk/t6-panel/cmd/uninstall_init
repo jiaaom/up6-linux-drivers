@@ -1,5 +1,7 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
 remove_kiosk
+remove_audio
 remove_paneld
+disable_root_session
 exit 0

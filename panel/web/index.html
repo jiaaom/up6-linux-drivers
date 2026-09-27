@@ -68,6 +68,34 @@
         </div>
       </section>
 
+      <section class="panel" id="audioPanel">
+        <div class="section-head">
+          <div>
+            <h2 data-i18n="audio">Audio</h2>
+            <p class="hint" data-i18n="audioHint">Choose the audio output below or on the panel under Settings → Audio.</p>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat"><span data-i18n="soundServer">Sound server</span><strong id="statAudio">-</strong></div>
+          <div class="stat"><span data-i18n="bluetoothSvc">Bluetooth</span><strong id="statBt">-</strong></div>
+        </div>
+        <p class="hint warn" id="audioWarn" hidden></p>
+        <div class="row">
+          <div class="row-label">
+            <span data-i18n="audioOutput">Output</span>
+            <p class="hint" data-i18n="audioOutputHint">Where the panel's videos play their sound. Apps that play to the default output (such as Audio Player) follow it too.</p>
+          </div>
+          <select id="outputSel" disabled></select>
+        </div>
+        <ul class="comp-list" id="audioComps"></ul>
+        <div class="row">
+          <div class="row-label">
+            <span data-i18n="repairAudio">Repair audio</span>
+            <p class="hint" data-i18n="repairAudioHint">Reinstall PipeWire from Debian backports and restart the sound server.</p>
+          </div>
+          <button id="repairBtn" class="ghost-btn" type="button" data-i18n="repair">Repair</button>
+        </div>
+      </section>
       <section class="panel">
         <div class="section-head">
           <h2 data-i18n="actions">Actions</h2>

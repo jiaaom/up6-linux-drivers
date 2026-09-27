@@ -53,6 +53,21 @@ pub(super) async fn put_power(Json(req): Json<PowerReq>) -> Response {
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct HoldReq {
+    /// Seconds to keep the screen on from now (renew before it runs out);
+    /// 0 releases the hold.
+    secs: u64,
+}
+
+/// Hold off the screen timeout, e.g. while the video player plays. A lease,
+/// capped at 10 minutes, so a holder that dies can't keep the screen on.
+pub(super) async fn put_timeout_hold(Json(req): Json<HoldReq>) -> Response {
+    let secs = req.secs.min(600);
+    crate::idle::hold_for(secs);
+    Json(serde_json::json!({ "secs": secs })).into_response()
+}
+
 /// Server-sent events: `{"on":bool}` now and on every change of the screen
 /// state, whoever switched it.
 pub(super) async fn display_events() -> axum::response::sse::Sse<impl futures_util::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {

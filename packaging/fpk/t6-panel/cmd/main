@@ -4,8 +4,8 @@
 . "$(dirname "$0")/common"
 
 case "$1" in
-    start) start_paneld; start_kiosk ;;
-    stop) stop_kiosk; stop_paneld ;;
+    start) start_paneld; start_audio; start_kiosk ;;
+    stop) stop_kiosk; stop_audio; stop_paneld ;;
     status) paneld_running && exit 0 || exit 3 ;;
     *) exit 1 ;;
 esac

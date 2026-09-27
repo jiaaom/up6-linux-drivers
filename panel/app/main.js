@@ -115,6 +115,88 @@ ipcMain.handle('preview:close', async () => {
   return { ok: true };
 });
 
+// Video player: the bundled mpv (../mpv, see panel/mpv/README.md) runs as its
+// own Wayland window. weston-appliance-shell stacks it above this window
+// (app-id "mpv", layer 10), gives it keyboard focus and brings the panel back
+// when it exits, so all this process does is start it and keep the screen on
+// while a video plays: mpv's IPC socket reports `pause`, and a playing video
+// holds t6-paneld's screen timeout (a renewed lease, so a crash here can't
+// leave the screen on for good).
+const { spawn } = require('child_process');
+const net = require('net');
+const MPV = require('path').join(__dirname, '..', 'mpv', 'run-mpv.sh');
+const MPV_IPC = `${process.env.XDG_RUNTIME_DIR || '/tmp'}/t6-panel-mpv.sock`;
+const HOLD_SECS = 90;   // lease length
+const HOLD_RENEW_MS = 60 * 1000;
+let player = null;      // { proc, ipc, renew }
+
+function holdScreen(secs) {
+  return fetch(new URL('api/display/timeout-hold', PANEL_URL), {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secs }),
+  }).catch(() => {});
+}
+
+function setPlaying(p, playing) {
+  if (playing && !p.renew) {
+    holdScreen(HOLD_SECS);
+    p.renew = setInterval(() => holdScreen(HOLD_SECS), HOLD_RENEW_MS);
+  } else if (!playing && p.renew) {
+    clearInterval(p.renew);
+    p.renew = null;
+    holdScreen(0);
+  }
+}
+
+// Follow mpv's `pause` property over its JSON IPC socket. mpv creates the
+// socket shortly after start, so retry the connect for a few seconds.
+function watchPlayer(p, tries = 20) {
+  const ipc = net.connect(MPV_IPC);
+  let buf = '';
+  ipc.on('connect', () => {
+    p.ipc = ipc;
+    ipc.write(JSON.stringify({ command: ['observe_property', 1, 'pause'] }) + '\n');
+  });
+  ipc.on('data', (d) => {
+    buf += d;
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      try {
+        const m = JSON.parse(line);
+        if (m.event === 'property-change' && m.name === 'pause') setPlaying(p, m.data === false);
+      } catch (e) { /* not JSON: ignore */ }
+    }
+  });
+  ipc.on('error', () => {
+    if (!p.ipc && player === p && tries > 0) setTimeout(() => watchPlayer(p, tries - 1), 250);
+  });
+}
+
+function stopPlayer() {
+  if (player) player.proc.kill('SIGTERM');
+}
+
+ipcMain.handle('player:open', async (event, { path }) => {
+  if (!fs.existsSync(MPV)) return { ok: false, reason: 'no player' };
+  stopPlayer(); // one video at a time
+  try { fs.unlinkSync(MPV_IPC); } catch (e) { /* not there */ }
+  // `--` so a file name starting with '-' is never read as an option.
+  const proc = spawn(MPV, [`--input-ipc-server=${MPV_IPC}`, '--', path], { stdio: 'ignore' });
+  const p = { proc, ipc: null, renew: null };
+  player = p;
+  proc.on('exit', () => {
+    setPlaying(p, false);
+    if (p.ipc) p.ipc.destroy();
+    if (player === p) player = null;
+    if (mainWindow) mainWindow.webContents.send('player:closed');
+  });
+  watchPlayer(p);
+  return { ok: true };
+});
+app.on('before-quit', stopPlayer);
+
 function createWindow() {
   const windowed = !!process.env.WINDOWED;
   const win = new BrowserWindow({

@@ -236,7 +236,7 @@ function fmBindRows() {
         if (fmSelecting()) { fmSelToggle(path); return; }
         if (el.classList.contains('nolink')) { fmItemActions(fmFindEntry(path, name), path, name, isDir); return; }
         if (isDir) { fmPushRecent({ path: path, name: name, root: FM.cur.root, dir: 1 }); fmGo({ mode: 'browse', root: FM.cur.root, path: path, title: name }); }
-        else fmOpenPreview(path, name, FM.cur.root);
+        else fmOpenFile(path, name, FM.cur.root);
       },
       function () { // hold
         if (fmSelecting()) { fmSelToggle(path); return; }
@@ -342,6 +342,20 @@ function fmMoreMenu() {
         else if (a === 'info') fmDoSize(FM.cur.path, FM.cur.title || 'Folder');
       });
     });
+  });
+}
+
+/* ---------- opening a file: videos and music play in the built-in player, the rest previews ---------- */
+function fmIsPlayable(name) {
+  var c = fmCat(name);
+  return (c === 'video' || c === 'audio') && !!(window.playerBridge && window.playerBridge.open);
+}
+function fmOpenFile(path, name, root) {
+  if (!fmIsPlayable(name)) { fmOpenPreview(path, name, root); return; }
+  fmPushRecent({ path: path, name: name, root: root || (FM.cur && FM.cur.root) || 'personal', dir: 0 });
+  window.playerBridge.open(path).then(function (r) {
+    // No bundled player (dev build): fall back to Preview.
+    if (!r || !r.ok) fmOpenPreview(path, name, root);
   });
 }
 

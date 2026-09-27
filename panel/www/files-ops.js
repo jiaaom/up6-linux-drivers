@@ -10,7 +10,9 @@ function fmItemActions(entry, path, name, isDir) {
   if (FM.cur.root === 'trash') {
     rows.push(['restore', 'Restore', FM_ICON.refresh]);
   } else {
-    rows.push(['open', isDir ? 'Open' : 'Preview', isDir ? FM_ICON.folder : FM_ICON.info]);
+    var playable = !isDir && fmIsPlayable(name);
+    rows.push(['open', isDir ? 'Open' : playable ? 'Play' : 'Preview', isDir ? FM_ICON.folder : playable ? (fmCat(name) === 'audio' ? FM_ICON.audio : FM_ICON.video) : FM_ICON.info]);
+    if (playable) rows.push(['preview', 'Open in Preview', FM_ICON.info]);
     var faved = fmIsFav(path) || FM.cur.root === 'fav';
     rows.push(['fav', faved ? 'Remove from Favorites' : 'Add to Favorites', FM_ICON.fav]);
     rows.push(['rename', 'Rename', FM_ICON.rename || FM_ICON.file]);
@@ -27,7 +29,8 @@ function fmItemActions(entry, path, name, isDir) {
     sheet.querySelectorAll('.fm-mrow').forEach(function (row) {
       row.addEventListener('click', function () {
         var a = row.dataset.a; fmCloseSheet();
-        if (a === 'open') { if (isDir) fmGo({ mode: 'browse', root: FM.cur.root, path: path, title: name }); else fmOpenPreview(path, name, FM.cur.root); }
+        if (a === 'open') { if (isDir) fmGo({ mode: 'browse', root: FM.cur.root, path: path, title: name }); else fmOpenFile(path, name, FM.cur.root); }
+        else if (a === 'preview') fmOpenPreview(path, name, FM.cur.root);
         else if (a === 'fav') fmDoFav(path, !(fmIsFav(path) || FM.cur.root === 'fav'));
         else if (a === 'rename') fmDoRename(path, name);
         else if (a === 'copy') fmClipSet('copy', { path: path, name: name, dir: isDir });

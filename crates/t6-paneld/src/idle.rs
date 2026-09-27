@@ -28,6 +28,10 @@ const EVENT_SIZE: usize = 24;
 static EPOCH: OnceLock<Instant> = OnceLock::new();
 /// Last activity, in ms since `EPOCH` (monotonic).
 static LAST: AtomicU64 = AtomicU64::new(0);
+/// Screen-timeout hold (a lease), in ms since `EPOCH`: until then the screen
+/// stays on, e.g. while a video plays. The holder renews it; if it dies the
+/// lease simply runs out. See `hold_until`.
+static HOLD_UNTIL: AtomicU64 = AtomicU64::new(0);
 /// Poked when the timeout or the panel-enabled setting changes.
 static CHANGED: Notify = Notify::const_new();
 
@@ -41,6 +45,18 @@ fn mark_activity() {
 
 /// Re-read the settings now (the timeout or panel-enabled flag changed).
 pub fn settings_changed() {
+    CHANGED.notify_one();
+}
+
+/// Hold the screen timeout for the next `secs` seconds (renewable lease);
+/// 0 releases it. The countdown restarts when the hold ends, so the screen
+/// doesn't go off the moment a video stops.
+pub fn hold_for(secs: u64) {
+    let now = now_ms();
+    HOLD_UNTIL.store(now + secs * 1000, Ordering::Relaxed);
+    if secs == 0 {
+        mark_activity();
+    }
     CHANGED.notify_one();
 }
 
@@ -69,8 +85,14 @@ async fn timer() {
         was_on = on;
 
         let wait = match timeout() {
+            Some(_) if on && now_ms() < HOLD_UNTIL.load(Ordering::Relaxed) => {
+                // Held: look again when the lease ends (or is renewed).
+                Some(Duration::from_millis(HOLD_UNTIL.load(Ordering::Relaxed).saturating_sub(now_ms()).max(1)))
+            }
             Some(secs) if on => {
-                let due = LAST.load(Ordering::Relaxed) + secs * 1000;
+                // Count from the last touch or the end of the last hold.
+                let since = LAST.load(Ordering::Relaxed).max(HOLD_UNTIL.load(Ordering::Relaxed));
+                let due = since + secs * 1000;
                 let now = now_ms();
                 if now >= due {
                     match tokio::task::spawn_blocking(|| Display::new().set_power(false)).await {

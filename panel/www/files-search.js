@@ -78,7 +78,7 @@ function fmPaintSearch(files, capped, q) {
     el.addEventListener('click', function () {
       var name = el.dataset.name, path = el.dataset.path;
       if (el.dataset.dir === '1') { FM.stack.push(FM.cur); FM.cur = { mode: 'browse', root: 'personal', path: path, title: name }; fmRender(); }
-      else fmOpenPreview(path, name, 'personal');
+      else fmOpenFile(path, name, 'personal');
     });
   });
 }

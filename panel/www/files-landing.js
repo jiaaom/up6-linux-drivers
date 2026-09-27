@@ -48,7 +48,7 @@ function fmLoadRecents() {
     wrap.querySelectorAll('.fm-recent').forEach(function (el) {
       el.addEventListener('click', function () {
         if (el.dataset.dir === '1') fmGo({ mode: 'browse', root: 'personal', path: el.dataset.path, title: el.dataset.name });
-        else fmOpenPreview(el.dataset.path, el.dataset.name, 'personal');
+        else fmOpenFile(el.dataset.path, el.dataset.name, 'personal');
       });
     });
   }).catch(function () { var w = document.getElementById('fmRecentWrap'); if (w) w.innerHTML = ''; });

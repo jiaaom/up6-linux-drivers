@@ -289,6 +289,10 @@
     return false;
   }
   addEL.call(document,'keydown',function(e){
+    // Real keys only: the on-screen keyboard's return key dispatches a
+    // synthetic Enter to its field, which belongs to the field's own handler
+    // (taken here, it clicked whatever key the ring was on instead).
+    if(!e.isTrusted)return;
     var t=e.target, typing=t&&t.matches&&t.matches('input,textarea');
     // In a text field, arrows/Enter belong to the field unless the
     // on-screen keyboard is up (then they drive it, like the remote would).

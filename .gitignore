@@ -29,3 +29,7 @@ panel/app/node_modules/
 
 # Claude Design drafts
 panel/design/design-review/
+
+# Python bytecode caches
+__pycache__/
+*.pyc

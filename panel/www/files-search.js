@@ -23,6 +23,15 @@ function fmRenderSearch() {
     c.addEventListener('click', function () { f.scope = c.dataset.s; document.querySelectorAll('#files .fm-chip').forEach(function (x) { x.classList.toggle('on', x === c); }); fmDoSearch(); });
   });
   input.addEventListener('input', function () { f.q = input.value; if (FM.searchTimer) clearTimeout(FM.searchTimer); FM.searchTimer = setTimeout(fmDoSearch, 280); });
+  // Return (the on-screen keyboard's too): search now and put the keyboard away.
+  input.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    f.q = input.value;
+    if (FM.searchTimer) clearTimeout(FM.searchTimer);
+    fmDoSearch();
+    input.blur();
+  });
   setTimeout(function () { input.focus(); }, 60); // triggers global #osk
   if (f.q) fmDoSearch();
 }

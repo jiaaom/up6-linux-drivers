@@ -393,6 +393,21 @@ pre.log {
 .radio-led .led-legend { margin: 4px 0 0; font-weight: 500; line-height: 1.45; }
 @media (prefers-reduced-motion: reduce) { .dot.fx-blink, .dot.fx-heartbeat { animation: none; } }
 
+/* ---- remote control ---- */
+.remote-state { font-size: 12px; font-weight: 700; color: var(--muted); }
+.remote-state .dot { width: 9px; height: 9px; border: 0; background: var(--track); }
+.remote-state.on { color: var(--ok); }
+.remote-state.on .dot { background: var(--ok); }
+.remote-state.warn { color: var(--warn); }
+.remote-state.warn .dot { background: var(--warn); }
+.remote-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.remote-key {
+  min-width: 34px; padding: 5px 9px; border-radius: 6px; background: var(--button); color: var(--button-text);
+  font-size: 12px; font-weight: 700; text-align: center; transition: background .5s, color .5s;
+}
+.remote-key.lit { background: var(--accent); color: #fff; transition: none; }
+.remote-last.unmapped { color: var(--warn); }
+
 /* ---- tray light picker ---- */
 /* Preview only: the periods approximate the three EC speeds. */
 #tray-card { --tray-period: 4s; }

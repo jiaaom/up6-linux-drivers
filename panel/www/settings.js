@@ -195,74 +195,14 @@ function showConfirm(title,msg,okText,danger,cb){
   confirmEl.querySelector('.cancel').onclick=close;
 }
 
-/* ---------- screen off (sleep) + wake ----------
-   The home sleep button turns the real backlight off (PUT /api/display/power)
-   and shows a black overlay. The idle timeout lives in t6-paneld (idle.rs,
-   which watches the touchscreen itself); its switch-off reaches us through
-   syncBacklight like any other. Double-tap wakes it
-   (single taps do nothing, so a stray touch won't wake the panel). On the real
-   panel the FT8722 still reports touches with the backlight off, so the
-   double-tap lands even though the screen is dark. No passcode. */
-var sleepEl=document.getElementById('sleep'), asleep=false, powerSetAt=0;
-function setPower(on){powerSetAt=Date.now();fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on})}).catch(function(){});}
-function goSleep(){if(asleep)return;asleep=true;showSleep();setPower(false);}
-function wake(){if(!asleep)return;asleep=false;hideSleep();setPower(true);}
-/* Overlay on/off. Hiding also swallows clicks for a moment, so the tap that
-   woke the panel (or a finger still on the glass) can't land on whatever is
-   underneath. */
-var swallowUntil=0;
-function showSleep(){sleepEl.classList.add('on');tapState=null;}
-function hideSleep(){sleepEl.classList.remove('on');tapState=null;swallowUntil=Date.now()+350;}
-document.addEventListener('click',function(e){if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();}},true);
-/* The backlight can also be switched by someone else — the power button, the web
-   console, another client — so each /api/panel poll reconciles the overlay with
-   the real state: dark screen → asleep (double-tap wakes it, instead of taps
-   landing on an invisible UI); lit screen → overlay dropped. Kiosk only: a
-   browser viewing the panel remotely shouldn't black out because the physical
-   screen did. Our own switches are left alone for a few seconds so a poll that
-   was already in flight can't undo them. */
-var IS_KIOSK=/Electron\//.test(navigator.userAgent), syncLater=null, lastDisp=null;
-function syncBacklight(disp){
-  if(!IS_KIOSK||!disp||typeof disp.on!=='boolean')return;
-  lastDisp=disp;
-  // Just after our own switch, a reply that was already in flight may be
-  // stale: look again once the grace period is over instead of dropping it
-  // (the power button may really have flipped the screen meanwhile).
-  var wait=4000-(Date.now()-powerSetAt);
-  if(wait>0){clearTimeout(syncLater);syncLater=setTimeout(function(){syncBacklight(lastDisp);},wait);return;}
-  if(!disp.on&&!asleep){asleep=true;showSleep();}
-  else if(disp.on&&asleep){asleep=false;hideSleep();}
-}
-/* Pushed by t6-paneld on every backlight change (front power button, T6
-   Control Center, a desktop...), so the overlay follows at once; the
-   /api/panel poll stays as a fallback. EventSource reconnects by itself. */
-if(IS_KIOSK&&window.EventSource){
-  new EventSource('api/display/events').onmessage=function(e){try{syncBacklight(JSON.parse(e.data));}catch(_){}};
-}
-document.getElementById('sleepBtn').addEventListener('click',goSleep);
-/* Double-tap the dark overlay to wake. A tap is a full press + release of the
-   primary contact; the second must start 40-400 ms after the first ended and
-   near it. That keeps a single tap from waking the panel when the touch
-   controller reports a bounce (down/up/down within a few ms) or a second
-   contact. The panel wakes on the second release, while the overlay is still
-   there, so that tap cannot click the UI underneath. */
-var tapState=null, tapDown=null;
-sleepEl.addEventListener('pointerdown',function(e){
-  e.preventDefault();
-  if(!e.isPrimary)return;
-  tapDown={t:Date.now(),x:e.clientX,y:e.clientY};
+/* ---------- screen off (sleep) ----------
+   The home sleep button asks t6-paneld to switch the screen off. While the
+   screen is dark nothing here is involved: t6-paneld puts its screensaver
+   window (appliance-screensaver) above this page first, and it takes every
+   key and touch until the screen is lit again (a key or a double tap). */
+document.getElementById('sleepBtn').addEventListener('click',function(){
+  fetch('api/display/power',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:false})}).catch(function(){});
 });
-sleepEl.addEventListener('pointerup',function(e){
-  e.preventDefault();
-  if(!e.isPrimary||!tapDown)return;
-  var now=Date.now(), d=tapDown; tapDown=null;
-  if(now-d.t>500){tapState=null;return;}                       // a press, not a tap
-  var p=tapState, near=p&&Math.hypot(d.x-p.x,d.y-p.y)<Math.max(60,innerWidth*0.12);
-  if(p&&d.t-p.up>=40&&d.t-p.up<=400&&near){tapState=null;wake();return;}
-  if(p&&d.t-p.up<40)return;                                     // bounce: keep the first tap
-  tapState={up:now,x:d.x,y:d.y};
-});
-sleepEl.addEventListener('pointercancel',function(){tapDown=null;});
 var putTimer=null;
 function putBrightness(v){
   clearTimeout(putTimer);

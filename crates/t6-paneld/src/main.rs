@@ -20,6 +20,7 @@ mod fnos;
 mod gateway;
 mod idle;
 mod panel;
+mod screensaver;
 mod settings;
 mod www;
 
@@ -123,6 +124,7 @@ async fn main() {
         fnos::auto_sign_in().await;
     });
     backlight::start();
+    screensaver::start();
     idle::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (it comes up lit; systemd-backlight restores the level).

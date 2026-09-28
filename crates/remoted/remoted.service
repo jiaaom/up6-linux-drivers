@@ -1,0 +1,24 @@
+[Unit]
+Description=Bluetooth remote to keyboard (remoted)
+Documentation=file:///etc/remoted.toml
+After=bluetooth.service
+ConditionPathExists=/etc/remoted.toml
+
+[Service]
+Type=simple
+# The virtual keyboard needs uinput (a module on Debian kernels).
+ExecStartPre=-/sbin/modprobe uinput
+ExecStart=/usr/sbin/remoted --config /etc/remoted.toml
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+# status.json for dashboards; removed when the service stops.
+RuntimeDirectory=remoted
+# The last key pressed is private: only root (t6-webd) reads it.
+RuntimeDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

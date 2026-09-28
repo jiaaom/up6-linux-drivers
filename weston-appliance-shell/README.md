@@ -31,6 +31,43 @@ Applications need no changes: they are ordinary `xdg-shell` clients.
   set explicitly.
 - **Control socket** for a supervising process.
 
+## appliance-screensaver
+
+A companion client, built along with the shell (`-Dscreensaver=false` to
+skip it). It opens a black fullscreen window and reports input on stdout,
+one event per line:
+
+| line | meaning |
+|---|---|
+| `ready` | the window is mapped (first frame shown) |
+| `key <code>` | a key was pressed (Linux evdev code) |
+| `tap` / `doubletap` | a short touch or click / two close together |
+
+It fades in from transparent to black (`--fade-in MS`, default 400; 0 =
+black at once) and reports `ready` once it is black. With `--watch-stdin`
+it reads commands from stdin, one per line: `fade-out` fades back out
+(`--fade-out MS`, default 300) and exits. A 1×1 pixel per alpha level is
+scaled to the window with `wp_viewporter`, so a fade step costs one pixel.
+Without a viewporter it is simply black and never fades. Input is taken from
+the first frame on, while it is still fading in.
+
+It decides nothing itself. A supervising process starts it when the screen
+goes dark, reads the events (e.g. wake the screen on a key, change the
+volume on volume keys), and sends `fade-out` (or stops it) when the screen
+is lit again. It stays
+alive until SIGTERM, the compositor closes it, or (with `--watch-stdin`) its
+stdin reaches EOF. Give its app-id (`screensaver`, or `--app-id`) a rule above
+everything else, and while it is up it alone gets keys and touches:
+
+```ini
+[appliance-rule]
+app-id=screensaver
+layer=100
+```
+
+A different screensaver (a clock, a slideshow) can be any client that
+follows the same stdout contract.
+
 ## Build
 
 Needs the libweston and weston plugin headers for the **same major version**

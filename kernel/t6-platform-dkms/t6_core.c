@@ -291,9 +291,6 @@ static int t6_platform_probe(struct platform_device *pdev)
 	ret = t6_ec_read(priv, 0x57, &status);
 	if (ret)
 		return ret;
-	ret = t6_backlight_register(priv);
-	if (ret)
-		return ret;
 	ret = t6_leds_register(priv);
 	if (ret)
 		return ret;
@@ -323,6 +320,17 @@ static int t6_platform_probe(struct platform_device *pdev)
 		goto err_charge;
 
 	priv->online = true;
+	/*
+	 * Register the backlight only now: its uevent starts
+	 * systemd-backlight, which restores the saved level at once, and writes
+	 * fail with -ENODEV until the EC is online (after the fan handover's
+	 * settle time above). Registered earlier, the restore failed on every
+	 * boot and the screen kept the EC's level while userspace showed the
+	 * saved one.
+	 */
+	ret = t6_backlight_register(priv);
+	if (ret)
+		goto err_online;
 	WRITE_ONCE(t6, priv);
 	ret = register_reboot_notifier(&t6_reboot_nb);
 	if (ret)
@@ -506,4 +514,4 @@ MODULE_DESCRIPTION("ZSpace T6 EC platform driver");
 MODULE_AUTHOR("T6 driver project");
 MODULE_LICENSE("GPL");
 MODULE_SOFTDEP("pre: pinctrl_meteorlake");
-MODULE_VERSION("0.9.14");
+MODULE_VERSION("0.9.15");

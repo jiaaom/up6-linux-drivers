@@ -15,7 +15,7 @@
 //! - [`admin`]        — package web page (gateway only): kiosk on/off, restart
 
 mod admin;
-mod audio;
+pub(crate) mod audio;
 mod bluetooth;
 mod fnos_disks;
 mod fnos_files;
@@ -73,6 +73,7 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/audio"), get(audio::get_audio))
         .route(&p("/api/audio/default"), put(audio::put_default))
         .route(&p("/api/audio/volume"), put(audio::put_volume))
+        .route(&p("/api/audio/mute"), put(audio::put_mute))
         .route(&p("/api/bluetooth"), get(bluetooth::get_bluetooth))
         .route(&p("/api/bluetooth/power"), put(bluetooth::put_power))
         .route(&p("/api/bluetooth/scan"), post(bluetooth::post_scan))

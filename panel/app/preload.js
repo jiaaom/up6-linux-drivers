@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld('playerBridge', {
   onClosed: (cb) => ipcRenderer.on('player:closed', () => cb()),
 });
 
+// Remote/keyboard keys the main process takes before the page sees them
+// (BrowserBack, BrowserHome, ContextMenu, volume); www/nav.js acts on them.
+contextBridge.exposeInMainWorld('navBridge', {
+  onKey: (cb) => ipcRenderer.on('nav:key', (event, key) => cb(key)),
+});
+
 // Colour theme (see www/theme.js). The renderer owns the choice; main needs it
 // for the two surfaces the renderer can't paint: the BrowserWindow's own
 // background (visible on a scroll overshoot / before first paint) and the

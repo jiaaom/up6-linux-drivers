@@ -1,4 +1,4 @@
-# t6-platform 0.9.14
+# t6-platform 0.9.15
 
 The module exposes three labelled fan RPM/PWM channels and four EC
 temperature sensors through hwmon

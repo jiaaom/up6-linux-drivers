@@ -1,7 +1,7 @@
 //! Live screen state for the kiosk. The backlight can be switched by others
 //! (the front power button via t6-ledd, T6 Control Center, a desktop), so a
-//! task watches it and `/api/display/events` pushes every change, and the
-//! panel's black "asleep" overlay follows at once instead of at the next poll.
+//! task watches it: `/api/display/events` pushes every change, and the
+//! screensaver supervisor (`screensaver.rs`) covers the dark screen.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -29,6 +29,15 @@ pub fn start() {
             }
         }
     });
+}
+
+/// Read the screen state now instead of at the next poll (after our own
+/// switch, so the screensaver follows without the poll's delay).
+pub fn refresh() {
+    if let Some(tx) = STATE.get() {
+        let on = Display::new().is_on();
+        tx.send_if_modified(|v| std::mem::replace(v, on) != on);
+    }
 }
 
 /// Screen on/off, updated on every change.

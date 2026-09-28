@@ -2,7 +2,7 @@
 # test everything with `cargo build` / `cargo test` from this directory.
 [workspace]
 resolver = "2"
-members = ["t6-hw-rs", "t6-fand", "t6-ledd", "t6-webd", "t6-paneld"]
+members = ["t6-hw-rs", "t6-fand", "t6-ledd", "t6-webd", "t6-paneld", "remoted"]
 
 # Release profile applies to every member (profiles are ignored in members
 # once a workspace root defines them).

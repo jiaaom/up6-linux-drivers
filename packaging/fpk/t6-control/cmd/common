@@ -7,7 +7,8 @@ WEBD_UNIT_FILE=/etc/systemd/system/$WEBD_UNIT.service
 
 # The daemons are system services (they must run from early boot, whether
 # or not this app is started), laid out exactly like a plain-Debian install.
-DAEMONS=(t6-fand t6-ledd)
+# remoted (BLE remote -> keyboard) is generic, not T6-specific.
+DAEMONS=(t6-fand t6-ledd remoted)
 
 fail() {
     echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"

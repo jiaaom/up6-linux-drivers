@@ -1,0 +1,35 @@
+# remoted configuration: Bluetooth LE remotes that send their keys as GATT
+# notifications (not as a HID keyboard) are turned into a Linux keyboard.
+# Restart remoted after editing (systemctl restart remoted).
+#
+# One [[remote]] per kind of remote:
+#   name            BlueZ device name (or alias) to match; omit to match any
+#   address         Bluetooth address to match; omit to match any
+#   characteristic  UUID of the characteristic that notifies the key codes
+#   code_byte       which byte of a notification is the key code (default 0)
+#   release         the code sent when all keys are up (default "0x00")
+#   repeat          kernel autorepeat for held keys (default true)
+#   [remote.keys]   "<code>" = "<Linux key>", e.g. "0x52" = "KEY_UP"
+#                   (power/sleep keys are refused: logind would act on them)
+#
+# A new code while a key is held releases that key and presses the new one.
+# Pair the remote with BlueZ first; remoted picks it up whenever it connects.
+# To learn a remote's codes: stop the service and run `remoted -v`.
+
+# Stock remote of ZSpace/UnifyDrive NAS boxes (hold OK + Home to pair).
+[[remote]]
+name = "T2_remote_RC001"
+characteristic = "6e40ff03-b5a3-f393-e0a9-e50e24dcca9e"
+
+[remote.keys]
+"0x52" = "KEY_UP"
+"0x51" = "KEY_DOWN"
+"0x50" = "KEY_LEFT"
+"0x4f" = "KEY_RIGHT"
+"0x28" = "KEY_ENTER"       # OK
+"0x7f" = "KEY_ESC"         # Back (mpv 0.35 on Wayland drops KEY_BACK)
+"0x66" = "KEY_HOMEPAGE"    # Home
+"0x4a" = "KEY_COMPOSE"     # Menu (KEY_MENU doesn't reach Wayland apps)
+"0x76" = "KEY_VOLUMEUP"
+"0x80" = "KEY_VOLUMEDOWN"
+"0x59" = "KEY_MUTE"

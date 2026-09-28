@@ -34,6 +34,14 @@ const I18N = {
     tabDashboard: "Dashboard", tabFans: "Fans", tabLeds: "LEDs", tabDisplay: "Display", tabBattery: "Battery", tabBeeper: "Beeper",
     refresh: "Refresh", admin: "Administrator", readOnly: "Read-only",
     cpuTemp: "CPU temperature", fanProfile: "Fan profile", healthOk: "All running", healthProblems: "{n} problem(s)", repairingShort: "Repairing…",
+    remoteTitle: "Remote control", remoteConnected: "Connected", remoteAway: "Not connected", remoteUnpaired: "Not paired", remoteDown: "Service not running",
+    remoteDownHelp: "remoted is not running, so remote keys do nothing. Check it with journalctl -u remoted.",
+    remoteUnpairedHelp: "Hold OK + Home on the remote for a few seconds, then pair it on the front panel under Settings → Bluetooth.",
+    remoteAwayHelp: "Paired, but not connected. Check the batteries and move closer; it reconnects on its own.",
+    remoteTestHelp: "Press any key on the remote to test it: the key lights up here.",
+    remoteLast: "Last key: {k} · {ago}", remoteNoKey: "No key pressed yet", remoteUnmapped: "Unmapped code {c} · {ago}",
+    agoNow: "just now", agoSec: "{n} s ago", agoMin: "{n} min ago", agoHour: "{n} h ago",
+    keyEnter: "OK", keyEsc: "Back", keyHome: "Home", keyMenu: "Menu", keyMute: "Mute",
     access: "Your access", accessAdminNote: "can change every setting", accessReadNote: "changes need an administrator account",
     healthTitle: "Drivers & services", repairDrivers: "Repair drivers", lastRepair: "Last repair",
     builtinBattery: "Built-in battery", software: "Software",
@@ -84,7 +92,7 @@ const I18N = {
     slow: "Slow", normal: "Normal", fast: "Fast",
     running: "running", notRunning: "not running", loaded: "loaded", loadedV: "loaded, {v}", notLoaded: "not loaded",
     thisApp: "this app", linuxVersion: "Linux version", platformDesc: "fans, LEDs, backlight & battery driver",
-    touchDesc: "touchscreen driver", bridgeDesc: "HDMI-to-DSI front-panel bridge", fandDesc: "fan control service", leddDesc: "LED & beeper service", kernel: "Kernel",
+    touchDesc: "touchscreen driver", bridgeDesc: "HDMI-to-DSI front-panel bridge", fandDesc: "fan control service", leddDesc: "LED & beeper service", remotedDesc: "Bluetooth remote service", kernel: "Kernel",
     kernelV: "kernel {k}", repairing: "Repairing — building and loading the drivers (about 30 s)…",
     problems: "Problems detected", allGood: "All drivers and services are running",
     updateDrivers: "Update the T6 Drivers package to repair from here.",
@@ -131,6 +139,14 @@ const I18N = {
     tabDashboard: "概览", tabFans: "风扇", tabLeds: "指示灯", tabDisplay: "显示屏", tabBattery: "电池", tabBeeper: "蜂鸣器",
     refresh: "刷新", admin: "管理员", readOnly: "只读",
     cpuTemp: "CPU 温度", fanProfile: "风扇模式", healthOk: "全部正常", healthProblems: "{n} 个问题", repairingShort: "正在修复…",
+    remoteTitle: "遥控器", remoteConnected: "已连接", remoteAway: "未连接", remoteUnpaired: "未配对", remoteDown: "服务未运行",
+    remoteDownHelp: "remoted 未运行，遥控器按键不会起作用。可用 journalctl -u remoted 查看原因。",
+    remoteUnpairedHelp: "在遥控器上同时按住 OK 和主页键几秒，然后在前面板的 设置 → 蓝牙 中完成配对。",
+    remoteAwayHelp: "已配对，但当前没有连接。请检查电池并靠近一些，遥控器会自动重连。",
+    remoteTestHelp: "按遥控器上的任意键进行测试：对应的键会在这里亮起。",
+    remoteLast: "最近按键：{k} · {ago}", remoteNoKey: "还没有按过键", remoteUnmapped: "未映射的键码 {c} · {ago}",
+    agoNow: "刚刚", agoSec: "{n} 秒前", agoMin: "{n} 分钟前", agoHour: "{n} 小时前",
+    keyEnter: "OK", keyEsc: "返回", keyHome: "主页", keyMenu: "菜单", keyMute: "静音",
     access: "你的权限", accessAdminNote: "可以修改所有设置", accessReadNote: "修改设置需要管理员账户",
     healthTitle: "驱动与服务", repairDrivers: "修复驱动", lastRepair: "上次修复",
     builtinBattery: "内置电池", software: "软件",
@@ -180,7 +196,7 @@ const I18N = {
     slow: "慢", normal: "中", fast: "快",
     running: "运行中", notRunning: "未运行", loaded: "已加载", loadedV: "已加载，{v}", notLoaded: "未加载",
     thisApp: "本应用", linuxVersion: "Linux 版本", platformDesc: "风扇、指示灯、背光与电池驱动",
-    touchDesc: "触摸屏驱动", bridgeDesc: "前面板 HDMI-to-DSI 桥接驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", kernel: "内核",
+    touchDesc: "触摸屏驱动", bridgeDesc: "前面板 HDMI-to-DSI 桥接驱动", fandDesc: "风扇控制服务", leddDesc: "指示灯与蜂鸣器服务", remotedDesc: "蓝牙遥控器服务", kernel: "内核",
     kernelV: "内核 {k}", repairing: "正在修复 — 编译并加载驱动（约 30 秒）…",
     problems: "发现问题", allGood: "所有驱动和服务都在运行",
     updateDrivers: "请更新 T6 Drivers 套件后再从这里修复。",
@@ -482,6 +498,7 @@ function renderAll(s) {
   renderDisplay(s.display);
   renderPowerButton(s.leds);
   renderLeds(s.leds);
+  renderRemotes(s.remote);
   document.querySelectorAll("#beep-buttons button").forEach((b) => (b.disabled = !state.admin || !s.leds));
   $("#beep-note").textContent = !state.admin ? t("adminRequired") : "";
   document.querySelectorAll(".beep-events input").forEach((cb) => {
@@ -513,6 +530,86 @@ async function refresh() {
     pollFails++;
     if (pollFails >= 3) setConnError(t("reconnecting"));
   }
+}
+
+// ---- remote control (remoted) ----------------------------------------------
+
+// Labels for the Linux key names remoted reports; anything else shows its
+// name without the KEY_ prefix.
+const KEY_LABEL = {
+  KEY_UP: "↑", KEY_DOWN: "↓", KEY_LEFT: "←", KEY_RIGHT: "→",
+  KEY_VOLUMEUP: "Vol +", KEY_VOLUMEDOWN: "Vol −",
+  KEY_ENTER: "keyEnter", KEY_ESC: "keyEsc", KEY_BACK: "keyEsc", KEY_HOMEPAGE: "keyHome", KEY_COMPOSE: "keyMenu", KEY_MENU: "keyMenu", KEY_MUTE: "keyMute",
+};
+const KEY_ORDER = ["KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_ENTER", "KEY_ESC", "KEY_BACK", "KEY_HOMEPAGE", "KEY_COMPOSE", "KEY_MENU", "KEY_VOLUMEUP", "KEY_VOLUMEDOWN", "KEY_MUTE"];
+const keyLabel = (k) => {
+  const l = KEY_LABEL[k];
+  return l ? (l.startsWith("key") ? t(l) : l) : String(k).replace(/^KEY_/, "");
+};
+const hex = (c) => "0x" + c.toString(16).padStart(2, "0");
+
+function agoText(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 3) return t("agoNow");
+  if (s < 60) return t("agoSec", { n: s });
+  if (s < 3600) return t("agoMin", { n: Math.floor(s / 60) });
+  return t("agoHour", { n: Math.floor(s / 3600) });
+}
+
+const remoteSeen = new Map(); // remote index -> last seq shown
+
+function renderRemotes(st) {
+  const box = $("#remotes");
+  const remotes = st ? st.remotes : [null];
+  // Rebuild only when the set of remotes or their keys change, so a lit key
+  // isn't cut short by the next poll.
+  const sig = JSON.stringify(remotes.map((r) => r && [r.name, r.keys]));
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig;
+    box.innerHTML = remotes.map((r, i) => {
+      const keys = r ? r.keys.slice().sort((a, b) => {
+        const ia = KEY_ORDER.indexOf(a.key), ib = KEY_ORDER.indexOf(b.key);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      }) : [];
+      return `<div class="panel remote" data-i="${i}">
+        <div class="section-head"><h3>${r ? escapeHtml(r.name) : "remoted"}</h3><span class="remote-state"><i class="dot"></i><span></span></span></div>
+        <p class="help remote-help"></p>
+        <div class="remote-keys">${keys.map((k) => `<span class="remote-key" data-code="${k.code}" title="${hex(k.code)} → ${escapeHtml(k.key)}">${escapeHtml(keyLabel(k.key))}</span>`).join("")}</div>
+        <p class="meta remote-last"></p>
+      </div>`;
+    }).join("");
+  }
+  remotes.forEach((r, i) => {
+    const card = $(`.remote[data-i="${i}"]`, box);
+    const stateEl = $(".remote-state", card);
+    const [label, cls, help] = !r ? [t("remoteDown"), "warn", t("remoteDownHelp")]
+      : r.connected ? [t("remoteConnected"), "on", t("remoteTestHelp")]
+      : r.paired ? [t("remoteAway"), "warn", t("remoteAwayHelp")]
+      : [t("remoteUnpaired"), "", t("remoteUnpairedHelp")];
+    stateEl.className = "remote-state " + cls;
+    $("span", stateEl).textContent = label;
+    $(".remote-help", card).textContent = help;
+    $(".remote-keys", card).hidden = !r;
+    const lastEl = $(".remote-last", card);
+    const last = r && r.last;
+    // Only a recent key is shown (the server drops it after 5 min).
+    lastEl.hidden = !r;
+    lastEl.classList.toggle("unmapped", !!(last && !last.mapped));
+    lastEl.textContent = !last ? t("remoteNoKey")
+      : last.mapped ? t("remoteLast", { k: `${keyLabel(last.key)} (${hex(last.code)})`, ago: agoText(last.age_ms) })
+      : t("remoteUnmapped", { c: hex(last.code), ago: agoText(last.age_ms) });
+    if (!last) return;
+    // Light the key while it is held, and briefly for each new press (a tap
+    // is shorter than the 1 s poll).
+    const fresh = remoteSeen.has(i) && remoteSeen.get(i) !== last.seq && last.age_ms < 2000;
+    remoteSeen.set(i, last.seq);
+    const chip = $(`.remote-key[data-code="${last.code}"]`, card);
+    card.querySelectorAll(".remote-key.lit").forEach((c) => { if (c !== chip || !r.held) c.classList.remove("lit"); });
+    if (chip && (r.held || fresh)) {
+      chip.classList.add("lit");
+      if (!r.held) setTimeout(() => chip.classList.remove("lit"), 700);
+    }
+  });
 }
 
 // ---- battery --------------------------------------------------------------
@@ -1028,6 +1125,7 @@ async function loadSystem() {
       ["ite_it6616", t("bridgeDesc"), mod(s.modules.ite_it6616)],
       ["t6-fand", t("fandDesc"), yes(s.daemons["t6-fand"])],
       ["t6-ledd", t("leddDesc"), yes(s.daemons["t6-ledd"])],
+      ["remoted", t("remotedDesc"), yes(s.daemons["remoted"])],
     ].map(([k, d, v]) => `<li><span class="sw-name"><b>${k}</b><small>${d}</small></span><b>${v}</b></li>`).join("");
   } catch (e) {
     // Transient (e.g. the gateway not warm yet at startup). The poll retries

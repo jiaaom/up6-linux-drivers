@@ -149,7 +149,27 @@ async fn status(State(s): State<AppState>, headers: HeaderMap) -> Json<serde_jso
         "battery": s.inner.battery.info(),
         "display": s.inner.display.info(),
         "leds": s.inner.ledd.status(),
+        "remote": remote_status(),
     }))
+}
+
+/// remoted's status file (see crates/remoted/src/status.rs), with the age of
+/// each remote's last key added so the page needn't trust its own clock.
+/// None while remoted isn't running (the file lives in its RuntimeDirectory).
+/// The last key is only for the dashboard's key test: for privacy it is
+/// dropped once it is older than `REMOTE_LAST_MAX_MS`.
+fn remote_status() -> Option<serde_json::Value> {
+    const REMOTE_LAST_MAX_MS: u64 = 5 * 60 * 1000;
+    let mut v: serde_json::Value = serde_json::from_slice(&std::fs::read("/run/remoted/status.json").ok()?).ok()?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
+    for r in v["remotes"].as_array_mut().into_iter().flatten() {
+        let age = r["last"]["at_ms"].as_u64().map(|at| now.saturating_sub(at));
+        match age {
+            Some(age) if age <= REMOTE_LAST_MAX_MS => r["last"]["age_ms"] = json!(age),
+            _ => r["last"] = serde_json::Value::Null,
+        }
+    }
+    Some(v)
 }
 
 async fn whoami(State(s): State<AppState>, headers: HeaderMap) -> Json<User> {
@@ -346,6 +366,7 @@ async fn get_system(State(s): State<AppState>) -> Json<serde_json::Value> {
         "daemons": {
             "t6-fand": s.inner.fand.status().is_some(),
             "t6-ledd": s.inner.ledd.status().is_some(),
+            "remoted": std::process::Command::new("systemctl").args(["is-active", "--quiet", "remoted"]).status().is_ok_and(|st| st.success()),
         },
     }))
 }

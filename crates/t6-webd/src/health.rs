@@ -22,8 +22,9 @@ const MODULES: [(&str, &str); 3] = [
 ];
 /// This package's services that depend on the modules. The front panel
 /// (t6-paneld, t6-panel-kiosk) is an optional package and not checked here:
-/// stopping or removing it is not a fault.
-const SERVICES: [&str; 3] = ["t6-fand", "t6-ledd", "t6-webd"];
+/// stopping or removing it is not a fault. remoted (Bluetooth remote ->
+/// keyboard) needs no T6 module but ships with this package.
+const SERVICES: [&str; 4] = ["t6-fand", "t6-ledd", "t6-webd", "remoted"];
 const REPAIR_UNIT: &str = "t6-drivers-repair.service";
 /// Lines of the last repair run shown on the dashboard.
 const LOG_LINES: usize = 40;

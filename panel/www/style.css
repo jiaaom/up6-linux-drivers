@@ -45,7 +45,7 @@
     --prev-bg:oklch(0.11 0.02 252);         /* file-preview backdrop */
     --chip-scrim:oklch(0.15 0.035 252 / .7);/* check chip over a thumbnail */
     --letterbox:#000;                       /* outside the device canvas */
-    --sleep-bg:#000; --sleep-ink:oklch(1 0 0 / .28);
+   
     /* fills + lines */
     --fill-1:oklch(1 0 0 / .05);
     --fill-2:oklch(1 0 0 / .07);
@@ -121,7 +121,7 @@
     --prev-bg:oklch(0.97 0.006 248);
     --chip-scrim:oklch(1 0 0 / .78);
     --letterbox:#000;
-    --sleep-bg:#000; --sleep-ink:oklch(1 0 0 / .28);
+   
     --fill-1:oklch(0.45 0.08 260 / .07);
     --fill-2:oklch(0.45 0.08 260 / .095);
     --fill-3:oklch(0.45 0.08 260 / .095);
@@ -344,10 +344,6 @@
     color:var(--ink-2);transition:transform .1s,background .12s}
   .segopt:active{transform:scale(.94)}
   .segopt.on{background:var(--accent-soft2);border-color:var(--accent-border);color:var(--accent-text);font-weight:600}
-  #sleep{position:absolute;inset:0;z-index:60;background:var(--sleep-bg);display:flex;align-items:center;justify-content:center;
-    opacity:0;pointer-events:none;transition:opacity .6s}
-  #sleep.on{opacity:1;pointer-events:auto}
-  #sleep .wake{color:var(--sleep-ink);font-size:17px}
   .setrow.tap{cursor:pointer}
   .chev{opacity:.4;font-size:18px}
   .lbl.danger{color:var(--danger)}
@@ -955,3 +951,10 @@
 .bt-code span.typed{background:var(--accent);color:var(--card-raised)}
 .bt-codein{margin-top:18px;width:100%;box-sizing:border-box;height:56px;border-radius:12px;border:var(--line) solid var(--hair-strong);
   background:var(--fill-2);color:var(--ink);font:inherit;font-size:28px;letter-spacing:.3em;text-align:center}
+
+/* Keyboard / remote navigation (nav.js): the focus ring shows only after a
+   key press (body.kbd-nav) and hides again on touch. */
+body.kbd-nav .nav-focus{outline:3px solid var(--accent);outline-offset:3px;border-radius:12px;
+  box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 22%,transparent);position:relative;z-index:2}
+body.kbd-nav .osk-key.nav-focus{outline-offset:-3px}
+

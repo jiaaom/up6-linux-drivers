@@ -180,7 +180,6 @@ document.querySelector('#home .kick').addEventListener('click',function(){
 function refresh(d){
   if(!d)return;
   LAST=d;
-  syncBacklight(d.display); // backlight switched off/on elsewhere → match the sleep overlay
   if(!layoutApplied&&d.dashboard){layoutApplied=true;applyLayout(d.dashboard);homeCacheSave({dashboard:d.dashboard});} // restore saved widget layout
   // settings.json is the source of truth for the theme; theme.js has already
   // painted from the localStorage echo, so this only corrects a disagreement

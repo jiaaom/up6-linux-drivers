@@ -12,6 +12,7 @@
 //! - `GET  /api/audio`                 components, services, outputs
 //! - `PUT  /api/audio/default`         `{id}` — make an output the default
 //! - `PUT  /api/audio/volume`          `{id, volume}` — 0..1
+//! - `PUT  /api/audio/mute`            `{id, muted?}` — omitted = toggle
 //! - `POST /api/admin/audio/repair`    admin: (re)install packages, restart
 use axum::{http::{HeaderMap, StatusCode}, response::{IntoResponse, Response}, Json};
 use serde::{Deserialize, Serialize};
@@ -227,6 +228,51 @@ pub(super) async fn put_volume(Json(req): Json<VolumeReq>) -> Response {
     let r = tokio::task::spawn_blocking(move || tool("wpctl", &["set-volume", &req.id.to_string(), &format!("{v:.3}")])).await;
     match r {
         Ok(Ok(_)) => Json(serde_json::json!({ "id": req.id, "volume": v })).into_response(),
+        Ok(Err(e)) => (StatusCode::BAD_REQUEST, e).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+/// Volume keys while the screen is dark (the screensaver has the keys): the
+/// default output, ±`delta` (0..1), capped at 100 %.
+pub(crate) async fn step_volume(delta: f64) {
+    let arg = format!("{:.0}%{}", delta.abs() * 100.0, if delta < 0.0 { '-' } else { '+' });
+    let r = tokio::task::spawn_blocking(move || tool("wpctl", &["set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", &arg])).await;
+    if let Ok(Err(e)) = r {
+        eprintln!("volume key: {e}");
+    }
+}
+
+/// The Mute key while the screen is dark.
+pub(crate) async fn toggle_mute() {
+    let r = tokio::task::spawn_blocking(|| tool("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])).await;
+    if let Ok(Err(e)) = r {
+        eprintln!("mute key: {e}");
+    }
+}
+
+#[derive(Deserialize)]
+pub(super) struct MuteReq {
+    id: u64,
+    /// true/false; omitted = toggle (the remote's Mute key)
+    muted: Option<bool>,
+}
+
+pub(super) async fn put_mute(Json(req): Json<MuteReq>) -> Response {
+    let r = tokio::task::spawn_blocking(move || {
+        let id = req.id.to_string();
+        let arg = match req.muted {
+            Some(true) => "1",
+            Some(false) => "0",
+            None => "toggle",
+        };
+        tool("wpctl", &["set-mute", &id, arg])?;
+        let (_, muted) = tool("wpctl", &["get-volume", &id]).ok().as_deref().and_then(parse_volume).unwrap_or((0.0, false));
+        Ok::<_, String>(muted)
+    })
+    .await;
+    match r {
+        Ok(Ok(muted)) => Json(serde_json::json!({ "id": req.id, "muted": muted })).into_response(),
         Ok(Err(e)) => (StatusCode::BAD_REQUEST, e).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }

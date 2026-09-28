@@ -45,8 +45,9 @@ pub(super) struct PowerReq {
 }
 
 pub(super) async fn put_power(Json(req): Json<PowerReq>) -> Response {
-    let result = tokio::task::spawn_blocking(move || Display::new().set_power(req.on))
-        .await.unwrap_or_else(|e| Err(format!("display worker failed: {e}")));
+    // Off: the screensaver comes up first, so no key or touch reaches the
+    // UI behind the dark screen.
+    let result = if req.on { crate::screensaver::screen_on().await } else { crate::screensaver::screen_off().await };
     match result {
         Ok(v) => Json(serde_json::json!({ "brightness": v, "on": req.on })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),

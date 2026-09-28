@@ -52,20 +52,22 @@ payload_t6_drivers() {
 payload_t6_control() {
     local app=$1/app crate
     mkdir -p "$app/bin"
-    for crate in t6-fand t6-ledd t6-webd; do
+    for crate in t6-fand t6-ledd t6-webd remoted; do
         log "building $crate (release)"
         (cd "$CRATES" && cargo build --release --quiet -p "$crate")
     done
     cp "$CRATES/target/release/t6-fand" "$CRATES/target/release/t6-ledd" \
-       "$CRATES/target/release/t6-webd" "$app/bin/"
+       "$CRATES/target/release/t6-webd" "$CRATES/target/release/remoted" "$app/bin/"
     # Daemon defaults and units, installed system-wide by cmd/install_callback.
     cp "$CRATES/t6-fand/t6-fand.toml" "$CRATES/t6-fand/t6-fand.service" \
-       "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" "$app/"
+       "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" \
+       "$CRATES/remoted/remoted.toml" "$CRATES/remoted/remoted.service" "$app/"
 }
 
-# Build weston-appliance-shell into $1 (module + control tool + license).
+# Build weston-appliance-shell into $1 (module + screensaver + control tool + license).
 # Needs meson, ninja and the libweston/weston dev headers matching the
-# weston the panel runs (Debian: libweston-14-dev, weston-dev).
+# weston the panel runs (Debian: libweston-14-dev, weston-dev), plus
+# libwayland-dev and wayland-protocols for appliance-screensaver.
 build_appliance_shell() {
     local out=$1 bdir=$BUILD_DIR/appliance-shell
     [ -f "$ASH_SRC/meson.build" ] || die "weston-appliance-shell not found at $ASH_SRC (set ASH_SRC)"
@@ -76,7 +78,7 @@ build_appliance_shell() {
     { meson setup "$bdir" "$ASH_SRC" --buildtype=release && ninja -C "$bdir"; } >/dev/null \
         || die "weston-appliance-shell build failed"
     mkdir -p "$out"
-    cp "$bdir/appliance-shell.so" "$ASH_SRC/tools/appliance-shell-ctl" "$ASH_SRC/LICENSE" "$out/"
+    cp "$bdir/appliance-shell.so" "$bdir/appliance-screensaver" "$ASH_SRC/tools/appliance-shell-ctl" "$ASH_SRC/LICENSE" "$out/"
 }
 
 payload_t6_panel() {

@@ -197,6 +197,70 @@ ipcMain.handle('player:open', async (event, { path }) => {
 });
 app.on('before-quit', stopPlayer);
 
+// Remote/keyboard keys that a browser acts on by itself (BrowserBack is a
+// history navigation) or that must work wherever focus is — including inside
+// the Preview view — are taken here and handed to the panel UI's navigator
+// (www/nav.js). Arrows, Enter and Escape reach the page normally.
+const NAV_KEYS = new Set(['BrowserBack', 'BrowserHome', 'ContextMenu',
+  'AudioVolumeUp', 'AudioVolumeDown', 'AudioVolumeMute']);
+// Also taken from Preview: leaving it must not depend on its own key handling.
+const PREVIEW_EXIT_KEYS = new Set(['Escape']);
+// Volume works with the screen off (music); every other key only wakes it.
+const WAKE_PASS_KEYS = new Set(['AudioVolumeUp', 'AudioVolumeDown', 'AudioVolumeMute']);
+// Power-management keys never wake: the front power button's KEY_SCREENLOCK
+// (LaunchScreenSaver) arrives just after t6-ledd switched the screen off with
+// it, and waking on it would turn the screen straight back on.
+const NOT_WAKE_KEYS = new Set(['LaunchScreenSaver', 'PowerOff', 'Standby', 'WakeUp']);
+
+// The screen is lit: backlight powered and above 0, read from sysfs, the
+// same test as t6-hw-rs Display::is_on. This is decided here rather than by
+// the page's sleep flag, which lags or goes stale while the page sits unseen
+// behind a dark screen (Chromium throttles it), so keys could land on the
+// UI without waking the screen.
+const BACKLIGHT = (() => {
+  try {
+    const d = fs.readdirSync('/sys/class/backlight');
+    return d.length ? `/sys/class/backlight/${d.includes('t6_ec_backlight') ? 't6_ec_backlight' : d[0]}` : null;
+  } catch { return null; }
+})();
+function screenOn() {
+  if (!BACKLIGHT) return true;
+  try {
+    const power = parseInt(fs.readFileSync(`${BACKLIGHT}/bl_power`, 'utf8'), 10);
+    const level = parseInt(fs.readFileSync(`${BACKLIGHT}/brightness`, 'utf8'), 10);
+    return !(power !== 0 || level === 0);
+  } catch { return true; }
+}
+let wakeSentAt = 0;
+function wakeScreen() {
+  if (Date.now() - wakeSentAt < 1500) return;
+  wakeSentAt = Date.now();
+  fetch(new URL('api/display/power', PANEL_URL), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: true }),
+  }).catch((e) => console.error('wake screen:', e.message));
+}
+// Keys whose press woke the screen: their release is swallowed too.
+const wakeKeys = new Set();
+
+function routeNavKeys(contents, extra) {
+  contents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyUp' && wakeKeys.delete(input.code)) { event.preventDefault(); return; }
+    if (input.type !== 'keyDown') return;
+    if (NOT_WAKE_KEYS.has(input.key)) { event.preventDefault(); return; }
+    if (!WAKE_PASS_KEYS.has(input.key) && (wakeKeys.has(input.code) || !screenOn())) {
+      // Dark screen: this key only wakes it (autorepeat of the same key too).
+      event.preventDefault();
+      wakeKeys.add(input.code);
+      wakeScreen();
+      return;
+    }
+    if (NAV_KEYS.has(input.key) || (extra && extra.has(input.key))) {
+      event.preventDefault();
+      if (mainWindow) mainWindow.webContents.send('nav:key', input.key === 'Escape' ? 'BrowserBack' : input.key);
+    }
+  });
+}
+
 function createWindow() {
   const windowed = !!process.env.WINDOWED;
   const win = new BrowserWindow({
@@ -215,6 +279,7 @@ function createWindow() {
     },
   });
   mainWindow = win;
+  routeNavKeys(win.webContents);
   win.loadURL(PANEL_URL);
   // No more Preview-toolbar geometry hack here: the weston compositor scale
   // (panel/app/weston.ini) plus a genuinely responsive panel UI (no more fixed
@@ -227,6 +292,7 @@ function createWindow() {
   });
   previewView.setBackgroundColor(themeBg); // matches --bg; avoids a flash of the wrong theme while loading
   win.contentView.addChildView(previewView);
+  routeNavKeys(previewView.webContents, PREVIEW_EXIT_KEYS);
   previewView.setVisible(false); // hidden until preview:open
 
   // On-panel verification: screenshot once after load, but keep running so the

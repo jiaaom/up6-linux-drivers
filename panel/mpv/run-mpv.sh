@@ -1,7 +1,7 @@
 #!/bin/sh
 # Start the bundled mpv (bin/, lib/ from packaging/mpv/bundle-mpv.sh) with the
-# panel's player config. The kiosk (Electron main) runs this with the weston
-# environment (XDG_RUNTIME_DIR, WAYLAND_DISPLAY) already set.
+# panel's player config. The kiosk (Electron main) runs this with the
+# compositor's client environment (XDG_RUNTIME_DIR, WAYLAND_DISPLAY) already set.
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 # Hardware decoding: lib/ carries our own libva 2.23.0 (core, drm, wayland,
@@ -14,8 +14,9 @@ if [ -e "$MEDIASRV_DRI/iHD_drv_video.so" ]; then
     export LIBVA_DRIVERS_PATH="$MEDIASRV_DRI" LIBVA_DRIVER_NAME=iHD
 fi
 
-# The rotate button drives the compositor (see config/scripts/ash_rotate.lua).
-CTL="$HERE/../shell/appliance-shell-ctl"
+# The rotate button drives the compositor (see config/scripts/ash_rotate.lua),
+# through appliance-compositor's control tool (its docs/CONTRACT.md).
+CTL=/usr/local/lib/appliance-compositor/bin/appliance-shell-ctl
 [ -x "$CTL" ] && export ASH_CTL="$CTL"
 
 exec "$HERE/bin/mpv" --config-dir="$HERE/config" "$@"

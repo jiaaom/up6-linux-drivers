@@ -1,6 +1,7 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
+remove_legacy
 install_paneld
-install_audio
+install_compositor_client
 install_kiosk
 exit 0

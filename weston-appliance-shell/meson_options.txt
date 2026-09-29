@@ -1,5 +1,0 @@
-option('libweston', type: 'string', value: 'libweston-14',
-       description: 'pkg-config name of the libweston to build against')
-option('moduledir', type: 'string', value: '',
-       description: 'where weston looks for shell modules (default: <libdir>/weston)')
-option('screensaver', type: 'boolean', value: true, description: 'Build appliance-screensaver (needs wayland-client, wayland-protocols)')

@@ -1,11 +1,16 @@
 #!/bin/bash
 # Runtime control of the panel backend + on-device kiosk (systemd units; see
-# cmd/common).
+# cmd/common). The display and sound server is appliance-compositor, started
+# by its own package (our install/upgrade restarts it when our clients.d
+# fragment changes); here we only make sure it runs.
 . "$(dirname "$0")/common"
 
 case "$1" in
-    start) start_paneld; start_audio; start_kiosk ;;
-    stop) stop_kiosk; stop_audio; stop_paneld ;;
+    start)
+        start_paneld
+        systemctl start "$COMPOSITOR_UNIT" || fail "appliance-compositor failed to start (journalctl -u $COMPOSITOR_UNIT)."
+        start_kiosk ;;
+    stop) stop_kiosk; stop_paneld ;;
     status) paneld_running && exit 0 || exit 3 ;;
     *) exit 1 ;;
 esac

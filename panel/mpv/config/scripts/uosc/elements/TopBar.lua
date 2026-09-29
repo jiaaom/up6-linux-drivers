@@ -33,7 +33,7 @@ function TopBar:init()
 	local close = {icon = 'close', hover_bg = '2311e8', hover_fg = 'ffffff', command = function() mp.command('quit') end}
 	local max = {icon = 'crop_square', command = maximized_command}
 	local min = {icon = 'minimize', command = function() mp.command('cycle window-minimized') end}
-	-- T6 panel: the player is always fullscreen under weston-appliance-shell;
+	-- T6 panel: the player is always fullscreen under appliance-compositor;
 	-- maximize/minimize do nothing there, so only Close is shown.
 	self.buttons = {close}
 

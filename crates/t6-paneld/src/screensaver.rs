@@ -1,10 +1,11 @@
 //! The screensaver window while the screen is dark.
 //!
-//! `appliance-screensaver` (built with weston-appliance-shell, installed next
-//! to it in `$APP/shell/`) is a black fullscreen window. Its app-id has a rule
-//! above every other window (panel/app/weston.ini), so while it is up it
-//! alone gets keys and touches: nothing reaches the panel or the video
-//! player behind a dark screen. It only reports input on stdout; what to do
+//! `appliance-screensaver` (a tool of appliance-compositor, at the path its
+//! runtime contract gives) is a black fullscreen window. Its app-id
+//! (`t6-panel-screensaver`) has a rule above every other window on the
+//! built-in screen (panel/app/compositor.ini), so while it is up it alone gets
+//! keys and touches: nothing reaches the panel or the video player behind a
+//! dark screen. It only reports input on stdout; what to do
 //! with it is decided here:
 //!   volume keys           change the default output's volume, screen stays dark
 //!   power/sleep keys      ignored (t6-ledd and logind own them)
@@ -21,7 +22,7 @@
 //!   on (any source)               backlight first, then the window fades
 //!                                 out and exits (`fade-out` on its stdin)
 //! One supervisor task owns the child process; if it dies while the screen is
-//! dark (e.g. weston restarted) it is started again.
+//! dark (e.g. the compositor restarted) it is started again.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -33,8 +34,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot};
 
+// appliance-compositor's runtime contract (its docs/CONTRACT.md).
 const RUNTIME_DIR: &str = "/run/user/0";
-const WAYLAND_DISPLAY: &str = "wayland-panel";
+const WAYLAND_DISPLAY: &str = "wayland-appliance";
+const SCREENSAVER: &str = "/usr/local/lib/appliance-compositor/bin/appliance-screensaver";
+const APP_ID: &str = "t6-panel-screensaver";
 /// How long a cover requested before switching off may wait for the
 /// backlight to actually go off.
 const PRE_COVER: Duration = Duration::from_secs(3);
@@ -78,25 +82,15 @@ static WAKES: AtomicU64 = AtomicU64::new(0);
 /// the write, never while waiting for the window (whose events may wake).
 static POWER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-fn binary() -> Option<PathBuf> {
-    // $APP/bin/t6-paneld -> $APP/shell/appliance-screensaver
-    let exe = std::env::current_exe().ok()?;
-    let p = exe.parent()?.parent()?.join("shell/appliance-screensaver");
-    p.is_file().then_some(p)
-}
-
 /// Start the supervisor (once, from main, after `backlight::start`).
 pub fn start() {
     let (tx, rx) = mpsc::unbounded_channel();
     if TX.set(tx).is_err() {
         return;
     }
-    match binary() {
-        Some(bin) => {
-            tokio::spawn(supervise(bin, rx));
-        }
-        None => eprintln!("screensaver: appliance-screensaver not installed; input isn't blocked while the screen is dark"),
-    }
+    // Looked up at each start (spawn): the compositor may be installed or
+    // upgraded while we run.
+    tokio::spawn(supervise(PathBuf::from(SCREENSAVER), rx));
 }
 
 /// Switch the screen off with the screensaver up (faded to black) first.
@@ -240,10 +234,15 @@ async fn dismiss(mut r: Running, lit: bool) {
 
 async fn spawn(bin: &PathBuf, id: u64, fade_in_ms: u64) -> Option<Running> {
     if !std::path::Path::new(RUNTIME_DIR).join(WAYLAND_DISPLAY).exists() {
-        return None; // weston isn't running (kiosk stopped or starting)
+        return None; // the compositor isn't running (stopped or starting)
+    }
+    if !bin.is_file() {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| eprintln!("screensaver: {} missing; input isn't blocked while the screen is dark", bin.display()));
+        return None;
     }
     let mut child = Command::new(bin)
-        .args(["--watch-stdin", "--fade-in", &fade_in_ms.to_string(), "--fade-out", &FADE_OUT_MS.to_string()])
+        .args(["--app-id", APP_ID, "--watch-stdin", "--fade-in", &fade_in_ms.to_string(), "--fade-out", &FADE_OUT_MS.to_string()])
         .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
         .env("WAYLAND_DISPLAY", WAYLAND_DISPLAY)
         .stdin(Stdio::piped()) // EOF when we go: it exits with us

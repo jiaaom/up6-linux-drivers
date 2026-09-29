@@ -1,71 +1,39 @@
 #!/bin/bash
 # Launch the T6 front-panel kiosk on the physical touch screen.
 #
-# The panel runs under a private weston compositor on the built-in DRM output.
-# This script wires up the Wayland environment and launches the Electron shell
-# with the one Chromium flag that must live on the real command line:
-# --ozone-platform=wayland (Electron reads the ozone platform before main.js
-# runs, so it can't be set via app.commandLine). The GPU/ANGLE switches that
-# turn on iGPU acceleration are set inside main.js instead.
+# The panel is a window of appliance-compositor (one weston + appliance-shell
+# on every display, shared with other screen apps; its runtime contract is
+# docs/CONTRACT.md in that project). Our fragment in
+# /etc/appliance-compositor/clients.d/t6-panel.ini puts this window (app-id
+# t6-panel) on the built-in screen, scaled 2x; see compositor.ini.
 #
-# Prereq: a system Mesa new enough to drive the Meteor Lake iGPU (PCI 0x7d55) —
-# Debian 12's stock Mesa 22.3 does NOT; the backports 25.x GL stack
-# (libgl1-mesa-dri, libegl-mesa0, libglx-mesa0, libgbm1) does. Without it the
-# whole stack (weston included) falls back to llvmpipe/SwiftShader software
-# rendering and pegs the CPU.
+# This script launches the Electron shell with the one Chromium flag that must
+# live on the real command line: --ozone-platform=wayland (Electron reads the
+# ozone platform before main.js runs, so it can't be set via
+# app.commandLine). The GPU/ANGLE switches that turn on iGPU acceleration are
+# set inside main.js instead; the Mesa they need is appliance-compositor's
+# install requirement.
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON="$APP_DIR/node_modules/electron/dist/electron"
 
-# Wayland environment. Root's XDG_RUNTIME_DIR is not created by pam, so ensure it.
-: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
-: "${WAYLAND_DISPLAY:=wayland-panel}"
-export XDG_RUNTIME_DIR WAYLAND_DISPLAY
-mkdir -p "$XDG_RUNTIME_DIR"
-chmod 700 "$XDG_RUNTIME_DIR"
-
-# Start weston on the DRM output if it isn't already up on our socket.
-# --config points at our own weston.ini (2x output scale on the touch panel —
-# see that file for why), rather than relying on any system-wide weston config.
-if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
-  # Send limited-range RGB: the panel path stretches 16-235 to 0-255, so full
-  # range looks washed out (see set-drm-prop.py). Needs DRM master, i.e. must
-  # run before weston takes it; weston leaves the property alone. Non-fatal.
-  # Settings → Screen → Color correction (color_correction in t6-paneld's
-  # settings.json, default on) can turn it off; set Full explicitly then,
-  # since the property otherwise keeps its last value across restarts.
-  RANGE="Limited 16:235"
-  if python3 -c 'import json,sys; sys.exit(json.load(open("/var/lib/t6-paneld/settings.json")).get("color_correction", True) is not False)' 2>/dev/null; then
-    RANGE="Full"
-  fi
-  python3 "$APP_DIR/set-drm-prop.py" auto HDMI-A-1 "Broadcast RGB" "$RANGE" || true
-
-  # Start weston with the given shell; true once its socket is up.
-  start_weston() {
-    weston --backend=drm-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 \
-      --config="$APP_DIR/weston.ini" --shell="$1" &
-    WESTON_PID=$!
-    for _ in $(seq 1 40); do
-      [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && return 0
-      kill -0 "$WESTON_PID" 2>/dev/null || return 1
-      sleep 0.25
-    done
-    return 1
-  }
-
-  # weston-appliance-shell (../shell, built from /weston-appliance-shell in
-  # this repo) stacks the video player above the panel by the [appliance-rule]s in
-  # weston.ini and can rotate it. It is built for one libweston major; if it
-  # can't load (weston was upgraded), fall back to weston's own kiosk-shell:
-  # the panel and player still work, only rotation doesn't.
-  SHELL_SO="$APP_DIR/../shell/appliance-shell.so"
-  if ! { [ -f "$SHELL_SO" ] && start_weston "$SHELL_SO"; }; then
-    [ -f "$SHELL_SO" ] && echo "run-kiosk: appliance-shell failed to start weston, falling back to kiosk-shell" >&2
-    kill "${WESTON_PID:-}" 2>/dev/null || true
-    start_weston kiosk-shell.so || true
-  fi
+# The compositor's client environment. The kiosk unit loads it with
+# EnvironmentFile=; this covers manual starts.
+CLIENT_ENV=/usr/local/lib/appliance-compositor/client.env
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -f "$CLIENT_ENV" ]; then
+  set -a; . "$CLIENT_ENV"; set +a
 fi
+: "${XDG_RUNTIME_DIR:=/run/user/0}"
+: "${WAYLAND_DISPLAY:=wayland-appliance}"
+export XDG_RUNTIME_DIR WAYLAND_DISPLAY
+
+# The compositor unit is Type=notify, so under systemd the socket is already
+# up; give manual starts a few seconds.
+for _ in $(seq 1 40); do
+  [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+  sleep 0.25
+done
 
 # --no-sandbox: the shell runs as root on the appliance; the Chromium sandbox
 # can't drop privileges from uid 0 and would refuse to start otherwise.

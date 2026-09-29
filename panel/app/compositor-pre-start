@@ -1,0 +1,17 @@
+#!/bin/bash
+# T6 Front Panel's pre-start hook for appliance-compositor, linked as
+# /etc/appliance-compositor/pre-start.d/t6-panel. Runs as root before weston
+# starts, while nobody holds DRM master.
+#
+# Sends limited-range RGB to the built-in screen: its path stretches 16-235 to
+# 0-255, so full range looks washed out (see set-drm-prop.py). Only the DRM
+# master can set the property, and weston leaves it alone once running.
+# Settings → Screen → Color correction (color_correction in t6-paneld's
+# settings.json, default on) can turn it off; set Full explicitly then, since
+# the property otherwise keeps its last value across restarts.
+APP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+RANGE="Limited 16:235"
+if python3 -c 'import json,sys; sys.exit(json.load(open("/var/lib/t6-paneld/settings.json")).get("color_correction", True) is not False)' 2>/dev/null; then
+    RANGE="Full"
+fi
+exec python3 "$APP_DIR/set-drm-prop.py" auto HDMI-A-1 "Broadcast RGB" "$RANGE"

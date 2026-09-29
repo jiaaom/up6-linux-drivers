@@ -54,10 +54,9 @@ Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 - FygoOS packages: [`fygopack`](https://developer.fygonas.com/docs/cli/fygopack/).
 - `t6-panel` additionally:
   - **Node.js** to fetch the Electron runtime: `cd panel/app && npm ci`;
-  - for weston-appliance-shell, the video player's mpv bundle and libva:
+  - for the video player's mpv bundle and libva:
 
     ```bash
-    sudo apt install -t bookworm-backports libweston-14-dev weston-dev
     sudo apt install meson ninja-build patchelf libdrm-dev libwayland-dev \
       libx11-dev libxext-dev libxfixes-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev
     ```
@@ -90,10 +89,17 @@ packages (.fpk) to `build/`:
 |---|---|
 | `t6-drivers.fpk` | the three DKMS modules + `install-dkms.sh`, built and loaded on install; a `t6-drivers-check` unit rebuilds them at boot after a kernel update |
 | `t6-control.fpk` | the `t6-fand`, `t6-ledd` and `t6-webd` daemons (Control Center web app); depends on `t6-drivers` |
-| `t6-panel.fpk` | the front-panel backend (`t6-paneld`), the Electron kiosk, its weston shell ([`weston-appliance-shell`](weston-appliance-shell/)), a bundled mpv video/music player and the PipeWire sound-server setup, started on boot; depends on `t6-control` |
+| `t6-panel.fpk` | the front-panel backend (`t6-paneld`), the Electron kiosk and a bundled mpv video/music player, started on boot; depends on `t6-control` and `appliance-compositor` |
+
+`t6-panel` runs on **appliance-compositor**, a separate project: one Wayland
+compositor (weston + appliance-shell) on every display and one PipeWire sound
+server, shared by screen apps (the front panel, a TV app, …). The panel uses
+only its runtime contract, so this repository builds without it; each
+[release](../../releases) also carries `appliance-compositor.fpk`.
 
 Install them from the App Center's manual-installation entry, or with
-`appcenter-cli install-fpk <file>`.
+`appcenter-cli install-fpk <file>`, in this order: `t6-drivers`,
+`t6-control`, `appliance-compositor`, `t6-panel`.
 
 
 ## Repository layout
@@ -101,9 +107,8 @@ Install them from the App Center's manual-installation entry, or with
 ```
 kernel/       DKMS kernel modules
 crates/       Cargo workspace with all Rust userspace (shared target/ and lockfile)
-panel/        front-panel UI (www/), its admin page (web/), the Electron kiosk shell (app/),
-              the video player's config (mpv/) and sound-server rules (audio/)
-weston-appliance-shell/  weston shell plugin that stacks and rotates the panel's windows
+panel/        front-panel UI (www/), its admin page (web/), the Electron kiosk shell (app/,
+              with its appliance-compositor registration) and the video player's config (mpv/)
 packaging/    install-dkms.sh, build-fpk.sh, the FygoOS package skeletons (fpk/) and the
               pinned mpv/libva sources (mpv/)
 assets/       README images

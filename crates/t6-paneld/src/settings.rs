@@ -24,8 +24,9 @@ pub struct Settings {
     /// Panel colour theme: "dark" (default) or "light". Empty = dark.
     #[serde(default)]
     pub theme: String,
-    /// Send limited-range RGB to the front panel (run-kiosk.sh reads this key
-    /// before starting weston). None = default = on; see set-drm-prop.py.
+    /// Send limited-range RGB to the front panel (panel/app/compositor-pre-start
+    /// reads this key before the compositor starts). None = default = on; see
+    /// set-drm-prop.py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_correction: Option<bool>,
     /// Run the on-device kiosk (front-panel app). None = default = on. The

@@ -1,9 +1,10 @@
 # Panel video player (mpv)
 
 Tapping a video in the panel's file browser plays it fullscreen in a bundled
-mpv. mpv runs as its own Wayland window on the panel's weston;
-weston-appliance-shell (`/weston-appliance-shell` in this repo) stacks it
-above the panel UI (`[appliance-rule] app-id=mpv layer=10` in `panel/app/weston.ini`).
+mpv. mpv runs as its own Wayland window on appliance-compositor's weston;
+appliance-compositor's shell (a separate project; see its docs/CONTRACT.md)
+stacks it above the panel UI (`[appliance-rule] app-id=mpv layer=10` in
+`panel/app/compositor.ini`).
 When mpv exits, the panel is on top again.
 
 ```
@@ -58,7 +59,7 @@ uosc 5.13.0 from https://github.com/tomasklaen/uosc/releases (LGPL-2.1, see
    a repeated "mouse left" and ignored every tap. The patch treats moves as
    hovered until a real hover is ever seen.
 3. `elements/TopBar.lua`: only the Close button (the player is always
-   fullscreen under weston-appliance-shell; maximize/minimize do nothing).
+   fullscreen under appliance-compositor; maximize/minimize do nothing).
 4. `main.lua` audio-device menu: `auto` and `pipewire` are the same device
    here (the AO is fixed), so the menu shows one "System default" (the AO's
    default, following the system output) and then the real devices.

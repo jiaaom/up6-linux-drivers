@@ -116,8 +116,8 @@ ipcMain.handle('preview:close', async () => {
 });
 
 // Video player: the bundled mpv (../mpv, see panel/mpv/README.md) runs as its
-// own Wayland window. weston-appliance-shell stacks it above this window
-// (app-id "mpv", layer 10), gives it keyboard focus and brings the panel back
+// own Wayland window. appliance-compositor's shell stacks it above this window
+// (app-id "mpv", layer 10 in compositor.ini), gives it keyboard focus and brings the panel back
 // when it exits, so all this process does is start it and keep the screen on
 // while a video plays: mpv's IPC socket reports `pause`, and a playing video
 // holds t6-paneld's screen timeout (a renewed lease, so a crash here can't
@@ -282,7 +282,7 @@ function createWindow() {
   routeNavKeys(win.webContents);
   win.loadURL(PANEL_URL);
   // No more Preview-toolbar geometry hack here: the weston compositor scale
-  // (panel/app/weston.ini) plus a genuinely responsive panel UI (no more fixed
+  // (panel/app/compositor.ini) plus a genuinely responsive panel UI (no more fixed
   // 1080x2160 canvas + JS transform, see style.css) means the Preview view
   // now sees the real, correctly-scaled viewport on its own — see
   // refs/linux-wayland-dpi.md.

@@ -1,6 +1,6 @@
-//! Audio outputs for the panel: the sound server is PipeWire, run system-wide
-//! as root by the t6-audio units (see `packaging/fpk/t6-panel/cmd/common`),
-//! sharing root's runtime dir with weston and the kiosk. The video player
+//! Audio outputs for the panel: the sound server is appliance-compositor's
+//! PipeWire, run system-wide as root by its appliance-audio units (its runtime
+//! contract, docs/CONTRACT.md there), in root's runtime dir next to weston. The video player
 //! (mpv, `ao=pipewire`) and the kiosk (Chromium, via pipewire-pulse) both play
 //! into PipeWire's default output, so choosing an output here means setting
 //! that default; WirePlumber remembers it and each output's volume.
@@ -21,10 +21,10 @@ use std::process::Command;
 use std::sync::Mutex;
 
 const RUNTIME_DIR: &str = "/run/user/0";
-/// Same list as the fpk's `AUDIO_PKGS` (cmd/common); bluez is optional
+/// Same list as appliance-compositor's `AUDIO_PKGS`; bluez is optional
 /// (Bluetooth outputs only).
 const PACKAGES: [&str; 5] = ["pipewire", "pipewire-pulse", "wireplumber", "libspa-0.2-bluetooth", "pipewire-bin"];
-const UNITS: [&str; 3] = ["t6-audio", "t6-audio-session", "t6-audio-pulse"];
+const UNITS: [&str; 3] = ["appliance-audio", "appliance-audio-session", "appliance-audio-pulse"];
 
 fn tool(cmd: &str, args: &[&str]) -> Result<String, String> {
     let out = Command::new(cmd)

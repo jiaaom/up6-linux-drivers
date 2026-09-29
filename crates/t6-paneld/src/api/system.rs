@@ -138,15 +138,20 @@ pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
     }
 }
 
+/// appliance-compositor's unit (its docs/CONTRACT.md).
+const COMPOSITOR_UNIT: &str = "appliance-compositor.service";
+
 #[derive(Deserialize)]
 pub(super) struct ColorCorrectionReq {
     on: bool,
 }
 
 /// The range is a DRM property that only the DRM master can set, and weston
-/// holds master while it runs, so a change takes effect by restarting the
-/// kiosk unit (run-kiosk.sh applies it before weston starts). The restart is
-/// deferred a moment so this response still reaches the (dying) renderer.
+/// holds master while it runs, so a change takes effect by restarting
+/// appliance-compositor: our pre-start hook (panel/app/compositor-pre-start)
+/// applies it before weston starts, and the kiosk comes back with it
+/// (PartOf=). Other apps' windows restart too. The restart is deferred a
+/// moment so this response still reaches the (dying) renderer.
 pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) -> Response {
     match crate::settings::set_color_correction(req.on) {
         Ok(s) => {
@@ -154,7 +159,7 @@ pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) ->
             if s.panel_enabled() {
                 tokio::spawn(async {
                     tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-                    let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", super::admin::KIOSK_UNIT]).status();
+                    let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", COMPOSITOR_UNIT]).status();
                 });
             }
             Json(serde_json::json!({ "color_correction": s.color_correction() })).into_response()

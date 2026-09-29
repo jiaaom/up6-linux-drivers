@@ -1,5 +1,5 @@
 // Audio sub-page: choose the output and its volume.
-/* The panel's sound server is PipeWire (t6-audio units); t6-paneld's /api/audio
+/* The panel's sound server is appliance-compositor's PipeWire; t6-paneld's /api/audio
    lists its outputs and sets the default one, which the video player and the
    kiosk both play into. Outputs appear as they are plugged in or paired
    (a TV only while connected), so the page re-reads every few seconds while

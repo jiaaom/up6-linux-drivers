@@ -1,7 +1,5 @@
 #!/bin/bash
-# Re-check system prerequisites that a reimage or downgrade can take away.
+# Upgrading from <= 1.4 (own weston + PipeWire) needs appliance-compositor.
 . "$(dirname "$0")/common"
-check_weston
-check_mesa
-check_audio
+check_compositor
 exit 0

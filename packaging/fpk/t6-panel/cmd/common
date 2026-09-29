@@ -15,209 +15,77 @@ fail() {
     exit 1
 }
 
-# The kiosk needs a Mesa that knows the Meteor Lake iGPU (PCI 0x7d55).
-# Debian 12's own 22.3 does not, so weston and Electron both fall back to
-# software rendering (~9 cores busy, the SoC near 100 °C). bookworm-backports
-# ships 25.x; these four GL packages are the ones that stay stale otherwise.
-MESA_MIN=24
-MESA_PKGS="libgl1-mesa-dri libegl-mesa0 libglx-mesa0 libgbm1"
-# Install system packages the way App Center runs us: as root, without a
-# terminal. Waits for another apt/dpkg run instead of failing on its lock,
-# and refreshes the package lists once if the first attempt fails (stale
-# lists are the usual cause). apt's output goes to `journalctl -t t6-panel-apt`.
-APT_TAG=t6-panel-apt
-apt_try_install() {
-    local opts=(-y -q --no-install-recommends -o DPkg::Lock::Timeout=120)
-    export DEBIAN_FRONTEND=noninteractive
-    logger -t "$APT_TAG" "apt-get install $*"
-    apt-get "${opts[@]}" install "$@" 2>&1 | logger -t "$APT_TAG"
-    [ "${PIPESTATUS[0]}" -eq 0 ] && return 0
-    apt-get -q -o DPkg::Lock::Timeout=120 update 2>&1 | logger -t "$APT_TAG"
-    apt-get "${opts[@]}" install "$@" 2>&1 | logger -t "$APT_TAG"
-    return "${PIPESTATUS[0]}"
-}
+# ---- appliance-compositor (display + sound) ----------------------------------
+#
+# weston, the Mesa GL stack and PipeWire belong to appliance-compositor, a
+# separate package the panel depends on (it also serves other screen apps,
+# e.g. a TV app on the rear HDMI port). We use only its runtime contract
+# (docs/CONTRACT.md in that project): the paths, unit names and config
+# directories below — none of its files.
+COMPOSITOR_LINK=/usr/local/lib/appliance-compositor
+COMPOSITOR_CONTRACT=1
+COMPOSITOR_UNIT=appliance-compositor
+COMPOSITOR_ETC=/etc/appliance-compositor
+CLIENT_NAME=t6-panel
+# Touches must stay on the built-in screen when a TV is attached too: weston
+# maps an input device to the output named in its udev WL_OUTPUT property.
+TOUCH_RULE=/etc/udev/rules.d/90-t6-panel-touch.rules
 
-# The kiosk compositor. weston-appliance-shell (../shell) is built for weston
-# 14 (bookworm-backports; Debian 12 itself has 10). A newer weston still runs
-# the panel: run-kiosk.sh falls back to kiosk-shell (no player rotation).
-WESTON_MIN=14
-weston_version() { dpkg-query -W -f='${Version}' weston 2>/dev/null; }
-check_weston() {
+check_compositor() {
     local ver
-    ver=$(weston_version) || ver=""
-    [ -n "$ver" ] && dpkg --compare-versions "$ver" ge "$WESTON_MIN" && return 0
-    logger -t t6-panel "weston ${ver:-missing}; installing from bookworm-backports"
-    apt_try_install -t bookworm-backports weston
-    ver=$(weston_version) || ver=""
-    [ -n "$ver" ] && dpkg --compare-versions "$ver" ge "$WESTON_MIN" && return 0
-    fail "The panel needs weston $WESTON_MIN or newer, and installing it automatically failed (details: journalctl -t $APT_TAG).
-Installed: ${ver:-none}.
-Run as root over SSH, then install again:
-apt install -t bookworm-backports weston"
+    ver=$(cat "$COMPOSITOR_LINK/CONTRACT" 2>/dev/null) || ver=""
+    [ -n "$ver" ] || fail "Install Appliance Compositor first (it provides the display and sound server)."
+    [ "$ver" = "$COMPOSITOR_CONTRACT" ] || fail "This version of T6 Front Panel needs Appliance Compositor with contract version $COMPOSITOR_CONTRACT; the installed one has $ver.
+Install the matching Appliance Compositor from the same release."
 }
 
-# Audio: the panel's sound server is PipeWire (bookworm-backports, matching the
-# libpipewire weston already pulls in), run system-wide as root next to the
-# kiosk; see install_audio. PulseAudio is a second sound server fighting over
-# the same cards and Bluetooth (Debian lets both packages be installed, so it
-# is only caught here); we refuse to install next to it rather than remove
-# someone else's.
-AUDIO_PKGS="pipewire pipewire-pulse wireplumber libspa-0.2-bluetooth pipewire-bin"
-audio_missing() {
-    local pkg missing=""
-    for pkg in $AUDIO_PKGS; do
-        dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed' ||
-            missing="${missing:+$missing, }$pkg"
-    done
-    printf '%s' "$missing"
-}
-check_audio() {
-    local missing
-    if dpkg-query -W -f='${Status}' pulseaudio 2>/dev/null | grep -q 'install ok installed'; then
-        fail "The panel's audio (PipeWire) cannot run next to PulseAudio, which is installed on this system (for example by the Bluetooth or Audio Player apps).
-Uninstall the app that installed PulseAudio, or remove it as root over SSH, then install again:
-apt purge pulseaudio"
+compositor_running() { systemctl is-active --quiet "$COMPOSITOR_UNIT"; }
+
+# Register with the compositor: our window rules and output settings, the
+# pre-start hook for the built-in screen's colour range, and the touch mapping.
+# A running compositor reads them on restart (which restarts the kiosk too),
+# so restart it only when our fragment actually changed: other apps' windows
+# (e.g. a TV) go down with it.
+install_compositor_client() {
+    local frag=$COMPOSITOR_ETC/clients.d/$CLIENT_NAME.ini changed=0
+    mkdir -p "$COMPOSITOR_ETC/clients.d" "$COMPOSITOR_ETC/pre-start.d"
+    if ! cmp -s "$TRIM_APPDEST/app/compositor.ini" "$frag"; then
+        install -m 644 "$TRIM_APPDEST/app/compositor.ini" "$frag"
+        changed=1
     fi
-    missing=$(audio_missing)
-    [ -n "$missing" ] || return 0
-    logger -t t6-panel "audio packages missing ($missing); installing from bookworm-backports"
-    apt_try_install -t bookworm-backports $AUDIO_PKGS
-    missing=$(audio_missing)
-    [ -n "$missing" ] || return 0
-    fail "The panel needs PipeWire for audio, and installing it automatically failed (details: journalctl -t $APT_TAG).
-Missing: $missing.
-Run as root over SSH, then install again:
-apt install -t bookworm-backports $AUDIO_PKGS"
-}
-
-# The sound server: PipeWire + WirePlumber (session manager; its stock
-# "main-systemwide" profile drops the per-login-seat features, so Bluetooth
-# works without a logged-in user) + pipewire-pulse (Chromium/Electron speak the
-# PulseAudio protocol). They share root's runtime dir with weston and the
-# kiosk; WirePlumber remembers the default output and volumes in
-# /var/lib/t6-paneld/audio.
-AUDIO_UNITS="t6-audio t6-audio-session t6-audio-pulse"
-# Root's runtime dir. weston, PipeWire and the kiosk keep their sockets in
-# /run/user/0, the conventional place other root apps look (e.g. fn-bluetooth's
-# pactl finds the panel's PipeWire there). That dir belongs to root's user
-# session: starting user@0 (a root SSH login, or apps that start it on
-# purpose) mounts a fresh tmpfs over it (hiding our sockets), and stopping it
-# deletes the dir. So keep root's session up from boot (linger) and order our
-# units after user-runtime-dir@0, which mounts the tmpfs; whoever starts
-# user@0 later finds it already running. A marker records that we turned
-# linger on, so uninstall only undoes our own change.
-RUNTIME_UNIT=user-runtime-dir@0.service
-LINGER_MARK=/var/lib/t6-paneld/root-linger-enabled
-enable_root_session() {
-    mkdir -p /var/lib/t6-paneld
-    if [ ! -e /var/lib/systemd/linger/root ]; then
-        loginctl enable-linger root && touch "$LINGER_MARK"
+    ln -sfn "$TRIM_APPDEST/app/compositor-pre-start" "$COMPOSITOR_ETC/pre-start.d/$CLIENT_NAME"
+    cat > "$TOUCH_RULE" <<'RULE'
+# T6 Front Panel: the touchscreen and pen belong to the built-in screen
+# (weston maps an input device to the output named in WL_OUTPUT).
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="FT8722 *", ENV{WL_OUTPUT}="HDMI-A-1"
+RULE
+    udevadm control --reload 2>/dev/null || true
+    udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
+    if [ "$changed" = 1 ] && compositor_running; then
+        systemctl restart --no-block "$COMPOSITOR_UNIT"
     fi
-    systemctl start "$RUNTIME_UNIT" 2>/dev/null || true
-}
-disable_root_session() {
-    [ -e "$LINGER_MARK" ] || return 0
-    loginctl disable-linger root 2>/dev/null || true
-    rm -f "$LINGER_MARK"
+    return 0
 }
 
-audio_unit() { # name description exec [extra unit lines]
-    cat > "/etc/systemd/system/$1.service" <<UNIT
-[Unit]
-Description=$2
-Requires=$RUNTIME_UNIT
-After=$RUNTIME_UNIT
-$4
-[Service]
-Type=simple
-Environment=XDG_RUNTIME_DIR=/run/user/0
-Environment=XDG_STATE_HOME=/var/lib/t6-paneld/audio
-# our WirePlumber rules (panel/audio in the repo)
-Environment=XDG_CONFIG_HOME=$TRIM_APPDEST/audio/config
-ExecStart=$3
-Restart=on-failure
-RestartSec=2
+remove_compositor_client() {
+    rm -f "$COMPOSITOR_ETC/clients.d/$CLIENT_NAME.ini" "$COMPOSITOR_ETC/pre-start.d/$CLIENT_NAME" "$TOUCH_RULE"
+    udevadm control --reload 2>/dev/null || true
+    # Let a running compositor drop our rules and output settings.
+    compositor_running && systemctl restart --no-block "$COMPOSITOR_UNIT"
+    return 0
+}
 
-[Install]
-WantedBy=multi-user.target
-UNIT
-}
-# Debian enables PipeWire as a per-login user service too; for root that
-# would start a second server in the same /run/user/0 (e.g. on an SSH login
-# as root). Mask those for root only.
-ROOT_USER_UNITS="pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service wireplumber.service filter-chain.service"
-install_audio() {
+# Up to 1.4 the panel ran its own weston (in the kiosk unit) and PipeWire
+# (t6-audio*). appliance-compositor takes the audio units (and our old
+# root-linger marker) over when it is installed; remove whatever is left.
+remove_legacy() {
     local u
-    audio_unit t6-audio "T6 audio server (PipeWire)" /usr/bin/pipewire \
-        "After=bluetooth.service"
-    audio_unit t6-audio-session "T6 audio session manager (WirePlumber)" \
-        "/usr/bin/wireplumber --profile main-systemwide" \
-        "BindsTo=t6-audio.service
-After=t6-audio.service bluetooth.service"
-    audio_unit t6-audio-pulse "T6 audio PulseAudio compatibility (pipewire-pulse)" \
-        /usr/bin/pipewire-pulse \
-        "BindsTo=t6-audio.service
-After=t6-audio.service"
-    mkdir -p /root/.config/systemd/user
-    for u in $ROOT_USER_UNITS; do
-        ln -sf /dev/null "/root/.config/systemd/user/$u"
-    done
-    # after the masks: linger starts root's user manager right away
-    enable_root_session
-    systemctl daemon-reload
-    for u in $AUDIO_UNITS; do
-        systemctl enable "$u" >/dev/null 2>&1
-    done
-}
-remove_audio() {
-    local u
-    for u in $AUDIO_UNITS; do
+    for u in t6-audio-pulse t6-audio-session t6-audio; do
+        [ -f "/etc/systemd/system/$u.service" ] || continue
         systemctl disable --now "$u" >/dev/null 2>&1 || true
         rm -f "/etc/systemd/system/$u.service"
     done
-    for u in $ROOT_USER_UNITS; do
-        [ -L "/root/.config/systemd/user/$u" ] && rm -f "/root/.config/systemd/user/$u"
-    done
     systemctl daemon-reload
-}
-start_audio() {
-    local u
-    [ -f /etc/systemd/system/t6-audio.service ] || install_audio
-    for u in $AUDIO_UNITS; do
-        systemctl start "$u" || fail "$u failed to start (journalctl -u $u)."
-    done
-}
-stop_audio() {
-    systemctl stop $AUDIO_UNITS 2>/dev/null || true
-}
-
-# Print the Mesa GL packages older than MESA_MIN (or missing), comma-separated.
-mesa_stale() {
-    local pkg ver stale=""
-    for pkg in $MESA_PKGS; do
-        ver=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null) || ver=""
-        if [ -z "$ver" ] || dpkg --compare-versions "$ver" lt "$MESA_MIN"; then
-            stale="${stale:+$stale, }$pkg ${ver:-(missing)}"
-        fi
-    done
-    printf '%s' "$stale"
-}
-
-# Upgrade Mesa from bookworm-backports when it is too old; only if that fails
-# ask the user. App Center shows the fail() text verbatim in its error dialog,
-# newlines included, so the message is laid out as lines.
-check_mesa() {
-    local stale
-    stale=$(mesa_stale)
-    [ -n "$stale" ] || return 0
-    logger -t t6-panel "Mesa too old ($stale); installing from bookworm-backports"
-    apt_try_install -t bookworm-backports $MESA_PKGS
-    stale=$(mesa_stale)
-    [ -n "$stale" ] || { logger -t t6-panel "Mesa upgraded"; return 0; }
-    fail "The panel needs Mesa $MESA_MIN or newer for GPU rendering, and installing it automatically failed (details: journalctl -t $APT_TAG).
-Outdated: $stale.
-Run as root over SSH, then install again:
-apt install -t bookworm-backports $MESA_PKGS"
 }
 
 # Generate the unit from the package paths and enable it. Runs as root: the
@@ -277,14 +145,13 @@ paneld_running() {
     systemctl is-active --quiet "$PANELD_UNIT"
 }
 
-# ---- on-device kiosk (weston + Electron) --------------------------------
+# ---- on-device kiosk (Electron) ----------------------------------------------
 #
-# The panel's Electron shell runs on the built-in DRM panel via a private
-# weston compositor. It is a boot service, not a desktop: no display manager,
+# The panel's Electron shell is a window of appliance-compositor on the
+# built-in screen. It is a boot service, not a desktop: no display manager,
 # no greeter (fnOS ships graphical.target with no DM; we just add one service
 # under multi-user.target). The bundled Electron runtime lives under
-# $TRIM_APPDEST/app; weston and a Meteor-Lake-capable Mesa are system packages
-# (checked in install_init).
+# $TRIM_APPDEST/app.
 KIOSK_UNIT=t6-panel-kiosk
 KIOSK_UNIT_FILE=/etc/systemd/system/$KIOSK_UNIT.service
 
@@ -298,18 +165,20 @@ panel_enabled() {
 install_kiosk() {
     cat > "$KIOSK_UNIT_FILE" <<UNIT
 [Unit]
-Description=T6 front-panel kiosk (weston + Electron)
+Description=T6 front-panel kiosk (Electron on appliance-compositor)
 # The renderer loads the backend's local shell ($PANEL_LOCAL_ADDR); the hidden
 # login window needs the gateway/login SPA — both come up under these.
-After=$PANELD_UNIT.service trim_nginx.service systemd-user-sessions.service t6-audio-pulse.service $RUNTIME_UNIT
-Wants=$PANELD_UNIT.service t6-audio-pulse.service
-Requires=$RUNTIME_UNIT
+After=$PANELD_UNIT.service trim_nginx.service $COMPOSITOR_UNIT.service appliance-audio-pulse.service
+Wants=$PANELD_UNIT.service appliance-audio-pulse.service
+# A window of the compositor: needs it, and restarts with it.
+Requires=$COMPOSITOR_UNIT.service
+PartOf=$COMPOSITOR_UNIT.service
 
 [Service]
 Type=simple
-# weston needs DRM master + input and Electron runs --no-sandbox, so root.
-Environment=XDG_RUNTIME_DIR=/run/user/0
-Environment=WAYLAND_DISPLAY=wayland-panel
+# Electron runs --no-sandbox (root); the compositor's client environment
+# (Wayland socket, root's runtime dir with PipeWire).
+EnvironmentFile=$COMPOSITOR_LINK/client.env
 Environment=NAS_HOST=127.0.0.1
 Environment=PANEL_PORT=${PANEL_LOCAL_ADDR##*:}
 # Chromium profile (UI prefs in localStorage). Without this — and with no

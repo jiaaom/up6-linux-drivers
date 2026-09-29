@@ -91,11 +91,13 @@ packages (.fpk) to `build/`:
 | `t6-control.fpk` | the `t6-fand`, `t6-ledd` and `t6-webd` daemons (Control Center web app); depends on `t6-drivers` |
 | `t6-panel.fpk` | the front-panel backend (`t6-paneld`), the Electron kiosk and a bundled mpv video/music player, started on boot; depends on `t6-control` and `appliance-compositor` |
 
-`t6-panel` runs on **appliance-compositor**, a separate project: one Wayland
-compositor (weston + appliance-shell) on every display and one PipeWire sound
-server, shared by screen apps (the front panel, a TV app, …). The panel uses
-only its runtime contract, so this repository builds without it; each
-[release](../../releases) also carries `appliance-compositor.fpk`.
+`t6-panel` runs on
+**[appliance-compositor](https://github.com/jiaaom/appliance-compositor)**, a
+separate project: one Wayland compositor (weston + appliance-shell) on every
+display and one PipeWire sound server, shared by screen apps (the front panel,
+a TV app, …). The panel uses only its runtime contract, so this repository
+builds without it. Download its package from its own releases:
+[latest `appliance-compositor.fpk`](https://github.com/jiaaom/appliance-compositor/releases/latest/download/appliance-compositor.fpk).
 
 Install them from the App Center's manual-installation entry, or with
 `appcenter-cli install-fpk <file>`, in this order: `t6-drivers`,

@@ -138,32 +138,20 @@ pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
     }
 }
 
-/// appliance-compositor's unit (its docs/CONTRACT.md).
-const COMPOSITOR_UNIT: &str = "appliance-compositor.service";
-
 #[derive(Deserialize)]
 pub(super) struct ColorCorrectionReq {
     on: bool,
 }
 
 /// The range is a DRM property that only the DRM master can set, and weston
-/// holds master while it runs, so a change takes effect by restarting
-/// appliance-compositor: our pre-start hook (panel/app/compositor-pre-start)
-/// applies it before weston starts, and the kiosk comes back with it
-/// (PartOf=). Other apps' windows restart too. The restart is deferred a
-/// moment so this response still reaches the (dying) renderer.
+/// holds master while it runs, so our pre-start hook
+/// (panel/app/compositor-pre-start) applies it when appliance-compositor next
+/// starts, i.e. at the next boot. We don't restart the compositor for it: on
+/// fnOS's 6.18 kernel, weston's exit can deadlock in the i915 fbdev restore
+/// (console_lock taken twice), leaving every screen dark until a reboot.
 pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) -> Response {
     match crate::settings::set_color_correction(req.on) {
-        Ok(s) => {
-            // Only when the panel app is on: restarting would start a stopped kiosk.
-            if s.panel_enabled() {
-                tokio::spawn(async {
-                    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-                    let _ = std::process::Command::new("systemctl").args(["restart", "--no-block", COMPOSITOR_UNIT]).status();
-                });
-            }
-            Json(serde_json::json!({ "color_correction": s.color_correction() })).into_response()
-        }
+        Ok(s) => Json(serde_json::json!({ "color_correction": s.color_correction() })).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }

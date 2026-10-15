@@ -63,7 +63,7 @@ function buildSettings(){
       '<div class="setrow"><div class="lbl">Screen Timeout</div></div>'+
       '<div class="seg" id="timeoutSeg">'+seg+'</div>'+
       '<div class="hairrow"></div>'+
-      '<div class="setrow"><div class="lbl">Color correction</div><div class="etoggle'+(ccOn?' on':'')+'" id="ccToggle"><div class="knob"></div></div></div>'+
+      '<div class="setrow"><div class="lbl">Color correction<div class="edesc">Applies after the NAS restarts</div></div><div class="etoggle'+(ccOn?' on':'')+'" id="ccToggle"><div class="knob"></div></div></div>'+
     '</div></div>'+
     '<div class="setgroup"><div class="setlabel">Appearance</div><div class="card">'+
       '<div class="setrow"><div class="lbl">Theme</div></div>'+
@@ -127,20 +127,15 @@ function buildSettings(){
       });
   });
   // Color correction: limited-range output to the front panel (set-drm-prop.py).
-  // Only settable before weston starts, so applying it restarts the screen —
-  // confirm first; the toggle only flips once the user agrees.
+  // Only settable before weston starts, so it is saved here and applied at
+  // the next boot (no screen restart: see put_color_correction in t6-paneld).
   var ccT=document.getElementById('ccToggle');
   ccT.addEventListener('click',function(){
     var nowOn=!ccT.classList.contains('on');
-    showConfirm(nowOn?'Turn on color correction?':'Turn off color correction?',
-      (nowOn?'Fixes washed-out colors and clipped highlights on this screen. ':'Colors on this screen will look washed out. ')+
-        'The screen restarts to apply this (a few seconds of black).',
-      'Restart Screen', false, function(){
-        ccT.classList.toggle('on',nowOn);
-        fetch('api/settings/color-correction',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:nowOn})})
-          .then(function(r){if(!r.ok)throw new Error();toast('Restarting screen…');})
-          .catch(function(){ccT.classList.toggle('on',!nowOn);toast('Color correction change failed');});
-      });
+    ccT.classList.toggle('on',nowOn);
+    fetch('api/settings/color-correction',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:nowOn})})
+      .then(function(r){if(!r.ok)throw new Error();toast('Applies after the NAS restarts');})
+      .catch(function(){ccT.classList.toggle('on',!nowOn);toast('Color correction change failed');});
   });
   // Fan profile -> t6-fand (highlight the active one, switch on tap)
   fetch('api/fan',{cache:'no-store'}).then(function(r){return r.json();}).then(function(f){

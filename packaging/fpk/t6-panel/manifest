@@ -1,5 +1,5 @@
 appname="t6-panel"
-version="1.4.1"
+version="1.4.2"
 display_name="${common.display_name}"
 desc="${common.desc}"
 changelog="${common.changelog}"

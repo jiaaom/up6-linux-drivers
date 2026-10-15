@@ -203,6 +203,7 @@ function refresh(d){
   var et=document.querySelector('[data-tile="eth"]');
   if(et){var e=nw.ethernet||{};et.className='tile '+(e.connected?'on':'off');
     var es=et.querySelector('.eth-sub');if(es)es.textContent=e.connected?(e.ip||'Connected'):'Disconnected';}
+  if(window.ethOnPage&&ethOnPage())ethRender();
   var wt=document.querySelector('[data-tile="wifi"]');
   if(wt){var w=nw.wifi||{},wc=w.connected&&w.ssid;wt.className='tile '+(wc?'on':'off');
     var ws=wt.querySelector('.wifi-sub');if(ws)ws.textContent=wc?w.ssid:'Off';}

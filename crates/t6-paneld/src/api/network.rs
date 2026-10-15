@@ -102,12 +102,21 @@ pub(super) async fn put_wifi_profile(Json(req): Json<WifiProfileReq>) -> Respons
 
 // ---- Ethernet (wired) config ---------------------------------------------
 
-pub(super) async fn get_ethernet() -> Response {
-    Json(t6_hw_rs::network::eth_config()).into_response()
+#[derive(Deserialize)]
+pub(super) struct EthQuery {
+    /// Wired NIC to read (e.g. "enp103s0"); omitted = the default-route one.
+    iface: Option<String>,
+}
+
+pub(super) async fn get_ethernet(Query(q): Query<EthQuery>) -> Response {
+    Json(t6_hw_rs::network::eth_config(q.iface.as_deref())).into_response()
 }
 
 #[derive(Deserialize)]
 pub(super) struct EthReq {
+    /// Wired NIC to configure; omitted = the default-route one.
+    #[serde(default)]
+    iface: Option<String>,
     /// "auto" (DHCP) or "manual" (static).
     method: String,
     /// Static address as CIDR (e.g. "10.0.0.5/24"); required when manual.
@@ -123,7 +132,7 @@ pub(super) struct EthReq {
 pub(super) async fn post_ethernet(Json(req): Json<EthReq>) -> Response {
     let addr = req.address.as_deref().filter(|s| !s.is_empty());
     let gw = req.gateway.as_deref().filter(|s| !s.is_empty());
-    match t6_hw_rs::network::eth_set(&req.method, addr, gw, &req.dns) {
+    match t6_hw_rs::network::eth_set(req.iface.as_deref(), &req.method, addr, gw, &req.dns) {
         Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }

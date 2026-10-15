@@ -4,13 +4,29 @@ function setRows(rows){
     return (i?'<div class="hairrow"></div>':'')+'<div class="setrow"><div class="lbl">'+esc(r[0])+'</div><div class="setval">'+esc(r[1]||'—')+'</div></div>';
   }).join('');
 }
-function showEthDetail(){
-  var e=(LAST&&LAST.network&&LAST.network.ethernet)||{};
-  var rows=[['Status',e.connected?'Connected':'Disconnected'],['Link speed',fmtSpeed(e.speed_mbps)],['IP address',e.ip],['Router',e.gateway],['DNS',(e.dns||[]).join(', ')]];
-  var html='<div class="setgroup"><div class="setlabel">Connection</div><div class="card">'+setRows(rows)+'</div></div>'+
-    '<div class="setgroup"><div class="card"><div class="setrow tap" id="ethEditRow"><div class="lbl">Configure IPv4…</div><div class="chev">›</div></div></div></div>';
-  openPage('Ethernet',html,function(){document.getElementById('ethEditRow').addEventListener('click',ethEdit);});
+/* Ethernet page: one group per wired NIC (built-in port first, then USB
+   adapters), connected or not, each with its own IPv4 editor. Repainted from
+   the 2 s panel poll while open. */
+function ethPorts(){
+  var nw=(LAST&&LAST.network)||{};
+  return nw.ethernet_ports||(nw.ethernet&&nw.ethernet.iface?[nw.ethernet]:[]);
 }
+function ethName(e){return e.usb?(e.model||'USB adapter'):'Built-in port';}
+function ethOnPage(){return document.body.classList.contains('subpage-open')&&document.getElementById('subTitle').textContent==='Ethernet';}
+var ethShape='';
+function ethRender(){
+  var ports=ethPorts(), shape=JSON.stringify(ports);
+  if(shape===ethShape)return; ethShape=shape;
+  subpageScroll.innerHTML=ports.length?ports.map(function(e){
+    var rows=[['Status',e.connected?'Connected':'No cable'],['Link speed',e.connected?fmtSpeed(e.speed_mbps):null],
+      ['IP address',e.ip?(e.ip+(e.prefix!=null?'/'+e.prefix:'')):null],['Router',e.gateway],['DNS',(e.dns||[]).join(', ')],['MAC',e.mac]];
+    return '<div class="setgroup"><div class="setlabel">'+esc(ethName(e))+' · '+esc(e.iface)+'</div><div class="card">'+setRows(rows)+
+      '<div class="hairrow"></div><div class="setrow tap" data-eth="'+esc(e.iface)+'"><div class="lbl">Configure IPv4…</div><div class="chev">›</div></div></div></div>';
+  }).join(''):'<div class="wifi-empty">No wired network adapters.</div>';
+  subpageScroll.querySelectorAll('[data-eth]').forEach(function(r){
+    r.addEventListener('click',function(){var i=r.dataset.eth;ethEdit(i,ethPorts().filter(function(e){return e.iface===i;})[0]);});});
+}
+function showEthDetail(){ethShape='';openPage('Ethernet','',ethRender);}
 /* Ethernet IPv4 editor (drives NetworkManager on the wired/OVS connection) */
 function ethSetMode(m){
   document.querySelectorAll('#ethMode .seg-opt').forEach(function(o){o.classList.toggle('on',o.dataset.m===m);});
@@ -37,7 +53,7 @@ function ipv4Open(ctx){
     document.getElementById('ethedit').classList.add('on');
   }).catch(function(){toast('Could not read '+ctx.title);});
 }
-function ethEdit(){ ipv4Open({title:'Ethernet IPv4',getUrl:'api/network/ethernet',postUrl:'api/network/ethernet',extra:{}}); }
+function ethEdit(iface,e){ ipv4Open({title:(e?ethName(e):iface)+' IPv4',getUrl:'api/network/ethernet?iface='+encodeURIComponent(iface),postUrl:'api/network/ethernet',extra:{iface:iface}}); }
 function tbNetEdit(conn){ ipv4Open({title:'Thunderbolt IPv4',getUrl:'api/thunderbolt/net?conn='+encodeURIComponent(conn),postUrl:'api/thunderbolt/net',extra:{conn:conn},linkLocal:true}); }
 function hideEthEdit(){document.getElementById('ethedit').classList.remove('on');}
 
@@ -216,7 +232,7 @@ function showSharing(){
       .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
       .then(function(){toast('Updated');hideEthEdit();if(window.tbOnPage&&tbOnPage())setTimeout(tbReload,1500);
         setTimeout(function(){fetch('api/panel',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){LAST=d;refresh(d);
-          if(document.body.classList.contains('subpage-open'))showEthDetail(); else closeDetail();}).catch(function(){});},1400);})
+          if(!document.body.classList.contains('subpage-open'))closeDetail();}).catch(function(){});},1400);})
       .catch(function(e){err.textContent=e.message||'Failed';err.hidden=false;});
   });
 })();

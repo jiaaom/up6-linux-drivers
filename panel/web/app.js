@@ -70,7 +70,7 @@ const I18N = {
     never: "从不",
     minutes: "{n} 分钟",
     colorCorrection: "颜色校正",
-    colorCorrectionHint: "修正屏幕发白和高光被截断。切换时屏幕会重启几秒。",
+    colorCorrectionHint: "修正屏幕发白和高光被截断。设备重启后生效。",
     actions: "操作",
     restartPanel: "重启面板应用",
     restartPanelHint: "面板卡住或显示异常时使用，无需重启整台设备。",
@@ -100,9 +100,7 @@ const I18N = {
     offTitle: "关闭前面板应用？",
     offBody: "前面板将停止运行并熄灭屏幕，重启设备后也保持关闭。可随时在这里重新开启。",
     turnOff: "关闭",
-    ccOnTitle: "开启颜色校正？",
-    ccOffTitle: "关闭颜色校正？",
-    ccBody: "前面板屏幕会重启几秒以应用此设置。",
+    ccSaved: "已保存，设备重启后生效",
     restartTitle: "重启面板应用？",
     restartBody: "前面板会黑屏几秒后重新显示。",
     panelOn: "前面板应用已开启",
@@ -138,7 +136,7 @@ const I18N = {
     never: "Never",
     minutes: "{n} min",
     colorCorrection: "Color correction",
-    colorCorrectionHint: "Fixes washed-out colors and clipped highlights. The screen restarts for a few seconds.",
+    colorCorrectionHint: "Fixes washed-out colors and clipped highlights. Applies after the NAS restarts.",
     actions: "Actions",
     restartPanel: "Restart panel app",
     restartPanelHint: "For a frozen or misbehaving panel, without rebooting the OS.",
@@ -168,9 +166,7 @@ const I18N = {
     offTitle: "Turn off the front-panel app?",
     offBody: "The front panel stops and its screen turns off, and it stays off after a reboot. You can turn it back on here at any time.",
     turnOff: "Turn off",
-    ccOnTitle: "Turn on color correction?",
-    ccOffTitle: "Turn off color correction?",
-    ccBody: "The front-panel screen restarts for a few seconds to apply this.",
+    ccSaved: "Saved. Applies after the NAS restarts",
     restartTitle: "Restart the panel app?",
     restartBody: "The front panel goes dark for a few seconds, then comes back.",
     panelOn: "Front-panel app turned on",
@@ -432,13 +428,9 @@ els.output.addEventListener("change", () => {
   run(() => api("audio/default", "PUT", { id }), t("saved"));
 });
 
-els.cc.addEventListener("change", async () => {
-  const want = els.cc.checked;
-  if (!(await confirmDialog(t(want ? "ccOnTitle" : "ccOffTitle"), t("ccBody"), t("restart")))) {
-    els.cc.checked = !want;
-    return;
-  }
-  await run(() => api("settings/color-correction", "PUT", { on: want }), t("restarting"));
+// Saved only; it applies at the next boot (see put_color_correction in t6-paneld).
+els.cc.addEventListener("change", () => {
+  run(() => api("settings/color-correction", "PUT", { on: els.cc.checked }), t("ccSaved"));
 });
 
 els.restart.addEventListener("click", async () => {

@@ -275,7 +275,13 @@
     // Surface script failures (a module that fails to load or throws at the
     // top level never wires up the page) instead of leaving a dead UI.
     const showErr = (m) => { const n = document.getElementById("notice"); if (n) { n.textContent = "Page error: " + m; n.className = "notice error"; n.hidden = false; } };
-    addEventListener("error", (e) => showErr(e.message || (e.target && (e.target.src || e.target.href)) || "script error"), true);
+    addEventListener("error", (e) => {
+      const url = e.target && (e.target.src || e.target.href);
+      // Ignore third-party resources injected upstream (e.g. Cloudflare's
+      // analytics beacon), which content blockers routinely refuse to load.
+      if (url && new URL(url, location.href).origin !== location.origin) return;
+      showErr(e.message || url || "script error");
+    }, true);
     addEventListener("unhandledrejection", (e) => showErr(String(e.reason && e.reason.message || e.reason)));
   </script>
   <script type="module" src="app.js?v=__V__"></script>

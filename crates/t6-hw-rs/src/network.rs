@@ -1,23 +1,30 @@
 //! Ethernet/Wi-Fi info via `ip` and `nmcli`, plus Wi-Fi *config* (scan/connect).
 //!
-//! Ethernet config is deliberately left to fnOS: the wired IP lives on an OVS
-//! bridge (`en*-ovs`) that fnOS's `network_service` owns, so we only *read* it
-//! (link/speed from the physical `en*` device, address/gateway from whichever
-//! interface actually carries the default route). Wi-Fi, by contrast, is a
-//! standalone NetworkManager device with no OVS entanglement, so the panel can
-//! safely drive it directly — this matters for the headless bootstrap case
-//! (join a network from the panel before the box is reachable over the web UI).
+//! Ethernet is reported per physical NIC (the built-in port and any USB
+//! adapters): link/speed from the NIC itself, addresses from the interface that
+//! carries its IP (the fnOS OVS bridge `en*-ovs` for the built-in port, the NIC
+//! itself otherwise). Wi-Fi is a standalone NetworkManager device with no OVS
+//! entanglement, so the panel can drive it directly — this matters for the
+//! headless bootstrap case (join a network from the panel before the box is
+//! reachable over the web UI).
 //! Those writes go through NetworkManager, which fnOS observes.
 
 use serde::Serialize;
 use std::process::Command;
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 pub struct Ethernet {
     pub connected: bool,
     pub iface: Option<String>,
+    /// The NIC sits on USB (an adapter) rather than the board's PCIe port.
+    pub usb: bool,
+    /// USB product string (e.g. "USB 10/100/1G/2.5G LAN"); None for the built-in port.
+    pub model: Option<String>,
+    pub mac: Option<String>,
     pub speed_mbps: Option<i64>,
     pub ip: Option<String>,
+    /// IPv4 prefix length (e.g. 24).
+    pub prefix: Option<u32>,
     pub gateway: Option<String>,
     pub dns: Vec<String>,
 }
@@ -52,7 +59,11 @@ pub struct Wifi {
 
 #[derive(Serialize, Default)]
 pub struct Network {
+    /// One connected wired NIC (preferring the one with the wired default
+    /// route), else the first one — what the home tile shows.
     pub ethernet: Ethernet,
+    /// Every physical wired NIC, connected or not: built-in first, then USB.
+    pub ethernet_ports: Vec<Ethernet>,
     pub wifi: Wifi,
     pub hotspot: Hotspot,
 }
@@ -100,6 +111,62 @@ fn first_iface(prefixes: &[&str]) -> Option<String> {
         .collect();
     names.sort();
     names.into_iter().next()
+}
+
+/// Physical wired NICs: `en*`/`eth*` backed by a device (skips OVS/veth/bridge
+/// interfaces). Built-in ports first, then USB adapters, each by name.
+fn wired_ifaces() -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir("/sys/class/net")
+        .map(|d| d.flatten().filter_map(|e| e.file_name().into_string().ok()).collect())
+        .unwrap_or_default();
+    names.retain(|n| {
+        !n.contains('-')
+            && (n.starts_with("en") || n.starts_with("eth"))
+            && std::path::Path::new(&format!("/sys/class/net/{n}/device")).exists()
+    });
+    names.sort_by_key(|n| (is_usb(n), n.clone()));
+    names
+}
+
+fn is_usb(iface: &str) -> bool {
+    std::fs::canonicalize(format!("/sys/class/net/{iface}/device"))
+        .map(|p| p.to_string_lossy().contains("/usb"))
+        .unwrap_or(false)
+}
+
+/// The interface holding a NIC's IP: fnOS bridges the built-in port into OVS
+/// and puts the address on `<nic>-ovs`.
+fn l3_dev(iface: &str) -> String {
+    let ovs = format!("{iface}-ovs");
+    if std::path::Path::new(&format!("/sys/class/net/{ovs}")).exists() { ovs } else { iface.to_string() }
+}
+
+/// First IPv4 address on `dev` as (ip, prefix), from `ip -4 -o addr`.
+fn dev_ipv4(dev: &str) -> Option<(String, Option<u32>)> {
+    let out = run("ip", &["-4", "-o", "addr", "show", "dev", dev])?;
+    let toks: Vec<&str> = out.lines().next()?.split_whitespace().collect();
+    let cidr = tok_after(&toks, "inet")?;
+    let mut parts = cidr.splitn(2, '/');
+    Some((parts.next()?.to_string(), parts.next().and_then(|p| p.parse().ok())))
+}
+
+fn ethernet_port(iface: &str) -> Ethernet {
+    let dev = l3_dev(iface);
+    let usb = is_usb(iface);
+    let (ip, prefix) = dev_ipv4(&dev).map(|(i, p)| (Some(i), p)).unwrap_or_default();
+    Ethernet {
+        connected: sysfs(iface, "carrier").as_deref() == Some("1"),
+        iface: Some(iface.to_string()),
+        usb,
+        model: if usb { sysfs(iface, "device/../product") } else { None },
+        mac: sysfs(iface, "address"),
+        speed_mbps: sysfs(iface, "speed").and_then(|s| s.parse().ok()).filter(|&s| s > 0),
+        ip,
+        prefix,
+        gateway: run("ip", &["route", "show", "default", "dev", &dev])
+            .and_then(|o| tok_after(&o.split_whitespace().collect::<Vec<_>>(), "via")),
+        dns: nmcli_field(&dev, "IP4.DNS"),
+    }
 }
 
 fn tok_after(toks: &[&str], key: &str) -> Option<String> {
@@ -174,19 +241,16 @@ fn nmcli_field(dev: &str, field: &str) -> Vec<String> {
 pub fn info() -> Network {
     let mut n = Network::default();
 
-    // Ethernet: link/speed from the physical NIC; address from the default route.
-    if let Some(eth) = first_iface(&["en", "eth"]) {
-        n.ethernet.connected = sysfs(&eth, "carrier").as_deref() == Some("1");
-        n.ethernet.speed_mbps = sysfs(&eth, "speed").and_then(|s| s.parse().ok()).filter(|&s| s > 0);
-        n.ethernet.iface = Some(eth);
-    }
-    if let Some((gw, dev, src)) = default_route(false) {
-        n.ethernet.ip = src;
-        n.ethernet.gateway = gw;
-        if let Some(d) = dev {
-            n.ethernet.dns = nmcli_field(&d, "IP4.DNS");
-        }
-    }
+    // Ethernet: every physical NIC; the tile shows a connected one, preferring
+    // the NIC that carries the wired default route.
+    n.ethernet_ports = wired_ifaces().iter().map(|i| ethernet_port(i)).collect();
+    let route_dev = default_route(false).and_then(|(_, d, _)| d);
+    let on_route = |e: &&Ethernet| e.iface.as_deref().map(l3_dev) == route_dev;
+    n.ethernet = n.ethernet_ports.iter().filter(|e| e.connected).find(on_route)
+        .or_else(|| n.ethernet_ports.iter().find(|e| e.connected))
+        .or_else(|| n.ethernet_ports.first())
+        .cloned()
+        .unwrap_or_default();
 
     // Wi-Fi: link from the physical NIC; SSID/signal/security from nmcli.
     n.wifi.enabled = run("nmcli", &["-t", "radio", "wifi"]).map(|s| s.trim() == "enabled").unwrap_or(false);
@@ -386,12 +450,12 @@ pub fn set_autojoin(ssid: &str, on: bool) -> Result<(), String> {
 
 // ---- Ethernet config (writes go through NetworkManager) ------------------
 //
-// The wired IP usually lives on an OVS-bridge interface (fnOS setup), not the
-// physical NIC, so the editable target is whichever NM connection is active on
-// the device that carries the non-Wi-Fi default route. We set DHCP vs static +
-// DNS on that connection. fnOS's network_service reconciles the OVS iface's IP
-// *method* (forces disabled->auto, mac-mismatch->manual) but does not fight a
-// well-formed auto/manual config, so these changes stick.
+// Configured per NIC. The built-in port's IP lives on fnOS's OVS bridge
+// (`<nic>-ovs`), so that's the connection we edit for it; fnOS's
+// network_service may later reconcile it back, which is accepted (the panel
+// editor is a stopgap). A USB adapter gets the NM profile active on it, else
+// a saved one bound to it, else a new one; an unbound profile we edit is bound
+// to the NIC so NetworkManager can't bring it up on another adapter instead.
 
 #[derive(Serialize, Default)]
 pub struct EthConfig {
@@ -464,6 +528,12 @@ pub fn ipv4_config(conn: &str) -> Ipv4Cfg {
 /// Thunderbolt link, which has no DHCP server). `dns` (may be empty) applies to
 /// auto and manual — with DHCP a non-empty list overrides leases.
 pub fn set_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
+    modify_conn_ipv4(conn, method, address, gateway, dns)?;
+    nmcli_ok(&["connection", "up", conn]).map(|_| ())
+}
+
+/// Write a connection's IPv4 config without re-activating it.
+fn modify_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
     let dns_joined = dns.join(",");
     let mut args: Vec<String> = vec!["connection".into(), "modify".into(), conn.into()];
     let mut set = |k: &str, v: &str| { args.push(k.into()); args.push(v.into()); };
@@ -491,14 +561,18 @@ pub fn set_conn_ipv4(conn: &str, method: &str, address: Option<&str>, gateway: O
         other => return Err(format!("invalid method {other:?} (want auto|manual|link-local)")),
     }
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-    nmcli_ok(&argv)?;
-    nmcli_ok(&["connection", "up", conn]).map(|_| ())
+    nmcli_ok(&argv).map(|_| ())
 }
 
-/// Read the editable Ethernet (wired) IPv4 config.
-pub fn eth_config() -> EthConfig {
+/// Read the editable IPv4 config of wired NIC `iface`, or, with `None`, of
+/// the connection carrying the wired default route.
+pub fn eth_config(iface: Option<&str>) -> EthConfig {
     let mut c = EthConfig { method: "auto".into(), ..Default::default() };
-    let Some((conn, dev)) = wired_conn() else { return c };
+    let found = match iface {
+        Some(i) => port_conn(i).map(|conn| (conn, l3_dev(i))),
+        None => wired_conn(),
+    };
+    let Some((conn, dev)) = found else { return c };
     let ip = ipv4_config(&conn);
     c.method = ip.method;
     c.address = ip.address;
@@ -509,10 +583,79 @@ pub fn eth_config() -> EthConfig {
     c
 }
 
-/// Set the wired IPv4 config (delegates to the shared helper).
-pub fn eth_set(method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
-    let (conn, _) = wired_conn().ok_or("no wired connection found")?;
-    set_conn_ipv4(&conn, method, address, gateway, dns)
+/// Set the IPv4 config of wired NIC `iface` (or, with `None`, of the
+/// connection carrying the wired default route). An unplugged NIC's profile is
+/// only saved; NetworkManager applies it once a cable is in.
+pub fn eth_set(iface: Option<&str>, method: &str, address: Option<&str>, gateway: Option<&str>, dns: &[String]) -> Result<(), String> {
+    let Some(iface) = iface else {
+        let (conn, _) = wired_conn().ok_or("no wired connection found")?;
+        return set_conn_ipv4(&conn, method, address, gateway, dns);
+    };
+    if !wired_ifaces().iter().any(|i| i == iface) {
+        return Err(format!("{iface} is not a wired network adapter"));
+    }
+    if method == "manual" {
+        if let Some(ip) = address.and_then(|a| a.split('/').next()) {
+            if let Some(other) = ipv4_owner(ip).filter(|d| *d != iface && *d != l3_dev(iface)) {
+                return Err(format!("{ip} is already in use on {other}"));
+            }
+        }
+    }
+    let conn = match port_conn(iface) {
+        Some(conn) => {
+            if l3_dev(iface) == iface && conn_field(&conn, "connection.interface-name").is_none() {
+                nmcli_ok(&["connection", "modify", &conn, "connection.interface-name", iface])?;
+            }
+            conn
+        }
+        None => {
+            let name = format!("Wired {iface}");
+            nmcli_ok(&["connection", "add", "type", "ethernet", "ifname", iface, "con-name", &name])?;
+            name
+        }
+    };
+    modify_conn_ipv4(&conn, method, address, gateway, dns)?;
+    if sysfs(iface, "carrier").as_deref() == Some("1") {
+        nmcli_ok(&["connection", "up", &conn])?;
+    }
+    Ok(())
+}
+
+/// The NM connection that configures wired NIC `iface` (see the section note).
+fn port_conn(iface: &str) -> Option<String> {
+    let dev = l3_dev(iface);
+    if dev != iface {
+        return device_connection(&dev).or_else(|| saved_wired_conn(&dev, None));
+    }
+    device_connection(iface).or_else(|| saved_wired_conn(iface, sysfs(iface, "address").as_deref()))
+}
+
+/// A saved wired profile bound to `dev` by name or MAC (by UUID). Profiles with
+/// IPv4 disabled are skipped: those are bridge ports (fnOS binds one to the
+/// built-in NIC for OVS), not where the address lives.
+fn saved_wired_conn(dev: &str, mac: Option<&str>) -> Option<String> {
+    let list = run("nmcli", &["-t", "-f", "UUID,TYPE", "connection", "show"])?;
+    list.lines().map(split_terse).find_map(|f| {
+        let (uuid, kind) = (f.first()?, f.get(1)?);
+        if kind != "802-3-ethernet" && kind != "generic" {
+            return None;
+        }
+        let out = run("nmcli", &["-t", "-f", "connection.interface-name,802-3-ethernet.mac-address,ipv4.method", "connection", "show", uuid])?;
+        let field = |k: &str| out.lines().map(split_terse).find(|v| v.first().map(String::as_str) == Some(k)).and_then(|v| v.get(1).cloned()).unwrap_or_default();
+        let bound = field("connection.interface-name") == dev
+            || mac.is_some_and(|m| !m.is_empty() && field("802-3-ethernet.mac-address").eq_ignore_ascii_case(m));
+        (bound && field("ipv4.method") != "disabled").then(|| uuid.clone())
+    })
+}
+
+/// The interface that currently holds IPv4 address `ip`, if any.
+fn ipv4_owner(ip: &str) -> Option<String> {
+    let out = run("ip", &["-4", "-o", "addr"])?;
+    out.lines().find_map(|l| {
+        let toks: Vec<&str> = l.split_whitespace().collect();
+        let addr = tok_after(&toks, "inet")?;
+        (addr.split('/').next() == Some(ip)).then(|| toks.get(1).map(|d| d.to_string())).flatten()
+    })
 }
 
 // ---- Wi-Fi hotspot (AP mode) ---------------------------------------------

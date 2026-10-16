@@ -3,7 +3,7 @@
 //! views. None of these need an fnOS login — physical access to the panel is
 //! the authorization.
 
-use axum::{extract::State, http::{HeaderMap, StatusCode}, response::{IntoResponse, Response}, Json};
+use axum::{extract::{Query, State}, http::{HeaderMap, StatusCode}, response::{IntoResponse, Response}, Json};
 use serde::Deserialize;
 use serde_json::Value;
 use t6_hw_rs::display::Display;
@@ -13,6 +13,23 @@ use super::{session_value, AppState};
 /// Local resource monitor snapshot (see t6_hw_rs::sysmon). Deltas need two
 /// calls; the System page polls every ~2 s.
 pub(super) async fn get_sysmon() -> Json<Value> { Json(t6_hw_rs::sysmon::snapshot()) }
+
+#[derive(Deserialize)]
+pub(super) struct HistoryQuery {
+    /// `group/name`: `system/cpu`, `system/temp`, `system/mem`, `system/gpu`,
+    /// `system/rx`, `system/tx`, `vol1/used`, …
+    metric: String,
+    /// 1h, 24h, 7d, 30d, 90d or 1y.
+    range: String,
+}
+
+/// A metric over time, for the charts: `{metric, range, step, points: [[t, avg, max]]}`.
+pub(super) async fn get_history(Query(q): Query<HistoryQuery>) -> Response {
+    match crate::history::query(&q.metric, &q.range) {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
 
 pub(super) async fn get_panel(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
     let mut v = crate::panel::build();
@@ -85,18 +102,22 @@ pub(super) async fn display_events() -> axum::response::sse::Sse<impl futures_ut
 }
 
 #[derive(Deserialize)]
-pub(super) struct TimeoutReq {
-    /// Idle seconds before the panel turns its screen off; 0 = never.
-    seconds: u32,
+pub(super) struct IdleReq {
+    /// Idle seconds before the screen dims: 0 (never), 60, 120, 300, 900.
+    dim_after_s: Option<u32>,
+    /// The dim level in percent of the brightness: 10, 25, 50.
+    dim_percent: Option<u32>,
+    /// Idle seconds before the screen turns off: 0 (never), 3600, 43200, 86400.
+    off_after_s: Option<u32>,
 }
 
-pub(super) async fn put_screen_timeout(Json(req): Json<TimeoutReq>) -> Response {
-    match crate::settings::set_screen_timeout(req.seconds) {
+pub(super) async fn put_screen_idle(Json(req): Json<IdleReq>) -> Response {
+    match crate::settings::set_screen_idle(req.dim_after_s, req.dim_percent, req.off_after_s) {
         Ok(s) => {
             crate::idle::settings_changed();
-            Json(serde_json::json!({ "timeout_s": s.screen_timeout_s })).into_response()
+            Json(serde_json::json!({ "dim_after_s": s.dim_after_s(), "dim_percent": s.dim_percent(), "off_after_s": s.off_after_s() })).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
 }
 
@@ -122,7 +143,7 @@ pub(super) struct LanguageReq {
 pub(super) async fn put_language(Json(req): Json<LanguageReq>) -> Response {
     match crate::settings::set_language(req.code) {
         Ok(s) => Json(serde_json::json!({ "language": s.language })).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
 }
 
@@ -158,6 +179,67 @@ pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) ->
 
 pub(super) async fn get_hwinfo() -> Json<t6_hw_rs::hwinfo::HwInfo> {
     Json(t6_hw_rs::hwinfo::info())
+}
+
+/// Settings › 关于: the machine and the software versions on it.
+pub(super) async fn get_about() -> Response {
+    let about = tokio::task::spawn_blocking(|| {
+        let hw = t6_hw_rs::hwinfo::info();
+        let kernel = std::fs::read_to_string("/proc/sys/kernel/osrelease").ok().map(|s| s.trim().to_string());
+        serde_json::json!({
+            "hostname": t6_hw_rs::sensors::hostname(),
+            "model": hw.model,
+            "serial": hw.serial,
+            "cpu": hw.cpu,
+            "ram_bytes": hw.ram_bytes,
+            "uptime_s": crate::panel::uptime_s(),
+            "fnos": crate::firmware::installed_version(),
+            "panel": crate::panel::app_version(),
+            // t6-paneld ships inside t6-panel, so it carries the app's version
+            "backend": crate::panel::app_version(),
+            "kernel": kernel,
+        })
+    })
+    .await;
+    match about {
+        Ok(v) => Json(v).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+/// 总览 › 容器: Docker containers (read-only).
+pub(super) async fn get_containers() -> Response {
+    match tokio::task::spawn_blocking(t6_hw_rs::containers::list).await {
+        Ok(c) => Json(c).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+/// 存储池: every data volume with its layout, health, last check and disks.
+pub(super) async fn get_pools() -> Response {
+    match tokio::task::spawn_blocking(t6_hw_rs::pools::pools).await {
+        Ok(p) => Json(p).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub(super) struct CheckReq {
+    mount: String,
+}
+
+/// 存储池 › 检查磁盘: start a scrub of the volume at `mount`.
+pub(super) async fn post_pool_check(Json(req): Json<CheckReq>) -> Response {
+    match tokio::task::spawn_blocking(move || t6_hw_rs::pools::start_check(&req.mount)).await {
+        Ok(Ok(())) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Ok(Err(e)) => (StatusCode::BAD_REQUEST, e).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+/// Settings › 重启面板: restart the panel app (the kiosk), not the NAS.
+pub(super) async fn post_panel_restart() -> Response {
+    super::admin::restart_kiosk()
 }
 
 #[derive(Deserialize)]

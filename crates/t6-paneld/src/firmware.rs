@@ -132,8 +132,13 @@ fn fetch() -> Option<(String, String)> {
     Some((available, notes))
 }
 
+/// The installed fnOS version.
+pub fn installed_version() -> Option<String> {
+    std::fs::read_to_string(VERSION_FILE).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
 pub fn status() -> Firmware {
-    let current = std::fs::read_to_string(VERSION_FILE).ok().map(|s| s.trim().to_string());
+    let current = installed_version();
 
     let mut cache = load_cache();
     let now = now();

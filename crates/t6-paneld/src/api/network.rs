@@ -33,12 +33,29 @@ pub(super) struct WifiConnectReq {
     /// Omitted/empty for an open network or to reuse a saved profile.
     #[serde(default)]
     password: Option<String>,
+    /// An enterprise (802.1X) network: the user name. `eap` (default "peap")
+    /// and `phase2` (default "mschapv2") pick how it signs in.
+    #[serde(default)]
+    identity: Option<String>,
+    #[serde(default)]
+    eap: String,
+    #[serde(default)]
+    phase2: String,
 }
 
 pub(super) async fn post_wifi_connect(Json(req): Json<WifiConnectReq>) -> Response {
-    let pw = req.password.as_deref().filter(|s| !s.is_empty());
-    match t6_hw_rs::network::connect(&req.ssid, pw) {
-        Ok(()) => Json(serde_json::json!({ "ok": true, "ssid": req.ssid })).into_response(),
+    let joined = tokio::task::spawn_blocking(move || {
+        let pw = req.password.as_deref().filter(|s| !s.is_empty());
+        match req.identity.as_deref().filter(|s| !s.is_empty()) {
+        Some(identity) => t6_hw_rs::network::connect_enterprise(&req.ssid, identity, pw.unwrap_or(""), &req.eap, &req.phase2)
+            .map(|_| req.ssid),
+        None => t6_hw_rs::network::connect(&req.ssid, pw).map(|_| req.ssid),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| Err(e.to_string()));
+    match joined {
+        Ok(ssid) => Json(serde_json::json!({ "ok": true, "ssid": ssid })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
 }
@@ -140,13 +157,19 @@ pub(super) async fn post_ethernet(Json(req): Json<EthReq>) -> Response {
 
 // ---- Wi-Fi hotspot -------------------------------------------------------
 
+/// The hotspot page: settings with the password, and the devices on it.
 pub(super) async fn get_hotspot() -> Response {
-    Json(t6_hw_rs::network::hotspot_status()).into_response()
+    match tokio::task::spawn_blocking(t6_hw_rs::network::hotspot_details).await {
+        Ok(d) => Json(d).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 #[derive(Deserialize)]
 pub(super) struct HotspotReq {
-    /// true = start (needs ssid + password), false = stop.
+    /// true = start, false = stop. Starting with no ssid brings the last
+    /// hotspot back (the control center's toggle); with one, ssid + password
+    /// set it up anew.
     enabled: bool,
     #[serde(default)]
     ssid: String,
@@ -155,11 +178,20 @@ pub(super) struct HotspotReq {
     /// "a" (5 GHz) or "bg"/anything (2.4 GHz).
     #[serde(default)]
     band: String,
+    /// With settings: false only saves them (the hotspot stays off).
+    #[serde(default = "yes")]
+    start: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 pub(super) async fn post_hotspot(Json(req): Json<HotspotReq>) -> Response {
-    let r = if req.enabled {
-        t6_hw_rs::network::hotspot_start(&req.ssid, &req.password, &req.band)
+    let r = if req.enabled && req.ssid.is_empty() {
+        t6_hw_rs::network::hotspot_resume()
+    } else if req.enabled {
+        t6_hw_rs::network::hotspot_start(&req.ssid, &req.password, &req.band, req.start)
     } else {
         t6_hw_rs::network::hotspot_stop()
     };

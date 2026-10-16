@@ -17,7 +17,7 @@ fn deg(t: Option<f64>) -> Value {
 }
 
 /// Seconds since boot (local, no fnOS session needed).
-fn uptime_s() -> Option<u64> {
+pub(crate) fn uptime_s() -> Option<u64> {
     std::fs::read_to_string("/proc/uptime").ok()?
         .split_whitespace().next()?.parse::<f64>().ok().map(|s| s as u64)
 }
@@ -33,37 +33,46 @@ fn health_status(
 ) -> Value {
     let mut warn: Vec<String> = Vec::new();
     let mut err: Vec<String> = Vec::new();
+    // The same findings as data, for the UI to word in its own language:
+    // {level, kind, value?, name?}.
+    let mut items: Vec<Value> = Vec::new();
+    let mut add = |level: &str, kind: &str, value: Option<f64>, name: Option<&str>, text: String| {
+        items.push(json!({ "level": level, "kind": kind, "value": value.map(|v| v.round()), "name": name }));
+        if level == "err" { err.push(text) } else { warn.push(text) }
+    };
     // thermal
-    if let Some(t) = cpu { if t >= 95.0 { err.push(format!("CPU overheating ({t:.0}°)")); } else if t >= 85.0 { warn.push(format!("CPU running hot ({t:.0}°)")); } }
-    if let Some(t) = gpu { if t >= 95.0 { err.push(format!("GPU overheating ({t:.0}°)")); } else if t >= 85.0 { warn.push(format!("GPU running hot ({t:.0}°)")); } }
-    if let Some(t) = drives { if t >= 70.0 { err.push(format!("Drives overheating ({t:.0}°)")); } else if t >= 60.0 { warn.push(format!("Drives running warm ({t:.0}°)")); } }
+    if let Some(t) = cpu { if t >= 95.0 { add("err", "cpu_hot", Some(t), None, format!("CPU overheating ({t:.0}°)")); } else if t >= 85.0 { add("warn", "cpu_hot", Some(t), None, format!("CPU running hot ({t:.0}°)")); } }
+    if let Some(t) = gpu { if t >= 95.0 { add("err", "gpu_hot", Some(t), None, format!("GPU overheating ({t:.0}°)")); } else if t >= 85.0 { add("warn", "gpu_hot", Some(t), None, format!("GPU running hot ({t:.0}°)")); } }
+    if let Some(t) = drives { if t >= 70.0 { add("err", "drives_hot", Some(t), None, format!("Drives overheating ({t:.0}°)")); } else if t >= 60.0 { add("warn", "drives_hot", Some(t), None, format!("Drives running warm ({t:.0}°)")); } }
     // fans: commanded to spin but reading 0 rpm
     for f in fans {
         if let (Some(rpm), Some(pwm)) = (f.rpm, f.pwm_percent) {
-            if rpm == 0 && pwm > 0 { err.push(format!("{} stopped", f.name)); }
+            if rpm == 0 && pwm > 0 { add("err", "fan_stopped", None, Some(&f.name), format!("{} stopped", f.name)); }
         }
     }
     // battery / mains
     if bat.present {
         let on_batt = bat.ac_online == Some(false);
         let cap = bat.capacity.unwrap_or(100);
-        if on_batt && cap < 15 { err.push(format!("Battery low ({cap}%) — on battery")); }
-        else if on_batt { warn.push(format!("On battery power ({cap}%)")); }
+        if on_batt && cap < 15 { add("err", "battery_low", Some(cap as f64), None, format!("Battery low ({cap}%) — on battery")); }
+        else if on_batt { add("warn", "on_battery", Some(cap as f64), None, format!("On battery power ({cap}%)")); }
     }
     // volumes nearly full
     for v in vols {
         if v.total_bytes == 0 { continue; }
         let pct = v.used_bytes as f64 / v.total_bytes as f64 * 100.0;
-        if pct >= 99.0 { err.push(format!("{} is full ({pct:.0}%)", v.name)); }
-        else if pct >= 92.0 { warn.push(format!("{} nearly full ({pct:.0}%)", v.name)); }
+        if pct >= 99.0 { add("err", "volume_full", Some(pct), Some(&v.name), format!("{} is full ({pct:.0}%)", v.name)); }
+        else if pct >= 92.0 { add("warn", "volume_nearly_full", Some(pct), Some(&v.name), format!("{} nearly full ({pct:.0}%)", v.name)); }
     }
-    if let Some(m) = mem_pct { if m >= 97 { warn.push(format!("Memory nearly full ({m}%)")); } }
+    if let Some(m) = mem_pct { if m >= 97 { add("warn", "memory_full", Some(m as f64), None, format!("Memory nearly full ({m}%)")); } }
+    drop(add);
+    items.sort_by_key(|i| if i["level"] == "err" { 0 } else { 1 });
 
     let (level, text) = if let Some(e) = err.first() { ("err", e.clone()) }
         else if let Some(w) = warn.first() { ("warn", w.clone()) }
         else { ("ok", "All systems normal".to_string()) };
     let issues = err.len() + warn.len();
-    json!({ "level": level, "text": text, "issues": issues, "uptime_s": uptime_s() })
+    json!({ "level": level, "text": text, "issues": issues, "items": items, "uptime_s": uptime_s() })
 }
 
 /// Installed t6-panel package version: fnOS puts it in the unit's environment
@@ -122,7 +131,7 @@ pub fn build() -> Value {
             "hidden": set.dashboard_hidden,
         },
         // Colour theme; empty/unset means dark (theme.js falls back the same way).
-        "theme": if set.theme.is_empty() { "dark".to_string() } else { set.theme.clone() },
+        "theme": if set.theme.is_empty() { "light".to_string() } else { set.theme.clone() },
         // No active FygoOS session yet — the account chip shows "Sign in".
         "session": Value::Null,
         "system": {
@@ -140,14 +149,20 @@ pub fn build() -> Value {
         },
         "display": {
             "on": disp.on,
-            "brightness": disp.brightness,
+            // while dimmed (idle.rs), the level it comes back to: the sliders
+            // show the brightness people chose, not the idle dim
+            "brightness": set.dimmed_from.or(disp.brightness),
+            "dimmed": set.dimmed_from.is_some(),
         },
         // Panel-app (device) settings, persisted by t6-paneld.
         "screen": {
-            "timeout_s": set.screen_timeout_s,
+            // idle: dim after, how dim (percent of the level), off after (0 = never)
+            "dim_after_s": set.dim_after_s(),
+            "dim_percent": set.dim_percent(),
+            "off_after_s": set.off_after_s(),
             "color_correction": set.color_correction(),
         },
-        "language": if set.language.is_empty() { "en".to_string() } else { set.language.clone() },
+        "language": if set.language.is_empty() || set.language == "ja" { "zh".to_string() } else { set.language.clone() },
         "leds": leds,
         "status": status,
     })

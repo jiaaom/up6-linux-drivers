@@ -84,12 +84,18 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/bluetooth/device/{addr}/disconnect"), post(bluetooth::post_disconnect))
         .route(&p("/api/bluetooth/device/{addr}/audio"), post(bluetooth::post_audio))
         .route(&p("/api/display/events"), get(display_events))
-        .route(&p("/api/settings/screen-timeout"), put(put_screen_timeout))
+        .route(&p("/api/settings/screen-idle"), put(put_screen_idle))
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
         .route(&p("/api/settings/theme"), put(put_theme))
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/settings/color-correction"), put(put_color_correction))
         .route(&p("/api/hwinfo"), get(get_hwinfo))
+        .route(&p("/api/about"), get(get_about))
+        .route(&p("/api/history"), get(get_history))
+        .route(&p("/api/storage/pools"), get(get_pools))
+        .route(&p("/api/containers"), get(get_containers))
+        .route(&p("/api/storage/check"), post(post_pool_check))
+        .route(&p("/api/panel/restart"), post(post_panel_restart))
         // Local resource monitor (CPU/mem/GPU/NPU/disks/procs) — sysfs+procfs, no login.
         .route(&p("/api/sysmon"), get(get_sysmon))
         // Indicator LEDs (t6-ledd), the same settings as the Control Center
@@ -137,6 +143,7 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/fnos/login"), post(post_fnos_login))
         .route(&p("/api/fnos/status"), get(get_fnos_status))
         .route(&p("/api/fnos/logout"), post(post_fnos_logout))
+        .route(&p("/api/fnos/auto-login"), delete(delete_fnos_auto_login))
         .route(&p("/api/fnos/net"), get(get_fnos_net))
         .route(&p("/api/fnos/files"), get(get_fnos_files))
         .route(&p("/api/fnos/team-files"), get(get_fnos_team_files))
@@ -159,13 +166,16 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/fnos/files/fav"), post(post_fnos_fav))
         .route(&p("/api/fnos/files/trash"), post(post_fnos_trash))
         .route(&p("/api/fnos/trash/restore"), post(post_fnos_trash_restore))
+        .route(&p("/api/fnos/trash/clear"), post(post_fnos_trash_clear))
         .route(&p("/api/fnos/files/copy"), post(post_fnos_copy))
         .route(&p("/api/fnos/files/move"), post(post_fnos_move))
+        .route(&p("/api/fnos/tasks"), get(get_fnos_tasks).post(post_fnos_task))
+        .route(&p("/api/fnos/tasks/{id}"), delete(delete_fnos_task))
         .route(&p("/api/fnos/notifications"), get(get_fnos_notifications))
         .route(&p("/api/fnos/notifications/read-all"), post(post_fnos_notifications_read_all))
         .route(&p("/api/fnos/preview-cookie"), get(get_fnos_preview_cookie))
         .route(&p("/"), get(index))
-        .route(&p("/{file}"), get(static_file));
+        .route(&p("/{*file}"), get(static_file));
     if !prefix.is_empty() {
         let slash = format!("{prefix}/");
         r = r.route(prefix, get(move || async move { Redirect::permanent(&slash) }));
@@ -218,10 +228,27 @@ fn serve(www: &crate::www::Www, name: &str) -> Response {
         // The panel UI is live-reloaded during development and republished on
         // the same URL in production, so never let a client cache a stale page.
         Some((ctype, body)) => (
-            [(header::CONTENT_TYPE, ctype), (header::CACHE_CONTROL, "no-store")],
+            [
+                (header::CONTENT_TYPE, ctype),
+                (
+                    header::CACHE_CONTROL,
+                    if crate::www::is_immutable(name) { "public, max-age=31536000, immutable" } else { "no-store" },
+                ),
+            ],
             body,
         )
             .into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Static routes and the catch-all UI route must coexist on both surfaces.
+    #[test]
+    fn routers_build() {
+        let w = || crate::www::Www::new(None);
+        let _ = super::router(w(), w(), "", None);
+        let _ = super::router(w(), w(), "/app/t6-panel", Some(1));
     }
 }

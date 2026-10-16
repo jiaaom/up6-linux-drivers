@@ -69,7 +69,7 @@ payload_t6_panel() {
     (cd "$CRATES" && cargo build --release --quiet -p t6-paneld)
     cp "$CRATES/target/release/t6-paneld" "$app/bin/"
     # The panel UI (served by t6-paneld from $TRIM_APPDEST/www).
-    cp "$REPO/panel/www/"* "$app/www/"
+    cp -r "$REPO/panel/www/." "$app/www/"
     mkdir -p "$app/web"
     cp "$REPO/panel/web/"* "$app/web/"   # admin page (fnOS desktop window)
     # The on-device kiosk: the Electron shell + its bundled Electron runtime,

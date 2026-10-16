@@ -25,6 +25,13 @@ pub(super) async fn get_fnos_status() -> Response {
     Json(crate::fnos::status().await).into_response()
 }
 
+/// Settings › 账号 › 记住我 off: forget the sealed credentials, stay signed in.
+/// (Turning it on needs the password, so it happens at sign-in.)
+pub(super) async fn delete_fnos_auto_login() -> Response {
+    crate::autologin::clear();
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
 pub(super) async fn post_fnos_logout() -> Response {
     crate::fnos::logout().await;
     Json(serde_json::json!({ "ok": true })).into_response()

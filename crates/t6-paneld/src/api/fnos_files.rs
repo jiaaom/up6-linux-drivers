@@ -116,14 +116,21 @@ pub(super) async fn get_fnos_recent() -> Response {
 }
 
 /// Recursive size of a folder (or files) via `file.calc({files:[path]})`.
+/// A big folder takes minutes (the fnOS web client waits without a timeout),
+/// so this waits up to 30 minutes rather than the usual 10 s. The panel's
+/// 取消 just drops the request; fnOS has no way to stop a calc.
 pub(super) async fn get_fnos_folder_size(Query(q): Query<FilesQ>) -> Response {
     let path = match &q.path {
         Some(p) => p.clone(),
         None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "path required" }))).into_response(),
     };
-    match crate::fnos::call("file.calc", serde_json::json!({ "files": [path] })).await {
-        Ok(v) => Json(v).into_response(),
-        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    let mut last = None;
+    let res = crate::fnos::call_each("file.calc", serde_json::json!({ "files": [path] }), std::time::Duration::from_secs(1800), |f| last = Some(f.clone())).await;
+    match (res, last) {
+        (Ok(()), Some(v)) if v.get("fileSizeTotal").is_some() => Json(v).into_response(),
+        (Ok(()), Some(v)) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": v.get("errno").cloned().unwrap_or(v) }))).into_response(),
+        (Ok(()), None) => (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "file.calc timed out" }))).into_response(),
+        (Err(e), _) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
     }
 }
 
@@ -256,6 +263,54 @@ pub(super) async fn file_transfer(method: &str, b: &TransferBody) -> Response {
     if b.debug.is_some() { out["raw"] = serde_json::json!(frames); }
     Json(out).into_response()
 }
+/// Empty the personal recycle bin (`file.trash.clear`, a streamed task like
+/// the web client's). Cannot be undone; the panel asks first.
+pub(super) async fn post_fnos_trash_clear() -> Response {
+    let params = serde_json::json!({ "details": { "name": "empty", "count": 1, "dir": 1 } });
+    let frames = match crate::fnos::call_stream("file.trash.clear", params, std::time::Duration::from_secs(120)).await {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": e }))).into_response(),
+    };
+    let result = frames.iter().rev().find_map(|f| f.get("result").and_then(|r| r.as_str()).filter(|r| *r != "doing"));
+    match result {
+        Some("succ") => Json(serde_json::json!({ "ok": true })).into_response(),
+        Some(_) | None => {
+            let msg = frames.iter().rev().find_map(|f| f.get("errmsg").or_else(|| f.get("errno")).cloned());
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": msg.unwrap_or_else(|| "no answer from fnOS".into()) }))).into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub(super) struct TaskBody {
+    /// "copy" or "move".
+    op: String,
+    paths: Vec<String>,
+    to: String,
+    #[serde(default)]
+    overwrite: Option<i64>,
+}
+
+/// Start a copy or move that runs in the background (see `crate::tasks`).
+pub(super) async fn post_fnos_task(Json(b): Json<TaskBody>) -> Response {
+    let op = if b.op == "move" { "move" } else { "copy" };
+    match crate::tasks::start(op, b.paths, b.to, b.overwrite) {
+        Ok(id) => Json(serde_json::json!({ "id": id })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+pub(super) async fn get_fnos_tasks() -> Response {
+    Json(crate::tasks::list()).into_response()
+}
+
+pub(super) async fn delete_fnos_task(axum::extract::Path(id): axum::extract::Path<u64>) -> Response {
+    match crate::tasks::cancel(id).await {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
 pub(super) async fn post_fnos_copy(Json(b): Json<TransferBody>) -> Response { file_transfer("file.cp", &b).await }
 pub(super) async fn post_fnos_move(Json(b): Json<TransferBody>) -> Response { file_transfer("file.mv", &b).await }
 

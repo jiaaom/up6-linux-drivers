@@ -66,15 +66,47 @@ pub struct Network {
     pub ethernet_ports: Vec<Ethernet>,
     pub wifi: Wifi,
     pub hotspot: Hotspot,
+    pub wireless: Wireless,
 }
 
-/// Wi-Fi access-point ("hotspot") state. The password is never surfaced.
+/// What the wireless card can do. Wi-Fi and the hotspot share it, so only one
+/// can be on (`exclusive`).
+#[derive(Serialize, Default)]
+pub struct Wireless {
+    pub wifi_available: bool,
+    pub hotspot_available: bool,
+    pub exclusive: bool,
+}
+
+/// Wi-Fi access-point ("hotspot") state. The password is not part of it (it
+/// goes out in every /api/panel poll); see [`hotspot_details`].
 #[derive(Serialize, Default)]
 pub struct Hotspot {
     pub active: bool,
     pub ssid: Option<String>,
     /// "bg" (2.4 GHz) or "a" (5 GHz).
     pub band: Option<String>,
+    /// How many devices are on it (the status bar shows the count).
+    pub devices: usize,
+}
+
+/// The hotspot's page: its settings, password included (shown on the panel
+/// as a join QR code), and the devices on it.
+#[derive(Serialize, Default)]
+pub struct HotspotDetails {
+    #[serde(flatten)]
+    pub status: Hotspot,
+    pub password: Option<String>,
+    /// The NAS's own address on the hotspot network.
+    pub address: Option<String>,
+    pub clients: Vec<HotspotClient>,
+}
+
+#[derive(Serialize)]
+pub struct HotspotClient {
+    pub name: Option<String>,
+    pub ip: String,
+    pub mac: String,
 }
 
 /// One access point in a scan result (deduped by SSID, strongest signal kept).
@@ -296,7 +328,17 @@ pub fn info() -> Network {
         n.wifi.dbm = wifi_dbm(&n.wifi.iface);
     }
     n.hotspot = hotspot_status();
+    n.wireless = wireless();
     n
+}
+
+/// Whether there is a wireless card, and whether it can be an access point.
+pub fn wireless() -> Wireless {
+    let Some(wl) = first_iface(&["wl"]) else { return Wireless::default() };
+    let ap = run("nmcli", &["-g", "WIFI-PROPERTIES.AP", "device", "show", &wl])
+        .map(|o| o.trim() == "yes")
+        .unwrap_or(false);
+    Wireless { wifi_available: true, hotspot_available: ap, exclusive: true }
 }
 
 // ---- Wi-Fi config (writes go through NetworkManager) ---------------------
@@ -418,6 +460,34 @@ pub fn connect(ssid: &str, password: Option<&str>) -> Result<(), String> {
 }
 
 /// Disconnect the Wi-Fi radio's current association (keeps the saved profile).
+/// Join a WPA-Enterprise (802.1X) network: a user name and password, with
+/// the EAP method (default PEAP) and inner authentication (default MSCHAPv2).
+pub fn connect_enterprise(ssid: &str, identity: &str, password: &str, eap: &str, phase2: &str) -> Result<(), String> {
+    if identity.is_empty() || password.is_empty() {
+        return Err("user name and password are required".into());
+    }
+    let eap = if eap.is_empty() { "peap" } else { eap };
+    let phase2 = if phase2.is_empty() { "mschapv2" } else { phase2 };
+    let wl = first_iface(&["wl"]).ok_or("no Wi-Fi interface")?;
+    // A profile per SSID; replace any earlier one so new credentials apply.
+    if let Some(name) = saved_wifi_profile(ssid) {
+        let _ = nmcli_ok(&["connection", "delete", "id", &name]);
+    }
+    nmcli_ok(&[
+        "connection", "add", "type", "wifi", "ifname", &wl, "con-name", ssid, "ssid", ssid,
+        "wifi-sec.key-mgmt", "wpa-eap",
+        "802-1x.eap", eap,
+        "802-1x.phase2-auth", phase2,
+        "802-1x.identity", identity,
+        "802-1x.password", password,
+    ])?;
+    let up = nmcli_ok(&["--wait", "30", "connection", "up", "id", ssid]);
+    if up.is_err() {
+        let _ = nmcli_ok(&["connection", "delete", "id", ssid]);
+    }
+    up.map(|_| ())
+}
+
 pub fn disconnect() -> Result<(), String> {
     let iface = first_iface(&["wl"]).ok_or("no Wi-Fi interface")?;
     nmcli_ok(&["device", "disconnect", &iface]).map(|_| ())
@@ -678,11 +748,15 @@ pub fn hotspot_status() -> Hotspot {
     h.active = run("nmcli", &["-t", "-f", "NAME", "connection", "show", "--active"])
         .map(|o| o.lines().any(|l| l == HOTSPOT_CONN))
         .unwrap_or(false);
+    if h.active {
+        h.devices = first_iface(&["wl"]).map(|wl| hotspot_clients(&wl).len()).unwrap_or(0);
+    }
     h
 }
 
-/// Start (or restart) the hotspot. `band` is "a" (5 GHz) or anything else → 2.4 GHz.
-pub fn hotspot_start(ssid: &str, password: &str, band: &str) -> Result<(), String> {
+/// Set the hotspot up (name, password, band) and start it, or only save the
+/// settings when `start` is false. `band` is "a" (5 GHz) or anything else → 2.4 GHz.
+pub fn hotspot_start(ssid: &str, password: &str, band: &str, start: bool) -> Result<(), String> {
     if ssid.is_empty() || ssid.chars().count() > 32 {
         return Err("SSID must be 1–32 characters".into());
     }
@@ -707,6 +781,9 @@ pub fn hotspot_start(ssid: &str, password: &str, band: &str) -> Result<(), Strin
         "ipv4.method", "shared",
         "ipv6.method", "disabled",
     ]);
+    if !start {
+        return modify.map(|_| ());
+    }
     let up = modify.and_then(|_| nmcli_ok(&["--wait", "20", "connection", "up", HOTSPOT_CONN]));
     if let Err(e) = up {
         let _ = nmcli_ok(&["connection", "delete", HOTSPOT_CONN]);
@@ -716,6 +793,54 @@ pub fn hotspot_start(ssid: &str, password: &str, band: &str) -> Result<(), Strin
 }
 
 /// Stop the hotspot (deactivate; NM reconnects the saved client network).
+/// The hotspot with its password, address and the devices on it.
+pub fn hotspot_details() -> HotspotDetails {
+    let status = hotspot_status();
+    let password = run("nmcli", &["-s", "-g", "802-11-wireless-security.psk", "connection", "show", HOTSPOT_CONN])
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut d = HotspotDetails { status, password, ..Default::default() };
+    if !d.status.active {
+        return d;
+    }
+    let Some(wl) = first_iface(&["wl"]) else { return d };
+    d.address = dev_ipv4(&wl).map(|(ip, _)| ip);
+    d.clients = hotspot_clients(&wl);
+    d
+}
+
+/// The devices on the hotspot: NetworkManager's DHCP leases for it, kept
+/// only while the kernel still sees them on the link (leases outlive a
+/// disconnect).
+fn hotspot_clients(wl: &str) -> Vec<HotspotClient> {
+    let mut clients = Vec::new();
+    let present: Vec<String> = run("ip", &["neigh", "show", "dev", wl])
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.contains("FAILED") && !l.contains("INCOMPLETE"))
+        .filter_map(|l| l.split_whitespace().next().map(str::to_string))
+        .collect();
+    let leases = std::fs::read_to_string(format!("/var/lib/NetworkManager/dnsmasq-{wl}.leases")).unwrap_or_default();
+    for line in leases.lines() {
+        // expiry mac ip hostname client-id
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 4 || !present.iter().any(|ip| ip == f[2]) {
+            continue;
+        }
+        let name = (f[3] != "*").then(|| f[3].to_string());
+        clients.push(HotspotClient { name, ip: f[2].to_string(), mac: f[1].to_string() });
+    }
+    clients
+}
+
+/// Start the hotspot again with the name, password and band it was last set up with.
+pub fn hotspot_resume() -> Result<(), String> {
+    if conn_field(HOTSPOT_CONN, "802-11-wireless.ssid").is_none() {
+        return Err("the hotspot has not been set up yet".into());
+    }
+    nmcli_ok(&["--wait", "20", "connection", "up", HOTSPOT_CONN]).map(|_| ())
+}
+
 pub fn hotspot_stop() -> Result<(), String> {
     nmcli_ok(&["connection", "down", HOTSPOT_CONN]).map(|_| ())
 }

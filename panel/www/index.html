@@ -1,212 +1,29 @@
 <!doctype html>
-<html>
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#0d1420">
-<script src="theme.js"></script>
-<!-- first: records which elements get click handlers (keyboard/remote navigation) -->
-<script src="nav.js"></script>
-<title>T6 Panel — feel prototype</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<!-- laid out at 390 x 780 CSS px; the kiosk zooms it to the screen (panel/app/main.js) -->
+<meta name="t6-layout-width" content="390">
+<title>T6 Panel</title>
+<script>
+  // Paint the first frame in the chosen theme and language (echoes of
+  // settings.json; js/core/theme.js and i18n.js keep them in sync).
+  (function () {
+    function load(k) { try { return JSON.parse(localStorage.getItem('t6ui.' + k)); } catch (e) { return null; } }
+    if (load('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    if (load('lang') === 'en') document.documentElement.lang = 'en';
+  })();
+</script>
+<link rel="preload" href="ridgeline/1.7.0/fonts/SourceSans3-Variable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="ridgeline/1.7.0/fonts/HuiwenMinchoGBK-GB2312.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="ridgeline/1.7.0/tokens.css">
+<link rel="stylesheet" href="ridgeline/1.7.0/bundle.css">
+<link rel="stylesheet" href="css/app.css">
+<script src="vendor/qrcode-generator-1.4.4/qrcode.js" defer></script>  <!-- window.qrcode, for js/ui/qr.js -->
+<script type="module" src="js/main.js"></script>
 </head>
 <body>
-<div id="stage">
-  <div id="device">
-    <div class="bloomA"></div><div class="bloomB"></div><div class="vign"></div>
-
-    <!-- HOME -->
-    <div class="screen" id="home">
-      <div class="head">
-        <div class="statusbar"><span id="clock">22:48</span>
-          <div class="sb-icons">
-            <div style="width:26px;height:17px;border:2px solid currentColor;border-radius:4px;position:relative"><div style="position:absolute;left:6.5px;right:6.5px;top:-6.5px;height:6.5px;border-left:2px solid currentColor;border-right:2px solid currentColor"></div></div>
-            <div style="display:flex;align-items:flex-end;gap:3px;height:19px"><div style="width:4.5px;height:7px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:11.5px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:15.5px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:19px;border-radius:2px;background:currentColor;opacity:.3"></div></div>
-            <div style="display:flex;align-items:center;gap:2px"><div style="width:33px;height:17px;border:2px solid currentColor;border-radius:5px;padding:2px;box-sizing:border-box"><div class="bat-fill" style="width:72%;height:100%;border-radius:2px;background:currentColor"></div></div><div style="width:3.5px;height:7px;border-radius:0 2px 2px 0;background:currentColor"></div></div>
-          </div>
-        </div>
-        <div class="hero">
-          <div style="min-width:0">
-            <div class="kick"><i></i><span id="statusText">All systems normal</span></div>
-            <div class="hostname">nas.local</div>
-            <div class="sub signin" id="acct"><span class="acctdot" hidden></span><span id="acctText">Sign in</span></div>
-          </div>
-          <div class="hbtns"><div class="pill icon" id="sleepBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="pill" id="editbtn">Edit</div></div>
-        </div>
-        <div class="hair"></div>
-      </div>
-      <div class="scroll" id="homeScroll"></div>
-    </div>
-
-    <!-- EDIT -->
-    <div class="screen" id="edit">
-      <div class="vign2"></div>
-      <div class="head">
-        <div class="statusbar"><span class="clock2">22:53</span>
-          <div class="sb-icons">
-            <div style="width:26px;height:17px;border:2px solid currentColor;border-radius:4px;position:relative"><div style="position:absolute;left:6.5px;right:6.5px;top:-6.5px;height:6.5px;border-left:2px solid currentColor;border-right:2px solid currentColor"></div></div>
-            <div style="display:flex;align-items:flex-end;gap:3px;height:19px"><div style="width:4.5px;height:7px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:11.5px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:15.5px;border-radius:2px;background:currentColor"></div><div style="width:4.5px;height:19px;border-radius:2px;background:currentColor;opacity:.3"></div></div>
-            <div style="display:flex;align-items:center;gap:2px"><div style="width:33px;height:17px;border:2px solid currentColor;border-radius:5px;padding:2px;box-sizing:border-box"><div class="bat-fill" style="width:72%;height:100%;border-radius:2px;background:currentColor"></div></div><div style="width:3.5px;height:7px;border-radius:0 2px 2px 0;background:currentColor"></div></div>
-          </div>
-        </div>
-        <div class="hero">
-          <div style="min-width:0">
-            <div class="kick"><i></i>Editing dashboard</div>
-            <div class="hostname">nas.local</div>
-            <div class="sub">Drag to reorder · toggle to hide</div>
-          </div>
-          <div class="hbtns"><div class="pill solid" id="donebtn">Done</div></div>
-        </div>
-        <div class="hair"></div>
-      </div>
-      <div class="scroll" id="editScroll"></div>
-    </div>
-
-    <!-- SETTINGS -->
-    <div class="screen" id="settings">
-      <div class="vign2"></div>
-      <div class="head">
-        <div class="statusbar"><span class="clock3">22:48</span><div class="sb-icons" style="opacity:.5;font-size:14px">Settings</div></div>
-        <div class="hero">
-          <div class="sub-back" id="settingsBack"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M28 12L16 24l12 12"/></svg></div>
-          <div style="min-width:0;flex:1"><div class="hostname" style="font-size:38px">Settings</div></div>
-        </div>
-        <div class="hair"></div>
-      </div>
-      <div class="scroll" id="settingsScroll"></div>
-    </div>
-
-    <!-- GENERIC SUB-PAGE (Settings-style full page: Ethernet, Wi-Fi, Volumes, Files…) -->
-    <div class="screen" id="subpage">
-      <div class="vign2"></div>
-      <div class="head">
-        <div class="statusbar"><span class="clock3"></span><div class="sb-icons" id="subCrumb" style="opacity:.5;font-size:14px"></div></div>
-        <div class="hero">
-          <div class="sub-back" id="subBack" hidden><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M28 12L16 24l12 12"/></svg></div>
-          <div style="min-width:0;flex:1"><div class="hostname" id="subTitle" style="font-size:38px"></div><div class="sub sub-sub" id="subSub" hidden></div></div>
-          <div class="hbtns"><div class="pill solid" id="subDone">Done</div></div>
-        </div>
-        <div class="hair"></div>
-      </div>
-      <div class="scroll" id="subpageScroll"></div>
-    </div>
-
-    <!-- FILE MANAGER (dedicated screen; content injected by files.js) -->
-    <div class="screen" id="files">
-      <div class="vign2"></div>
-      <div class="fm-bar" id="fmBar" hidden></div>
-      <div class="fm-prev" id="fmPrev" hidden>
-        <div class="fm-prev-head">
-          <div class="fm-rbtn" id="fmPrevBack"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;opacity:.85"><path d="M14 14l20 20M34 14L14 34"/></svg></div>
-          <div class="fm-prev-name"></div>
-          <div class="fm-rbtn" style="visibility:hidden"></div>
-        </div>
-        <div class="fm-prev-view"></div>
-      </div>
-    </div>
-    <div id="fmSheetScrim"></div>
-    <div id="fmSheet"><div class="fm-sheet-inner"><div class="fm-sheet-title"></div><div class="fm-sheet-body"></div></div></div>
-
-    <div id="scrim"></div>
-    <div id="detail">
-      <div class="grabber"></div>
-      <div class="sheet-h"><div class="cancel" id="detailClose">Done</div><div class="title" id="detailTitle"></div><div class="cancel" style="opacity:0">Done</div></div>
-      <div id="detailBody"></div>
-    </div>
-    <div class="toast" id="toast"></div>
-    <div id="btCode"><div class="cdlg"><div class="ctitle"></div><div class="cmsg"></div><div class="bt-code"></div><input class="bt-codein" type="text" inputmode="numeric" maxlength="6" autocomplete="off"><div class="cbtns"><div class="cbtn cancel">Cancel</div><div class="cbtn ok">Pair</div></div></div></div>
-    <div id="confirm"><div class="cdlg"><div class="ctitle"></div><div class="cmsg"></div><div class="cbtns"><div class="cbtn cancel">Cancel</div><div class="cbtn ok">OK</div></div></div></div>
-    <div id="login">
-      <div class="login-card">
-        <div class="login-title">Sign in</div>
-        <div class="login-sub">Log in with your fnOS account to see your files and settings.</div>
-        <input id="loginUser" class="login-input" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
-        <input id="loginPass" class="login-input" type="password" placeholder="Password" autocomplete="current-password">
-        <div class="login-remember">
-          <div class="lr-text"><div class="lr-title">Sign in automatically</div>
-            <div class="lr-hint">Keeps your password so the panel signs back in by itself. Signing out forgets it.</div></div>
-          <div class="etoggle" id="loginRemember"><div class="knob"></div></div>
-        </div>
-        <div id="loginErr" class="login-err" hidden></div>
-        <div class="login-btn" id="loginSubmit">Sign in</div>
-        <div class="login-cancel" id="loginCancel">Cancel</div>
-      </div>
-    </div>
-    <div id="wifipass">
-      <div class="login-card">
-        <div class="login-title" id="wpTitle">Enter password</div>
-        <div class="login-sub" id="wpSub"></div>
-        <input id="wpSsid" class="login-input" type="text" placeholder="Network name (SSID)" autocapitalize="none" spellcheck="false" hidden>
-        <input id="wpInput" class="login-input" type="password" placeholder="Password" autocomplete="off" autocapitalize="none" spellcheck="false">
-        <div id="wpErr" class="login-err" hidden></div>
-        <div class="login-btn" id="wpSubmit">Connect</div>
-        <div class="login-cancel" id="wpCancel">Cancel</div>
-      </div>
-    </div>
-    <div id="ethedit">
-      <div class="login-card">
-        <div class="login-title" id="ipv4Title">Ethernet IPv4</div>
-        <div class="seg" id="ethMode">
-          <div class="seg-opt" data-m="auto">Automatic (DHCP)</div>
-          <div class="seg-opt" data-m="link-local" id="ethLL" hidden>Link-local</div>
-          <div class="seg-opt" data-m="manual">Manual</div>
-        </div>
-        <div id="ethManual" hidden>
-          <input id="ethAddr" class="login-input" type="text" inputmode="decimal" placeholder="IP address (e.g. 10.0.0.50)" autocapitalize="none" spellcheck="false">
-          <input id="ethPrefix" class="login-input" type="text" inputmode="numeric" placeholder="Subnet prefix (e.g. 24)" autocapitalize="none" spellcheck="false">
-          <input id="ethGw" class="login-input" type="text" inputmode="decimal" placeholder="Gateway (e.g. 10.0.0.1)" autocapitalize="none" spellcheck="false">
-        </div>
-        <input id="ethDns" class="login-input" type="text" inputmode="decimal" placeholder="DNS, comma-separated (optional)" autocapitalize="none" spellcheck="false">
-        <div id="ethErr" class="login-err" hidden></div>
-        <div class="login-btn" id="ethApply">Apply</div>
-        <div class="login-cancel" id="ethCancel">Cancel</div>
-      </div>
-    </div>
-    <div id="hotspot">
-      <div class="login-card">
-        <div class="login-title">Hotspot</div>
-        <div class="login-sub" id="hsStatus"></div>
-        <input id="hsSsid" class="login-input" type="text" placeholder="Network name (SSID)" autocapitalize="none" spellcheck="false">
-        <input id="hsPass" class="login-input" type="password" placeholder="Password (min 8 chars)" autocapitalize="none" spellcheck="false">
-        <div class="seg" id="hsBand">
-          <div class="seg-opt" data-m="bg">2.4 GHz</div>
-          <div class="seg-opt" data-m="a">5 GHz</div>
-        </div>
-        <div id="hsErr" class="login-err" hidden></div>
-        <div class="login-btn" id="hsToggle">Start Hotspot</div>
-        <div class="login-cancel" id="hsCancel">Close</div>
-      </div>
-    </div>
-    <div id="fmPrompt">
-      <div class="login-card">
-        <div class="login-title fm-prompt-title"></div>
-        <input id="fmPromptInput" class="login-input" type="text" autocapitalize="none" spellcheck="false">
-        <div id="fmPromptErr" class="login-err" hidden></div>
-        <div class="login-btn" id="fmPromptOk">OK</div>
-        <div class="login-cancel" id="fmPromptCancel">Cancel</div>
-      </div>
-    </div>
-    <div id="osk"></div>
-  </div>
-</div>
-
-<script src="shell.js"></script>
-    <script src="home.js"></script>
-    <script src="settings.js"></script>
-    <script src="leds.js"></script><script src="audio.js"></script><script src="bluetooth.js"></script>
-    <script src="live.js"></script>
-    <script src="account.js"></script>
-    <script src="storage-files.js"></script>
-    <script src="system.js"></script>
-    <script src="files.js"></script>
-    <script src="files-landing.js"></script>
-    <script src="files-browse.js"></script>
-    <script src="files-ops.js"></script>
-    <script src="files-search.js"></script>
-    <script src="notifications.js"></script>
-    <script src="network.js"></script>
+<div id="app" class="rl-screen rl-backdrop--fixed rl-silk rl-color-icons"></div>
 </body>
 </html>

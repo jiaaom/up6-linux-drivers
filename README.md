@@ -109,8 +109,9 @@ Install them from the App Center's manual-installation entry, or with
 ```
 kernel/       DKMS kernel modules
 crates/       Cargo workspace with all Rust userspace (shared target/ and lockfile)
-panel/        front-panel UI (www/), its admin page (web/), the Electron kiosk shell (app/,
-              with its appliance-compositor registration) and the video player's config (mpv/)
+panel/        front-panel UI (www/, built on the Ridgeline design system; dev tools in tools/),
+              its admin page (web/), the Electron kiosk shell (app/, with its
+              appliance-compositor registration) and the video player's config (mpv/)
 packaging/    install-dkms.sh, build-fpk.sh, the FygoOS package skeletons (fpk/) and the
               pinned mpv/libva sources (mpv/)
 assets/       README images

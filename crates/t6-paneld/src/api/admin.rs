@@ -45,10 +45,12 @@ pub(super) async fn get_status(headers: HeaderMap) -> Response {
     Json(serde_json::json!({
         "panel": { "enabled": set.panel_enabled(), "active": kiosk_active() },
         "display": { "present": disp.present, "on": disp.on },
-        // Front-panel theme; empty/unset means dark (as in /api/panel).
-        "theme": if set.theme.is_empty() { "dark".to_string() } else { set.theme.clone() },
+        // Front-panel theme; empty/unset means light (as in /api/panel).
+        "theme": if set.theme.is_empty() { "light".to_string() } else { set.theme.clone() },
         "color_correction": set.color_correction(),
-        "screen_timeout_s": set.screen_timeout_s,
+        "dim_after_s": set.dim_after_s(),
+        "dim_percent": set.dim_percent(),
+        "off_after_s": set.off_after_s(),
         "version": crate::panel::app_version(),
         "host": t6_hw_rs::sensors::hostname(),
     }))
@@ -97,6 +99,11 @@ pub(super) async fn post_restart(headers: HeaderMap) -> Response {
     if !is_admin(&headers) {
         return forbidden();
     }
+    restart_kiosk()
+}
+
+/// Restart the kiosk (the panel app itself), unless it is turned off.
+pub(super) fn restart_kiosk() -> Response {
     if !crate::settings::load().panel_enabled() {
         return (StatusCode::CONFLICT, "the panel app is turned off").into_response();
     }

@@ -18,10 +18,12 @@ mod backlight;
 mod firmware;
 mod fnos;
 mod gateway;
+mod history;
 mod idle;
 mod panel;
 mod screensaver;
 mod settings;
+mod tasks;
 mod www;
 
 use std::path::PathBuf;
@@ -126,6 +128,7 @@ async fn main() {
     backlight::start();
     screensaver::start();
     idle::start();
+    history::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (it comes up lit; systemd-backlight restores the level).
     if !settings::load().panel_enabled() {
@@ -174,6 +177,11 @@ async fn main() {
     }
     if let Some(path) = &opts.gateway_socket {
         let _ = std::fs::remove_file(path);
+    }
+    history::save_all();
+    // a dimmed screen gets its level back before systemd-backlight saves it
+    if let Err(e) = tokio::task::spawn_blocking(idle::restore_saved).await {
+        eprintln!("restore brightness: {e}");
     }
     println!("t6-paneld stopped");
 }

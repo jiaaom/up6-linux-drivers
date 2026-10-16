@@ -5,12 +5,14 @@
 //! numbers: `t6-webd` (Control Center web UI) and `t6-paneld` (front panel).
 
 pub mod battery;
+pub mod containers;
 pub mod display;
 pub mod fans;
 pub mod hwinfo;
 pub mod leds;
 pub mod net;
 pub mod network;
+pub mod pools;
 pub mod sensors;
 pub mod sharing;
 pub mod ssh;

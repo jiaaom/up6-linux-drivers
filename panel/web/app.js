@@ -32,11 +32,13 @@ document.documentElement.dataset.theme = resolvedTheme();
 const state = { language: "en-US", status: null, audio: null };
 
 // Front-panel themes, in picker order. A new theme needs an entry here, its
-// strings in I18N, a theme-<id>.png preview (240x480, a capture of the home
-// screen) and to be allowed in t6-paneld (settings::set_theme) and
-// panel/www/theme.js.
-// Same choices as the panel's own Settings page (panel/www/settings.js).
-const TIMEOUTS = [0, 60, 300, 900, 1800];
+// strings in I18N, a theme-<id>.png preview (240x480, a capture of 总览) and
+// to be allowed in t6-paneld (settings::set_theme) and panel/www/js/core/theme.js.
+// Same choices as the panel's own Settings page (panel/www/js/pages/settings).
+// Screen idle (t6-paneld idle.rs): dim after, how dim, off after; 0 = never.
+const DIM_AFTER = [0, 60, 120, 300, 900];
+const DIM_PERCENT = [10, 25, 50];
+const OFF_AFTER = [0, 3600, 43200, 86400];
 
 const THEMES = [
   { id: "light", img: "theme-light.png" },
@@ -65,10 +67,17 @@ const I18N = {
     theme_light: "浅色",
     theme_dark: "深色",
     themeSaved: "主题已更改",
-    screenTimeout: "自动关屏",
+    dimAfter: "闲置后变暗",
+    dimAfterHint: "前面板这么久没被触摸后把屏幕调暗，一碰就恢复。",
+    dimLevel: "变暗到",
+    dimLevelHint: "变暗后的亮度，按屏幕当前亮度的比例。",
+    screenTimeout: "闲置后熄屏",
     screenTimeoutHint: "前面板这么久没被触摸后自动关闭屏幕。",
     never: "从不",
+    off: "关",
     minutes: "{n} 分钟",
+    hours: "{n} 小时",
+    percentOf: "亮度的 {n}%",
     colorCorrection: "颜色校正",
     colorCorrectionHint: "修正屏幕发白和高光被截断。设备重启后生效。",
     actions: "操作",
@@ -131,10 +140,17 @@ const I18N = {
     theme_light: "Light",
     theme_dark: "Dark",
     themeSaved: "Theme changed",
-    screenTimeout: "Screen timeout",
+    dimAfter: "Dim after",
+    dimAfterHint: "Dim the screen after the front panel has not been touched for this long. A touch brings it back.",
+    dimLevel: "Dim to",
+    dimLevelHint: "How dim, as a share of the screen's brightness.",
+    screenTimeout: "Screen off after",
     screenTimeoutHint: "Turn the screen off after the front panel has not been touched for this long.",
     never: "Never",
+    off: "Off",
     minutes: "{n} min",
+    hours: "{n} h",
+    percentOf: "{n}% of brightness",
     colorCorrection: "Color correction",
     colorCorrectionHint: "Fixes washed-out colors and clipped highlights. Applies after the NAS restarts.",
     actions: "Actions",
@@ -190,6 +206,8 @@ const els = {
   displayPanel: $("displayPanel"),
   themeGrid: $("themeGrid"),
   timeout: $("timeoutSel"),
+  dimAfter: $("dimAfterSel"),
+  dimLevel: $("dimLevelSel"),
   cc: $("ccSwitch"),
   restart: $("restartBtn"),
   statAudio: $("statAudio"),
@@ -268,7 +286,7 @@ function render() {
   // Display settings only make sense while the panel app runs.
   els.displayPanel.classList.toggle("off", !on);
   renderThemes(s.theme, !on);
-  renderTimeout(s.screen_timeout_s ?? 0, !on);
+  renderIdle(s, !on);
   els.cc.disabled = !on;
   els.cc.checked = !!s.color_correction;
   els.restart.disabled = !on;
@@ -344,18 +362,22 @@ function renderThemes(current, disabled) {
   }
 }
 
-function renderTimeout(current, disabled) {
-  const sel = els.timeout;
+// One select of the screen-idle settings; the options are rebuilt only on a
+// language change, so the refresh never closes an open list.
+function renderChoice(sel, values, label, current, disabled) {
   if (sel.dataset.lang !== state.language) {
     sel.dataset.lang = state.language;
-    sel.innerHTML = TIMEOUTS.map((v) => `<option value="${v}">${v ? t("minutes", { n: v / 60 }) : t("never")}</option>`).join("");
-  }
-  // A value set elsewhere that is not in the list still shows.
-  if (!TIMEOUTS.includes(current) && !sel.querySelector(`option[value="${current}"]`)) {
-    sel.insertAdjacentHTML("beforeend", `<option value="${current}">${t("minutes", { n: Math.round(current / 60) })}</option>`);
+    sel.innerHTML = values.map((v) => `<option value="${v}">${label(v)}</option>`).join("");
   }
   if (document.activeElement !== sel) sel.value = String(current);
   sel.disabled = disabled;
+}
+
+function renderIdle(s, disabled) {
+  renderChoice(els.dimAfter, DIM_AFTER, (v) => (v ? t("minutes", { n: v / 60 }) : t("off")), s.dim_after_s ?? 120, disabled);
+  // how dim only matters while it dims
+  renderChoice(els.dimLevel, DIM_PERCENT, (v) => t("percentOf", { n: v }), s.dim_percent ?? 25, disabled || !(s.dim_after_s ?? 120));
+  renderChoice(els.timeout, OFF_AFTER, (v) => (v ? t("hours", { n: v / 3600 }) : t("never")), s.off_after_s ?? 3600, disabled);
 }
 
 // ---- dialog + toast ----
@@ -418,9 +440,11 @@ els.themeGrid.addEventListener("click", (e) => {
   run(() => api("settings/theme", "PUT", { theme: card.dataset.themeId }), t("themeSaved"));
 });
 
-els.timeout.addEventListener("change", () => {
-  run(() => api("settings/screen-timeout", "PUT", { seconds: Number(els.timeout.value) }), t("saved"));
-});
+for (const [sel, key] of [[els.dimAfter, "dim_after_s"], [els.dimLevel, "dim_percent"], [els.timeout, "off_after_s"]]) {
+  sel.addEventListener("change", () => {
+    run(() => api("settings/screen-idle", "PUT", { [key]: Number(sel.value) }), t("saved"));
+  });
+}
 
 els.output.addEventListener("change", () => {
   const id = Number(els.output.value);

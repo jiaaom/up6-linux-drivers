@@ -330,6 +330,14 @@ impl FnosClient {
     /// collected frames in order. On timeout the collected frames so far are
     /// returned (partial results) — callers can treat that as "capped".
     pub async fn request_stream(&self, req: &str, params: Value, budget: Duration) -> Result<Vec<Value>, String> {
+        let mut frames = Vec::new();
+        self.request_each(req, params, budget, |f| frames.push(f.clone())).await?;
+        Ok(frames)
+    }
+
+    /// Like [`request_stream`](Self::request_stream), but hands each frame to
+    /// `on_frame` as it arrives (for progress) instead of collecting them.
+    pub async fn request_each(&self, req: &str, params: Value, budget: Duration, mut on_frame: impl FnMut(&Value)) -> Result<(), String> {
         let id = reqid();
         let mut obj = params.as_object().cloned().unwrap_or_default();
         obj.insert("req".into(), json!(req));
@@ -341,21 +349,20 @@ impl FnosClient {
         self.tx.send(Cmd::Stream { frame, reqid: id, tx })
             .await.map_err(|_| "fnos connection closed".to_string())?;
 
-        let mut frames = Vec::new();
         let deadline = tokio::time::Instant::now() + budget;
         loop {
             match tokio::time::timeout_at(deadline, rx.recv()).await {
                 Ok(Some(f)) => {
                     let terminal = f.get("result").and_then(|r| r.as_str())
                         .map_or(false, |r| r != "doing");
-                    frames.push(f);
+                    on_frame(&f);
                     if terminal { break; }
                 }
                 Ok(None) => break,   // registration dropped (shouldn't happen mid-stream)
                 Err(_) => break,     // budget elapsed — return partial
             }
         }
-        Ok(frames)
+        Ok(())
     }
 }
 
@@ -499,6 +506,21 @@ async fn current_client() -> Result<FnosClient, String> {
     }
     auto_sign_in().await;
     cell().lock().await.as_ref().cloned().ok_or_else(|| "not signed in to fnOS".to_string())
+}
+
+/// Stream a long request (a copy, a move), handing each frame to `on_frame`.
+pub async fn call_each(req: &str, params: Value, budget: Duration, mut on_frame: impl FnMut(&Value)) -> Result<(), String> {
+    let client = current_client().await?;
+    let mut expired = false;
+    client.request_each(req, params, budget, |f| {
+        expired |= is_session_expired(f);
+        on_frame(f);
+    }).await?;
+    if expired {
+        invalidate_session().await;
+        return Err(SESSION_EXPIRED.to_string());
+    }
+    Ok(())
 }
 
 /// Streaming variant of [`call`] — see [`FnosClient::request_stream`]. Returns

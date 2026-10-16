@@ -79,33 +79,43 @@ async function ensurePreviewCookie() {
 // file-listing page underneath is never touched while Preview is open, so
 // closing it is an instant bounds change, not a reload/refetch of the folder.
 let previewView = null;
-// Renderer-chosen colour theme, mirrored here so the window/preview backgrounds
-// and the Preview app's own ?theme= match. Defaults to dark like theme.js does.
-const THEME_BG = { dark: '#0d1420', light: '#e2ecf7' };
+// Renderer-chosen colour theme, mirrored here so the window background
+// matches it. Light unless set to dark, like the
+// UI (panel/www/js/core/theme.js). The colours are Ridgeline's desk
+// (surface-100 in each theme).
+const THEME_BG = { dark: '#1b1b1b', light: '#f5f5f4' };
+// Preview sits inside the panel's viewer, which is dark in both themes, so
+// it always runs dark; this is its page colour, which the viewer's bar
+// matches (panel/www/css/app.css .t6-viewer), so loading shows no flash.
+const VIEWER_BG = '#1f2021';
 // Seed from t6-paneld's own settings file (the source of truth) so a cold start
-// in light mode doesn't flash the dark window background before the renderer
+// in dark mode doesn't flash the light window background before the renderer
 // has loaded and reported back through theme:set.
 let theme = (() => {
   try {
     const t = JSON.parse(fs.readFileSync('/var/lib/t6-paneld/settings.json', 'utf8')).theme;
-    return t === 'light' ? 'light' : 'dark';
-  } catch (e) { return 'dark'; }
+    return t === 'dark' ? 'dark' : 'light';
+  } catch (e) { return 'light'; }
 })();
 let themeBg = THEME_BG[theme];
 let mainWindow = null;
 ipcMain.handle('theme:set', async (event, { theme: t, bg }) => {
-  theme = t === 'light' ? 'light' : 'dark';
+  theme = t === 'dark' ? 'dark' : 'light';
   if (bg) themeBg = bg;
   if (mainWindow) mainWindow.setBackgroundColor(themeBg);
-  if (previewView) previewView.setBackgroundColor(themeBg);
   return { ok: true };
 });
 ipcMain.handle('preview:open', async (event, { path, bounds }) => {
   if (!previewView) return { ok: false, reason: 'no window' };
-  previewView.setBounds(bounds);
+  // bounds are in the page's CSS px; the page may be zoomed (fitLayoutWidth)
+  const z = mainWindow.webContents.getZoomFactor();
+  previewView.setBounds({
+    x: Math.round(bounds.x * z), y: Math.round(bounds.y * z),
+    width: Math.round(bounds.width * z), height: Math.round(bounds.height * z),
+  });
   previewView.setVisible(true); // show immediately (themed bg) while it loads
   try { await ensurePreviewCookie(); } catch (e) { /* best-effort; the preview app surfaces its own auth error if this fails */ }
-  previewView.webContents.loadURL(`${FNOS_ORIGIN}/app/trim-preview/?path=${encodeURIComponent(path)}&theme=${theme}`);
+  previewView.webContents.loadURL(`${FNOS_ORIGIN}/app/trim-preview/?path=${encodeURIComponent(path)}&theme=dark`);
   return { ok: true };
 });
 ipcMain.handle('preview:close', async () => {
@@ -200,7 +210,7 @@ app.on('before-quit', stopPlayer);
 // Remote/keyboard keys that a browser acts on by itself (BrowserBack is a
 // history navigation) or that must work wherever focus is — including inside
 // the Preview view — are taken here and handed to the panel UI's navigator
-// (www/nav.js). Arrows, Enter and Escape reach the page normally.
+// (www/js/shell/remote.js). Arrows, Enter and Escape reach the page normally.
 const NAV_KEYS = new Set(['BrowserBack', 'BrowserHome', 'ContextMenu',
   'AudioVolumeUp', 'AudioVolumeDown', 'AudioVolumeMute']);
 // Also taken from Preview: leaving it must not depend on its own key handling.
@@ -261,6 +271,22 @@ function routeNavKeys(contents, extra) {
   });
 }
 
+// A page that is laid out for a fixed width (the Ridgeline UI declares
+// <meta name="t6-layout-width" content="390">) is zoomed to fill the window:
+// 540 / 390 on the panel, whose weston output is already scaled 2x. A page
+// without the tag (the old UI) is shown at 1:1.
+function fitLayoutWidth(win) {
+  win.webContents.on('dom-ready', async () => {
+    let width = 0;
+    try {
+      width = await win.webContents.executeJavaScript(
+        "Number(document.querySelector('meta[name=\"t6-layout-width\"]')?.content) || 0");
+    } catch { /* page gone */ }
+    const [contentWidth] = win.getContentSize();
+    win.webContents.setZoomFactor(width > 0 ? contentWidth / width : 1);
+  });
+}
+
 function createWindow() {
   const windowed = !!process.env.WINDOWED;
   const win = new BrowserWindow({
@@ -280,6 +306,7 @@ function createWindow() {
   });
   mainWindow = win;
   routeNavKeys(win.webContents);
+  fitLayoutWidth(win);
   win.loadURL(PANEL_URL);
   // No more Preview-toolbar geometry hack here: the weston compositor scale
   // (panel/app/compositor.ini) plus a genuinely responsive panel UI (no more fixed
@@ -290,7 +317,7 @@ function createWindow() {
   previewView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  previewView.setBackgroundColor(themeBg); // matches --bg; avoids a flash of the wrong theme while loading
+  previewView.setBackgroundColor(VIEWER_BG); // the viewer's colour, so loading shows no flash
   win.contentView.addChildView(previewView);
   routeNavKeys(previewView.webContents, PREVIEW_EXIT_KEYS);
   previewView.setVisible(false); // hidden until preview:open

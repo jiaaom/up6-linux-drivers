@@ -54,7 +54,21 @@
         </div>
         <div class="row">
           <div class="row-label">
-            <span data-i18n="screenTimeout">Screen timeout</span>
+            <span data-i18n="dimAfter">Dim after</span>
+            <p class="hint" data-i18n="dimAfterHint">Dim the screen after the front panel has not been touched for this long. A touch brings it back.</p>
+          </div>
+          <select id="dimAfterSel" disabled></select>
+        </div>
+        <div class="row">
+          <div class="row-label">
+            <span data-i18n="dimLevel">Dim to</span>
+            <p class="hint" data-i18n="dimLevelHint">How dim, as a share of the screen's brightness.</p>
+          </div>
+          <select id="dimLevelSel" disabled></select>
+        </div>
+        <div class="row">
+          <div class="row-label">
+            <span data-i18n="screenTimeout">Screen off after</span>
             <p class="hint" data-i18n="screenTimeoutHint">Turn the screen off after the front panel has not been touched for this long.</p>
           </div>
           <select id="timeoutSel" disabled></select>

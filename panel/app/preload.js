@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('playerBridge', {
 });
 
 // Remote/keyboard keys the main process takes before the page sees them
-// (BrowserBack, BrowserHome, ContextMenu, volume); www/nav.js acts on them.
+// (BrowserBack, BrowserHome, ContextMenu, volume); www/js/shell/remote.js acts on them.
 contextBridge.exposeInMainWorld('navBridge', {
   onKey: (cb) => ipcRenderer.on('nav:key', (event, key) => cb(key)),
 });

@@ -1,0 +1,68 @@
+/* Generated from tokens.json by scripts/tokens_to_css.py — do not edit by hand. */
+@font-face { font-family: "EB Garamond"; src: url("fonts/EBGaramond-Variable.woff2") format("woff2"); font-weight: 400 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "EB Garamond"; src: url("fonts/EBGaramond-Italic-Variable.woff2") format("woff2"); font-weight: 400 800; font-style: italic; font-display: swap; }
+@font-face { font-family: "Huiwen-MinchoGBK"; src: url("fonts/HuiwenMinchoGBK-GB2312.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("fonts/SourceSans3-Variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("fonts/SourceSans3-Italic-Variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; }
+:root, .rl-theme {
+  --surface-100: #f5f5f4;
+  --surface-200: #eaeae8;
+  --ink: #1c211a;
+  --ink-muted: #5b5a55;
+  --vine: #4f6420;
+  --on-vine: #f5f5f4;
+  --vine-tint: #d6dca4;
+  --ridge: #34506b;
+  --ochre: #835a1b;
+  --rust: #9a3f18;
+  --seal: #a82b22;
+  --on-seal: #f5f5f4;
+  --slip: #f3ecd9;
+  --on-slip: #2a2418;
+  --hairline: #d6d6d3;
+  --border-strong: #868682;
+  --pigment-indigo: #3a5674;
+  --pigment-malachite: #3d7560;
+  --pigment-gamboge: #8f6d1f;
+  --pigment-carmine: #9a3a4c;
+  --pigment-azurite: #2c6a88;
+  --pigment-ochre: #83562e;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-10: 40px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-full: 999px;
+  --shadow-soft: 0 1px 2px rgba(28,33,26,0.08), 0 4px 16px rgba(28,33,26,0.06);
+  --font-serif: "EB Garamond", "Huiwen-MinchoGBK", "Songti SC", "Noto Serif SC", serif;
+  --font-sans: "Source Sans 3", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+[data-theme="dark"], .rl-theme--dark {
+  --surface-100: #1b1b1b;
+  --surface-200: #262626;
+  --ink: #e9e8e5;
+  --ink-muted: #a9a8a4;
+  --vine: #a9ba5e;
+  --on-vine: #1b1b1b;
+  --vine-tint: #2f3a1e;
+  --ridge: #93adc7;
+  --ochre: #d6a453;
+  --rust: #e58a60;
+  --seal: #c4463a;
+  --on-seal: #e9e8e5;
+  --slip: #1f2e51;
+  --on-slip: #e6c87e;
+  --hairline: #363636;
+  --border-strong: #767572;
+  --pigment-indigo: #3a5674;
+  --pigment-malachite: #3d7560;
+  --pigment-gamboge: #8f6d1f;
+  --pigment-carmine: #9a3a4c;
+  --pigment-azurite: #2c6a88;
+  --pigment-ochre: #83562e;
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+}
+/* Motion tokens live in components/bundle.css as --rl-dur-* and --rl-ease-*. */

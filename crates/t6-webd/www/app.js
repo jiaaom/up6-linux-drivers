@@ -284,7 +284,6 @@ function applyPreferences() {
   $("#pageTitle").textContent = t($(".nav-item.active").querySelector("[data-i18n]").dataset.i18n);
   if (langChanged) {
     // strings built in JS: re-render from the last data
-    $("#led-devices").dataset.key = "";
     $("#profiles").dataset.key = "";
     if (state.last) renderAll(state.last);
     loadSystem();

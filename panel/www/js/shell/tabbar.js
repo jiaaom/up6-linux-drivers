@@ -1,5 +1,6 @@
 // The floating tab bar: 总览 · 文件 · 连接 · 设置. The current tab carries
-// aria-current="page", which alone draws its lit line.
+// aria-current="page", which alone draws its label (缃 on indigo cloth by day,
+// indigo on paper at night). Icons are Regular here, as Ridgeline asks.
 //
 // A page may put a bar in the dock with it: above the tab bar (the files
 // clipboard bar) or in its place (the selection action bar). It sets the bar
@@ -34,7 +35,7 @@ function render() {
   const cur = currentTab();
   dock.querySelector('nav')?.remove();
   dock.insertAdjacentHTML('beforeend', String(html`<nav class="rl-tabbar rl-tabbar--float" aria-label="${t('nav.main')}">
-    ${TABS.map((tab) => html`<a class="rl-tabbar__item" href="#" data-tab="${tab.id}"${tab.id === cur ? html` aria-current="page"` : ''}>${icon(tab.icon, 'light')}${t(tab.title)}</a>`)}
+    ${TABS.map((tab) => html`<a class="rl-tabbar__item" href="#" data-tab="${tab.id}"${tab.id === cur ? html` aria-current="page"` : ''}>${icon(tab.icon, 'regular')}${t(tab.title)}</a>`)}
   </nav>`));
   if (above) dock.prepend(above);
   if (instead) { dock.querySelector('nav').hidden = true; dock.append(instead); }

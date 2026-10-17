@@ -1,4 +1,4 @@
-# Ridgeline 1.7.0 (vendored)
+# Ridgeline 1.10.0 (vendored)
 
 The design system the panel UI is built on, copied here so this repository is
 self-contained. Do not edit these files: page-specific CSS goes in the panel's

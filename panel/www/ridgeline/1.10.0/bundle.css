@@ -2190,3 +2190,117 @@ li:nth-child(even) > * > .rl-toc__lead img, .rl-toc__item:nth-child(even) .rl-to
 .rl-sliptabs.is-locked .rl-sliptab__close { display: none; }
 /* remote: the ring sits on the slip's own edge */
 .is-remote .rl-sliptab.is-focus { outline-offset: 2px !important; z-index: 3; }
+
+
+/* =====================================================================
+   1.8.0 — the tab bar as a 蓝布函套 (the indigo cloth case of a book).
+   ===================================================================== */
+
+/* ---------- Navigation › the tab bar is indigo cloth by day ----------
+   On the washed-out IPS a paper bar over a paper page read as one white
+   mass. By day the bar is the indigo cloth case that holds a thread-bound
+   book: a woven indigo, a fine paper double rule inside its edge, paper-
+   coloured icons and labels. The current tab is a 缃 (pale straw-yellow
+   silk, as on old book wrappers) label pasted on the cloth, with ink marks.
+   缃 is used here only: it is not the slip's colour, and it stays clear of
+   ochre, which means a warning. At night the bar stays lamp-lit paper: on
+   the black desk paper already stands out, and cloth would sink. Icons in
+   the bar are Phosphor Regular (the one place Regular is used at 24px). */
+:root, .rl-theme {
+  --rl-cloth: linear-gradient(180deg, #2c3d58, #22314a);
+  --rl-cloth-weave: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.10) 0 1px, transparent 1px 3px);
+  --rl-on-cloth: rgba(236,230,214,.74);
+  --rl-cloth-label: #f1e3b4;
+  --rl-cloth-label-2: #e3cf92;
+}
+/* Light is the base, dark reverts it (the selectors carry the theme so they win
+   with data-theme on the root or the .rl-theme--dark class). */
+.rl-tabbar.rl-tabbar--float {
+  background: var(--rl-cloth-weave), var(--rl-cloth);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px rgba(236,230,214,.28), inset 0 0 0 4px #24344d, inset 0 0 0 5px rgba(236,230,214,.16),
+    0 2px 4px rgba(28,33,26,.30), 0 10px 24px rgba(28,33,26,.30), 0 -4px 16px rgba(28,33,26,.12);
+}
+.rl-tabbar--float .rl-tabbar__item { color: var(--rl-on-cloth); }
+.rl-tabbar--float .rl-tabbar__item[aria-current="page"] { position: relative; z-index: 0; color: #1c211a; }
+.rl-tabbar--float .rl-tabbar__item[aria-current="page"]::before { display: none; }
+.rl-tabbar--float .rl-tabbar__item[aria-current="page"]::after {
+  content: ""; position: absolute; z-index: -1; inset: 7px 10px; border-radius: 1px;
+  background: linear-gradient(180deg, var(--rl-cloth-label), var(--rl-cloth-label-2));
+  box-shadow: inset 0 0 0 1px rgba(42,36,24,.35), inset 0 0 0 3px var(--rl-cloth-label), inset 0 0 0 4px rgba(42,36,24,.25), 0 1px 2px rgba(0,0,0,.35);
+}
+/* remote: on cloth the ring is the label colour, not ridge */
+.is-remote .rl-tabbar--float .rl-tabbar__item.is-focus { outline-color: var(--rl-cloth-label) !important; filter: drop-shadow(0 0 6px rgba(241,227,180,.45)); }
+/* 夜案: the bar stays lamp-lit paper (1.4.0 values) */
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar.rl-tabbar--float {
+  background: var(--rl-glass-fill);
+  box-shadow: inset 0 0 0 1px var(--rl-ctl-line), inset 0 1px 0 var(--rl-glass-edge),
+    0 0 0 1px rgba(255,214,160,.14), 0 0 16px 1px rgba(255,200,130,.20), 0 -6px 30px 2px rgba(255,190,120,.10),
+    0 -3px 12px rgba(0,0,0,.22), 0 10px 26px rgba(0,0,0,.5);
+}
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item { color: var(--ink-muted); }
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"] { color: var(--ink); }
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"]::before { display: block; }
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"]::after { content: none; }
+/* every order of theme and remote: above, on the same element, or below (1.9.1:
+   apps put data-theme on <html> and .is-remote on <body>) */
+.is-remote :is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item.is-focus,
+:is([data-theme="dark"], .rl-theme--dark).is-remote .rl-tabbar--float .rl-tabbar__item.is-focus,
+:is([data-theme="dark"], .rl-theme--dark) .is-remote .rl-tabbar--float .rl-tabbar__item.is-focus { outline-color: var(--ridge) !important; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ridge) 45%, transparent)); }
+
+
+/* =====================================================================
+   1.9.0 — the night tab label; 文件 tabs from the build; 屏幕 › 闲置.
+   ===================================================================== */
+
+/* ---------- Navigation › at night the current tab is an indigo label ----------
+   The day pairing turned over: by day a 缃 label on indigo cloth, at night an
+   indigo label with 缃 marks on lamp-lit paper. The indigo is the title slip's
+   (--slip / --on-slip at night), one step lighter (10% white) so the label
+   sits on the bar instead of punching a hole in it; the slip names the page,
+   the label only marks where you are. Replaces the 2px malachite line. */
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"] { position: relative; z-index: 0; color: var(--on-slip); }
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"]::before { display: none; }
+:is([data-theme="dark"], .rl-theme--dark) .rl-tabbar--float .rl-tabbar__item[aria-current="page"]::after {
+  --rl-tab-slip: color-mix(in srgb, var(--slip) 90%, #fff);
+  content: ""; position: absolute; z-index: -1; inset: 7px 10px; border-radius: 1px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rl-tab-slip) 90%, #fff), var(--rl-tab-slip));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-slip) 55%, transparent), inset 0 0 0 3px var(--rl-tab-slip),
+    inset 0 0 0 4px color-mix(in srgb, var(--on-slip) 40%, transparent), 0 1px 2px rgba(0,0,0,.35);
+}
+
+/* ---------- TitleSlip › tabs from one tab on ----------
+   + is the way to a second tab, so the row shows as soon as 文件 has one tab:
+   the slip and +, no ×, and the English subtitle stays (it gives way only
+   while there are several). Signed out, or picking items with one tab, it is
+   the plain slip. */
+.rl-sliptabs.is-single .rl-slip__sub { display: inline; }
+.rl-sliptabs.is-single .rl-sliptab__close { display: none; }
+
+/* ---------- TitleSlip › English slips behind ----------
+   Two Chinese characters fit 3.1em; two English words do not, and a hard cut
+   mid-word ("My f") reads as a bug. In English a slip behind is wider (5em)
+   and fades out at its right edge, so the cut reads as paper tucked behind
+   the next slip. The panel sets the modifier with the language, and .is-cut
+   on a slip whose name does not fit (scrollWidth > clientWidth), so a name
+   that fits keeps its last letter. */
+.rl-sliptabs--en .rl-sliptab:not(.is-current):not(.rl-sliptab--add) { max-width: 5em; font-size: 16px; }
+.rl-sliptabs--en .rl-sliptab.is-cut:not(.is-current) > span {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 1.2em), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 1.2em), transparent);
+}
+
+/* ---------- Motion › switching tabs is a cross-fade of whole pages ----------
+   1.4.0 faded the new page's content while the old page vanished at once, so
+   for a moment the bare sky showed with no paper on it. Now the new page fades
+   in whole on top (rl-tabpane--in), and the old one stays put under it
+   (rl-tabpane--out) until the fade ends, then is removed. Both carry the same
+   sky, so only the paper changes. Closing a slip does the same. */
+.rl-screen > .rl-scroller.rl-tabpane--in { z-index: 1; animation: rl-fade-in 120ms var(--rl-ease-move) both !important; }
+.rl-screen > .rl-scroller.rl-tabpane--in > * { animation: none; }
+.rl-screen > .rl-scroller.rl-tabpane--out { z-index: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rl-screen > .rl-scroller.rl-tabpane--in { animation: rl-fade-in 120ms linear both !important; }
+  .rl-screen > .rl-scroller.rl-tabpane--in > * { animation: none !important; }
+}

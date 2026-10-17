@@ -34,6 +34,7 @@ pub(super) async fn get_history(Query(q): Query<HistoryQuery>) -> Response {
 pub(super) async fn get_panel(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
     let mut v = crate::panel::build();
     v["session"] = session_value(&headers, s.shell_port);
+    v["bluetooth"] = super::bluetooth::summary().await;
     Json(v)
 }
 

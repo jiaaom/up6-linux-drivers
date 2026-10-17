@@ -392,6 +392,25 @@ pub(super) async fn get_bluetooth() -> Response {
     .into_response()
 }
 
+/// For `/api/panel` (the status bar polls only that): whether there is an
+/// adapter, whether it is on, and how many devices are connected. A slow or
+/// missing bluetoothd reads as no adapter rather than holding up the poll.
+pub(super) async fn summary() -> serde_json::Value {
+    let read = async {
+        let c = bus().await.ok()?;
+        let m = managed(c).await.ok()?;
+        let adapter = adapter_path(&m)?;
+        let a = &m[&OwnedObjectPath::try_from(adapter.as_str()).ok()?]["org.bluez.Adapter1"];
+        let powered = get::<bool>(a, "Powered").unwrap_or(false);
+        let connected = if powered { devices(&m, &adapter).iter().filter(|d| d.connected).count() } else { 0 };
+        Some(serde_json::json!({ "adapter": true, "powered": powered, "connected": connected }))
+    };
+    match tokio::time::timeout(Duration::from_millis(500), read).await {
+        Ok(Some(v)) => v,
+        _ => serde_json::json!({ "adapter": false, "powered": false, "connected": 0 }),
+    }
+}
+
 async fn adapter(c: &Connection) -> Result<String, Response> {
     let m = managed(c).await.map_err(|e| err(StatusCode::SERVICE_UNAVAILABLE, e))?;
     adapter_path(&m).ok_or_else(|| err(StatusCode::NOT_FOUND, "no Bluetooth adapter"))

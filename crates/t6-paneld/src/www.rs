@@ -1,6 +1,6 @@
 //! Static UI files, served from a directory given with `--www DIR` (edit,
 //! refresh, no rebuild). A later production build can embed them like t6-webd.
-//! Files may sit in subdirectories (`fonts/…`, `ridgeline/1.7.0/…`); every
+//! Files may sit in subdirectories (`fonts/…`, `ridgeline/1.10.0/…`); every
 //! path segment must be a plain name, so a request can never leave the root.
 
 use std::path::PathBuf;
@@ -79,11 +79,11 @@ mod tests {
     #[test]
     fn paths() {
         assert!(safe_path("index.html"));
-        assert!(safe_path("ridgeline/1.7.0/fonts/EBGaramond-Variable.woff2"));
+        assert!(safe_path("ridgeline/1.10.0/fonts/EBGaramond-Variable.woff2"));
         for bad in ["../x", "a/../b", "a//b", "/a", "a/", "./a", "a\\b", "a\0b"] {
             assert!(!safe_path(bad), "{bad:?}");
         }
-        assert!(is_immutable("ridgeline/1.7.0/tokens.css"));
+        assert!(is_immutable("ridgeline/1.10.0/tokens.css"));
         assert!(!is_immutable("app.js"));
     }
 }

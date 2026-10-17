@@ -1,7 +1,7 @@
-// The one status bar (28px) for the whole app: time on the left; connection
-// (wired, Wi-Fi, or the hotspot with its device count) and a battery icon by
-// level (charging on AC) on the right. The battery percentage is in the control
-// center. A running copy adds a task chip after the time (files tab).
+// The one status bar (28px) for the whole app: time on the left; the
+// connections in use (Bluetooth, Wi-Fi or the hotspot, wired) and a battery
+// icon by level (charging on AC) on the right. The battery percentage is in
+// the control center. A running copy adds a task chip after the time (files tab).
 
 import { html, raw } from '../core/dom.js';
 import { icon } from '../core/icons.js';
@@ -30,19 +30,36 @@ export function signalIcon(percent, label) {
   return html`<svg class="rl-signal" viewBox="0 0 48 48" role="img" aria-label="${label}">${arc(3, 'M6 19a25 25 0 0 1 36 0')}${arc(2, 'M12.5 26.5a16 16 0 0 1 23 0')}${arc(1, 'M18.5 33.5a7.5 7.5 0 0 1 11 0')}<circle cx="24" cy="39.5" r="2.2"/></svg>`;
 }
 
-function connection(net) {
+/**
+ * Every connection in use, side by side (Ridgeline Navigation › Status bar ›
+ * Connections): 蓝牙 · Wi-Fi or 热点 · 有线, least to most important. Off, or
+ * on but not connected, shows nothing. With no network at all: wifi-slash
+ * when Wi-Fi is off (the reason), else cloud-slash.
+ */
+function connections(d) {
+  const net = d?.network;
+  const bt = d?.bluetooth;
   const hs = net?.hotspot;
-  if (hs?.active) return html`<span aria-label="${t('status.hotspot', { n: hs.devices ?? 0 })}">${icon('broadcast')}${hs.devices ?? 0}</span>`;
+  const wifi = net?.wifi;
   const eth = net?.ethernet;
+  const out = [];
+  if (bt?.powered && bt.connected > 0) out.push(html`<span aria-label="${t('status.bluetooth')}">${icon('bluetooth-connected')}</span>`);
+  if (hs?.active) {
+    const n = hs.devices ?? 0;
+    out.push(html`<span aria-label="${t('status.hotspot', { n })}">${icon('broadcast')}${n > 0 ? n : ''}</span>`);
+  } else if (wifi?.connected) {
+    out.push(html`<span>${signalIcon(wifi.signal ?? 0, t('status.wifi', { n: wifi.signal ?? 0 }))}</span>`);
+  }
   if (eth?.connected) {
     const speed = linkSpeed(eth.speed_mbps);
-    return html`<span aria-label="${t('status.wired', { speed })}">${icon('plugs-connected')}${speed}</span>`;
+    out.push(html`<span aria-label="${t('status.wired', { speed })}">${icon('plugs-connected')}${speed}</span>`);
   }
-  const wifi = net?.wifi;
-  if (wifi?.connected) {
-    return html`<span>${signalIcon(wifi.signal ?? 0, t('status.wifi', { n: wifi.signal ?? 0 }))}</span>`;
+  if (!hs?.active && !wifi?.connected && !eth?.connected) {
+    out.push(wifi && wifi.enabled === false
+      ? html`<span aria-label="${t('status.wifiOff')}">${icon('wifi-slash')}</span>`
+      : html`<span aria-label="${t('status.none')}">${icon('cloud-slash')}</span>`);
   }
-  return html`<span aria-label="${t('status.none')}">${icon('cloud-slash')}</span>`;
+  return out;
 }
 
 function battery(b) {
@@ -55,7 +72,7 @@ function battery(b) {
 
 function renderEnd() {
   const d = panel.data;
-  bar.querySelector('.rl-statusbar__end').innerHTML = String(html`${connection(d?.network)}${battery(d?.battery)}`);
+  bar.querySelector('.rl-statusbar__end').innerHTML = String(html`${connections(d)}${battery(d?.battery)}`);
 }
 
 function tick() {

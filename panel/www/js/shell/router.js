@@ -157,18 +157,20 @@ function setTop(entry) {
 }
 
 /**
- * Between tabs (and slips): the new page fades in, sky and all, over the old
- * one, which stays on screen underneath until the fade ends. Both carry the
- * same sky, so only the paper changes. (Fading only the new page's content,
- * as Ridgeline's rl-tabpane--in does, showed its bare sky for a moment with
- * no paper on it: a flash.)
+ * Between tabs (and slips): the new page fades in whole over the old one
+ * (rl-tabpane--in), which stays on screen under it (rl-tabpane--out) until
+ * the fade ends. Both carry the same sky, so only the paper changes.
  */
 function crossFade(old, next) {
   setTop(next);
   if (!old || old === next) return;
-  next.el.classList.add('t6-fade-in');
+  next.el.classList.remove('rl-tabpane--out'); // straight back during a fade
+  old.el.classList.remove('rl-tabpane--in');
+  next.el.classList.add('rl-tabpane--in');
+  old.el.classList.add('rl-tabpane--out');
   afterAnimation(next.el, 200).then(() => {
-    next.el.classList.remove('t6-fade-in');
+    next.el.classList.remove('rl-tabpane--in');
+    old.el.classList.remove('rl-tabpane--out');
     if (!old.el.classList.contains('is-top')) old.el.hidden = true; // unless we came straight back
   });
 }

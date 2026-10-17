@@ -10,7 +10,7 @@
 
 import { html, on } from '../../core/dom.js';
 import { icon } from '../../core/icons.js';
-import { t } from '../../core/i18n.js';
+import { getLang, t } from '../../core/i18n.js';
 import { account } from '../../data/stores.js';
 import { confirm, sheet, toast } from '../../shell/layers.js';
 import {
@@ -36,12 +36,24 @@ export function slipHead(inner, { locked = false } = {}) {
   if (!row) return html`<h1 class="rl-slip rl-panel__slip">${inner}</h1>`;
   const several = tabs.length > 1;
   const cur = tabs.find((x) => x.current);
-  return html`<div class="rl-sliptabs${locked ? ' is-locked' : ''}${several ? '' : ' is-single'}" role="tablist" aria-label="${t('tabs.label')}">
+  const en = getLang() === 'en';
+  return html`<div class="rl-sliptabs${en ? ' rl-sliptabs--en' : ''}${locked ? ' is-locked' : ''}${several ? '' : ' is-single'}" role="tablist" aria-label="${t('tabs.label')}">
     <h1 class="rl-slip rl-panel__slip rl-sliptab is-current" role="tab" aria-selected="true" data-sliptab="${cur?.id}">${inner}${several && !locked
       ? html`<button class="rl-sliptab__close" data-sliptab-close aria-label="${t('tabs.close')}">${icon('x')}</button>` : ''}</h1>
     ${tabs.filter((x) => !x.current).map((x) => html`<button class="rl-sliptab" role="tab" aria-selected="false" aria-label="${x.label}" data-sliptab="${x.id}"><span>${x.label}</span></button>`)}
     ${canOpenTab() ? html`<button class="rl-sliptab rl-sliptab--add" data-sliptab-add aria-label="${t('tabs.new')}">${icon('plus')}</button>` : ''}
   </div>`;
+}
+
+/**
+ * English slips behind fade out at the right edge, but only when the name
+ * does not fit (.is-cut), so a name that fits keeps its last letter.
+ */
+function markCut(root) {
+  for (const b of root.querySelectorAll('.rl-sliptabs--en .rl-sliptab:not(.is-current):not(.rl-sliptab--add)')) {
+    const span = b.firstElementChild;
+    b.classList.toggle('is-cut', !!span && span.scrollWidth > span.clientWidth);
+  }
 }
 
 /** The × on the current slip asks first: closing loses the tab's place. */
@@ -81,6 +93,13 @@ export async function openInNewTab(factory, params) {
  */
 export function wireSlipTabs(ctx, render, isShown) {
   let press = null;
+  // measure each time the page draws its slips (and once the fonts are in)
+  let queued = false;
+  const measure = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; markCut(ctx.el); }); };
+  const seen = new MutationObserver(measure);
+  seen.observe(ctx.el, { childList: true, subtree: true });
+  ctx.own(() => seen.disconnect());
+  document.fonts?.ready.then(measure);
   on(ctx.el, 'pointerdown', '[data-sliptab]', (e, n) => {
     if (n.closest('.is-locked') || e.target.closest('[data-sliptab-close]')) return;
     const id = n.dataset.sliptab;

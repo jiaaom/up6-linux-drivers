@@ -15,15 +15,13 @@ import {
   actionRow, foot, linkRow, list, pressSegment, section, segRow, sliderRow, switchRow, trackSlider,
 } from '../../ui/settings.js';
 import { MODULES, hiddenModules } from '../overview/modules.js';
+import { idleValue } from './idle.js';
 import * as data from '../../data/stores.js';
 
-// screen idle (t6-paneld idle.rs): dim after, how dim, off after; 0 = never
-const DIM_AFTER = [0, 60, 120, 300, 900];
-const DIM_PERCENT = [10, 25, 50];
-const OFF_AFTER = [0, 3600, 43200, 86400];
 const FAN_PROFILES = ['silent', 'balance', 'performance', 'custom'];
 
 const PAGES = {
+  idle: lazy(() => import('./idle.js')),
   modules: lazy(() => import('./modules.js')),
   leds: lazy(() => import('./leds.js')),
   sound: lazy(() => import('./sound.js')),
@@ -95,19 +93,7 @@ export default function settingsPage(ctx) {
       ${section('settings.secScreen')}
       ${list([
         sliderRow({ iconName: 'sun', label: t('settings.brightness'), value: brightness, valueText: `${brightness}%`, attrs: html` data-act="brightness"` }),
-        segRow({
-          iconName: 'timer', label: t('settings.dimAfter'), current: d.screen?.dim_after_s ?? 120, attrs: html` data-act="dim_after_s"`,
-          options: DIM_AFTER.map((s) => ({ value: s, label: s ? t('settings.minutes', { n: s / 60 }) : t('settings.off') })),
-        }),
-        // how dim only matters while it dims
-        (d.screen?.dim_after_s ?? 120) > 0 && segRow({
-          iconName: 'lightbulb', label: t('settings.dimLevel'), current: d.screen?.dim_percent ?? 25, attrs: html` data-act="dim_percent"`,
-          options: DIM_PERCENT.map((p) => ({ value: p, label: `${p}%` })),
-        }),
-        segRow({
-          iconName: 'power', label: t('settings.timeout'), current: d.screen?.off_after_s ?? 3600, attrs: html` data-act="off_after_s"`,
-          options: OFF_AFTER.map((s) => ({ value: s, label: s ? t('settings.hours', { n: s / 3600 }) : t('settings.never') })),
-        }),
+        linkRow({ iconName: 'timer', label: t('settings.idle'), value: idleValue(d), attrs: html` data-page="idle"` }),
         switchRow({ iconName: 'drop-half', label: t('settings.colorCorrection'), subText: t('settings.colorCorrectionSub'), checked: d.screen?.color_correction, attrs: html` data-act="color"` }),
       ])}
       ${section('settings.secLook')}
@@ -186,12 +172,7 @@ export default function settingsPage(ctx) {
     if (btn.getAttribute('aria-pressed') === 'true') return;
     pressSegment(btn);
     try {
-      if (['dim_after_s', 'dim_percent', 'off_after_s'].includes(act)) {
-        patch('screen', act, +v);
-        if (act === 'dim_after_s') render(); // 变暗到 comes and goes with it
-        await api.put('settings/screen-idle', { [act]: +v });
-      }
-      else if (act === 'theme') await setTheme(v);
+      if (act === 'theme') await setTheme(v);
       else if (act === 'lang') await setLang(v);
       else if (act === 'fan') { await api.put('fan', { profile: v }); data.fan.refresh(); }
       refreshPanel();

@@ -108,6 +108,7 @@
   "battery-low",
   "battery-medium",
   "bell",
+  "bluetooth-connected",
   "broadcast",
   "camera",
   "caret-down",

@@ -38,9 +38,20 @@ pub struct Settings {
     /// UI language code: "zh" or "en". Empty = default (zh).
     #[serde(default)]
     pub language: String,
-    /// Panel colour theme: "light" (default) or "dark". Empty = light.
+    /// Panel colour theme: "light" (default), "dark", or "night" (dark
+    /// inside the night window, see night.rs). Empty = light.
     #[serde(default)]
     pub theme: String,
+    /// The night window for theme "night", "HH:MM" in 30-minute steps; None
+    /// = default (22:00–07:00).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub night_from: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub night_to: Option<String>,
+    /// 夜案 in the control center while the theme follows the night: the
+    /// other theme, held until the window's next change (unix seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_hold: Option<ThemeHold>,
     /// Send limited-range RGB to the front panel (panel/app/compositor-pre-start
     /// reads this key before the compositor starts). None = default = on; see
     /// set-drm-prop.py.
@@ -51,6 +62,12 @@ pub struct Settings {
     /// so "off" survives App Center restarts, upgrades and reboots.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ThemeHold {
+    pub theme: String,
+    pub until: i64,
 }
 
 /// The choices offered (seconds; percent). Anything else is refused.
@@ -154,13 +171,44 @@ pub fn set_language(code: String) -> Result<Settings, String> {
     Ok(s)
 }
 
-/// Persist the panel colour theme ("dark" | "light").
+/// Persist the panel colour theme ("light" | "dark" | "night"). Choosing
+/// one here ends any 夜案 hold.
 pub fn set_theme(theme: String) -> Result<Settings, String> {
-    if theme != "dark" && theme != "light" {
-        return Err(format!("invalid theme {theme:?} (want dark|light)"));
+    if !["light", "dark", "night"].contains(&theme.as_str()) {
+        return Err(format!("invalid theme {theme:?} (want light|dark|night)"));
     }
     let mut s = load();
     s.theme = theme;
+    s.theme_hold = None;
+    save(&s)?;
+    Ok(s)
+}
+
+/// Persist the night window ("HH:MM", 30-minute steps, from != to). A new
+/// window ends any hold: its end was the old window's edge.
+pub fn set_night(from: String, to: String) -> Result<Settings, String> {
+    let (Some(f), Some(t)) = (crate::night::parse(&from), crate::night::parse(&to)) else {
+        return Err(format!("invalid night window {from:?}–{to:?} (want HH:MM in 30-minute steps)"));
+    };
+    if f == t {
+        return Err("the night window must not start and end at the same time".into());
+    }
+    let mut s = load();
+    s.night_from = Some(from);
+    s.night_to = Some(to);
+    s.theme_hold = None;
+    save(&s)?;
+    Ok(s)
+}
+
+/// 夜案 while following the night: hold the other theme until the window's
+/// next change (`on`), or go back to the window now.
+pub fn set_theme_hold(on: bool) -> Result<Settings, String> {
+    let mut s = load();
+    if on && s.theme != "night" {
+        return Err("the theme does not follow the night".into());
+    }
+    s.theme_hold = if on { Some(crate::night::hold(&s, chrono::Local::now())) } else { None };
     save(&s)?;
     Ok(s)
 }

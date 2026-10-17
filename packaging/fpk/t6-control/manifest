@@ -1,5 +1,5 @@
 appname="t6-control"
-version="2.0.1"
+version="2.1.0"
 display_name="${common.display_name}"
 desc="${common.desc}"
 changelog="${common.changelog}"

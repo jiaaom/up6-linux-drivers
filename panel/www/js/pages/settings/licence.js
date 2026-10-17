@@ -6,7 +6,7 @@ import { subpage } from '../../ui/page.js';
 import { panel } from '../../core/panel.js';
 import { loadFailed } from '../../ui/states.js';
 
-const RL = 'ridgeline/1.10.0'; // the vendored Ridgeline, as in index.html
+const RL = 'ridgeline/1.12.0'; // the vendored Ridgeline, as in index.html
 
 export const LICENCES = [
   { id: 'phosphor', name: 'Phosphor Icons', licence: 'MIT', file: `${RL}/icons/LICENSE.txt` },

@@ -153,11 +153,48 @@ pub(super) struct ThemeReq {
     theme: String,
 }
 
-pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
-    match crate::settings::set_theme(req.theme) {
-        Ok(s) => Json(serde_json::json!({ "theme": s.theme })).into_response(),
+/// What a theme change answers: the same fields as /api/panel, so the panel
+/// applies the theme in effect at once.
+fn theme_reply(r: Result<crate::settings::Settings, String>) -> Response {
+    match r {
+        Ok(s) => {
+            let now = chrono::Local::now();
+            Json(serde_json::json!({
+                "theme": crate::night::effective(&s, &now),
+                "theme_mode": crate::night::mode(&s),
+                "theme_night": crate::night::info(&s, &now),
+            }))
+            .into_response()
+        }
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
+}
+
+/// light | dark | night (跟随夜间).
+pub(super) async fn put_theme(Json(req): Json<ThemeReq>) -> Response {
+    theme_reply(crate::settings::set_theme(req.theme))
+}
+
+#[derive(Deserialize)]
+pub(super) struct NightWindowReq {
+    from: String,
+    to: String,
+}
+
+/// 设置 › 夜间时段: the window for theme night.
+pub(super) async fn put_night(Json(req): Json<NightWindowReq>) -> Response {
+    theme_reply(crate::settings::set_night(req.from, req.to))
+}
+
+#[derive(Deserialize)]
+pub(super) struct ThemeHoldReq {
+    on: bool,
+}
+
+/// 夜案 while following the night: hold the other theme until the next
+/// change, or go back to the window (现在恢复跟随夜间).
+pub(super) async fn put_theme_hold(Json(req): Json<ThemeHoldReq>) -> Response {
+    theme_reply(crate::settings::set_theme_hold(req.on))
 }
 
 #[derive(Deserialize)]

@@ -13,7 +13,7 @@ import { icon } from '../core/icons.js';
 import { getLang, langChanged, t } from '../core/i18n.js';
 import { panel, refreshPanel } from '../core/panel.js';
 import { poller } from '../core/resource.js';
-import { getTheme, setTheme } from '../core/theme.js';
+import { getMode, getTheme, nightInfo, toggleDark } from '../core/theme.js';
 import { audio, bluetooth, chooseOutput, defaultOutput, leds, soundProblem } from '../data/stores.js';
 import { outputRows } from '../ui/outputs.js';
 import { closeLayer, confirm, openLayer, panelSheet, toast, topLayer } from './layers.js';
@@ -26,6 +26,7 @@ const SETTLE_MS = 240;
 
 const PAGES = {
   leds: lazy(() => import('../pages/settings/leds.js')),
+  night: lazy(() => import('../pages/settings/night.js')),
   wifi: lazy(() => import('../pages/network/wifi.js')),
   bluetooth: lazy(() => import('../pages/network/bluetooth.js')),
   hotspot: lazy(() => import('../pages/network/hotspot.js')),
@@ -81,6 +82,14 @@ function toggle({ id, pigment, iconName, label, state, pressed, disabled = false
   return html`<button class="rl-cc__toggle" data-toggle="${id}" data-pigment="${pigment}" aria-pressed="${!!pressed}"${disabled ? html` disabled` : ''}>${icon(iconName, 'light')}<b>${label}</b><small>${state}</small></button>`;
 }
 
+/** 夜案's line: 开 / 关, or under 跟随夜间 跟随夜间 or the held theme and its end. */
+function darkState(off) {
+  if (getMode() !== 'night') return getTheme() === 'dark' ? t('cc.on') : off;
+  const hold = nightInfo()?.hold;
+  if (!hold) return t('cc.darkFollow');
+  return t(hold.theme === 'dark' ? 'cc.holdDark' : 'cc.holdLight', { time: hold.until });
+}
+
 function toggles() {
   const net = panel.data?.network ?? {};
   const wifi = net.wifi;
@@ -109,7 +118,7 @@ function toggles() {
       pressed: night?.active,
       state: night?.schedule ? night.schedule.replace('-', '–') : night?.active ? t('cc.on') : off,
     }),
-    toggle({ id: 'dark', pigment: 'carmine', iconName: 'moon-stars', label: t('cc.dark'), pressed: getTheme() === 'dark', state: getTheme() === 'dark' ? t('cc.on') : off }),
+    toggle({ id: 'dark', pigment: 'carmine', iconName: 'moon-stars', label: t('cc.dark'), pressed: getTheme() === 'dark', state: darkState(off) }),
   ].filter(Boolean);
 }
 
@@ -182,7 +191,7 @@ async function flip(id) {
       leds.refresh();
       return;
     case 'dark':
-      await run(setTheme(getTheme() === 'dark' ? 'light' : 'dark'));
+      await run(toggleDark());
       repaint();
       return;
     default:
@@ -193,7 +202,11 @@ async function flip(id) {
 function openPageOf(id) {
   close();
   if (id === 'night') goTo('settings', PAGES.leds);
-  else if (id === 'dark') goTo('settings');
+  else if (id === 'dark') {
+    // under 跟随夜间 its window; otherwise 设置 at 外观
+    if (getMode() === 'night') goTo('settings', PAGES.night);
+    else goTo('settings').then(() => document.querySelector('.rl-scroller.is-top [data-act="theme"]')?.closest('.rl-set__list')?.previousElementSibling?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   else goTo('network', PAGES[id]);
 }
 

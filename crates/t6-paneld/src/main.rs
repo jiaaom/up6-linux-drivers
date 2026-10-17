@@ -20,6 +20,7 @@ mod fnos;
 mod gateway;
 mod history;
 mod idle;
+mod night;
 mod panel;
 mod screensaver;
 mod settings;

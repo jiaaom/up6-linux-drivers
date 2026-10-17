@@ -19,8 +19,9 @@ export function section(id, extra = '') {
 
 export const list = (rows) => html`<ul class="rl-set__list">${rows.filter(Boolean).map((r) => html`<li>${r}</li>`)}</ul>`;
 
-export function linkRow({ iconName, lead: leading, label, subText, value, attrs = '' }) {
-  return html`<a class="rl-set__row" href="#"${attrs}>${leading ?? lead(iconName)}<span class="rl-set__label">${label}${sub(subText)}</span>${value != null && value !== '' ? html`<span class="rl-set__value">${value}</span>` : ''}${icon('caret-right', 'regular', 'rl-set__go')}</a>`;
+/** `sub`: a child row, only there because of the row above (no icon, indented). */
+export function linkRow({ iconName, lead: leading, label, subText, value, sub: child = false, attrs = '' }) {
+  return html`<a class="rl-set__row${child ? ' rl-set__row--sub' : ''}" href="#"${attrs}>${leading ?? lead(iconName)}<span class="rl-set__label">${label}${sub(subText)}</span>${value != null && value !== '' ? html`<span class="rl-set__value">${value}</span>` : ''}${icon('caret-right', 'regular', 'rl-set__go')}</a>`;
 }
 
 export function switchRow({ iconName, label, subText, checked, disabled = false, attrs = '' }) {
@@ -31,9 +32,9 @@ export function actionRow({ iconName, label, danger = false, attrs = '' }) {
   return html`<button class="rl-set__row${danger ? ' rl-set__row--danger' : ''}"${attrs}>${lead(iconName)}<span class="rl-set__label">${label}</span></button>`;
 }
 
-/** Segments under a label: options [{ value, label }], `current` is pressed. */
-export function segRow({ iconName, label, current, options, attrs = '' }) {
-  return html`<div class="rl-set__block"><div class="rl-set__head">${lead(iconName)}<span class="rl-set__label">${label}</span></div>
+/** Segments under a label: options [{ value, label }], `current` is pressed; `sub` as linkRow. */
+export function segRow({ iconName, label, current, options, sub: child = false, attrs = '' }) {
+  return html`<div class="rl-set__block${child ? ' rl-set__block--sub' : ''}"><div class="rl-set__head">${lead(iconName)}<span class="rl-set__label">${label}</span></div>
     <div class="rl-seg rl-glass" role="group" aria-label="${label}"${attrs}>${options.map((o) => html`<button class="rl-seg__btn" data-value="${o.value}" aria-pressed="${String(o.value) === String(current)}">${o.label}</button>`)}</div></div>`;
 }
 

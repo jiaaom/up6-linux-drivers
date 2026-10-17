@@ -93,8 +93,17 @@ const VIEWER_BG = '#1f2021';
 // has loaded and reported back through theme:set.
 let theme = (() => {
   try {
-    const t = JSON.parse(fs.readFileSync('/var/lib/t6-paneld/settings.json', 'utf8')).theme;
-    return t === 'dark' ? 'dark' : 'light';
+    const s = JSON.parse(fs.readFileSync('/var/lib/t6-paneld/settings.json', 'utf8'));
+    if (s.theme !== 'night') return s.theme === 'dark' ? 'dark' : 'light';
+    // 跟随夜间 (t6-paneld night.rs): a 夜案 hold, else dark inside the window
+    if (s.theme_hold && Date.now() / 1000 < s.theme_hold.until) return s.theme_hold.theme === 'dark' ? 'dark' : 'light';
+    const min = (v, d) => { const m = /^(\d\d):(\d\d)$/.exec(v || d); return +m[1] * 60 + +m[2]; };
+    const from = min(s.night_from, '22:00');
+    const to = min(s.night_to, '07:00');
+    const d = new Date();
+    const now = d.getHours() * 60 + d.getMinutes();
+    const dark = from < to ? from <= now && now < to : now >= from || now < to;
+    return dark ? 'dark' : 'light';
   } catch (e) { return 'light'; }
 })();
 let themeBg = THEME_BG[theme];

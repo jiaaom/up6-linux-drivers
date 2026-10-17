@@ -87,6 +87,8 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/settings/screen-idle"), put(put_screen_idle))
         .route(&p("/api/settings/dashboard"), put(put_dashboard))
         .route(&p("/api/settings/theme"), put(put_theme))
+        .route(&p("/api/settings/night"), put(put_night))
+        .route(&p("/api/settings/theme-hold"), put(put_theme_hold))
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/settings/color-correction"), put(put_color_correction))
         .route(&p("/api/hwinfo"), get(get_hwinfo))

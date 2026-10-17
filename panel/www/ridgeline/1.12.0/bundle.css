@@ -2304,3 +2304,25 @@ li:nth-child(even) > * > .rl-toc__lead img, .rl-toc__item:nth-child(even) .rl-to
   .rl-screen > .rl-scroller.rl-tabpane--in { animation: rl-fade-in 120ms linear both !important; }
   .rl-screen > .rl-scroller.rl-tabpane--in > * { animation: none !important; }
 }
+
+
+/* =====================================================================
+   1.12.0 — Settings › a row that belongs to the row above.
+   ===================================================================== */
+
+/* A row (or segment block) that only exists because of the row above — 夜间时段
+   under 主题 · 跟随夜间, 变暗到 under 闲置后变暗 — has no icon of its own and is
+   indented 36px (icon 24 + gap 12): under a parent with an icon that is the
+   label column; under one without, it is one clear step in. The hairline
+   between them starts at the same indent, so the two read as one group; the
+   line under the child runs full width as usual. */
+.rl-set { --rl-set-indent: 36px; }
+.rl-set__list:has(.rl-set__well) { --rl-set-indent: 46px; }     /* icon wells: 34 + 12 */
+:is(.rl-set__row, .rl-set__block):is(.rl-set__row--sub, .rl-set__block--sub) { position: relative; padding-left: var(--rl-set-indent); }
+:is(.rl-set__row--sub, .rl-set__block--sub)::before {
+  content: ""; position: absolute; top: -1px; left: var(--rl-set-indent); right: 0; height: 1px; background: var(--hairline); pointer-events: none;
+}
+.rl-set__list > li:has(+ li > :is(.rl-set__row--sub, .rl-set__block--sub)) > :is(.rl-set__row, .rl-set__block) { border-bottom-color: transparent; }
+/* a child row is a step quieter: 15px label, no icon */
+.rl-set__row--sub { min-height: 48px; font-size: 15px; }
+.rl-set__block--sub .rl-set__head { font-size: 15px; }

@@ -43,7 +43,7 @@ export default function idlePage(ctx) {
         }),
         // how dim only matters while it dims
         dim > 0 && segRow({
-          label: t('settings.dimLevel'), current: percent, attrs: html` data-idle="dim_percent"`,
+          label: t('settings.dimLevel'), current: percent, sub: true, attrs: html` data-idle="dim_percent"`,
           options: DIM_PERCENT.map((p) => ({ value: p, label: `${p}%` })),
         }),
       ])}

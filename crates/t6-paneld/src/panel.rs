@@ -99,6 +99,7 @@ pub fn build() -> Value {
     let bat = Battery::new().info();
     let disp = Display::new().info();
     let set = crate::settings::load();
+    let now = chrono::Local::now();
     let cpu = sensors::cpu_temp_c();
     let gpu = sensors::gpu_temp_c();
     let drives = sensors::drives_temp_c();
@@ -130,8 +131,11 @@ pub fn build() -> Value {
             "order": set.dashboard_order,
             "hidden": set.dashboard_hidden,
         },
-        // Colour theme; empty/unset means dark (theme.js falls back the same way).
-        "theme": if set.theme.is_empty() { "light".to_string() } else { set.theme.clone() },
+        // The theme in effect (light | dark); `theme_mode` is the choice
+        // (light | dark | night) and `theme_night` the night window (night.rs).
+        "theme": crate::night::effective(&set, &now),
+        "theme_mode": crate::night::mode(&set),
+        "theme_night": crate::night::info(&set, &now),
         // No active FygoOS session yet — the account chip shows "Sign in".
         "session": Value::Null,
         "system": {

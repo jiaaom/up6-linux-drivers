@@ -7,7 +7,7 @@ import { html, on, painter } from '../../core/dom.js';
 import { icon } from '../../core/icons.js';
 import { getLang, setLang, t } from '../../core/i18n.js';
 import { panel, refreshPanel } from '../../core/panel.js';
-import { getTheme, setTheme } from '../../core/theme.js';
+import { getMode, nightInfo, setTheme } from '../../core/theme.js';
 import { confirm, toast } from '../../shell/layers.js';
 import { lazy, push } from '../../shell/router.js';
 import { backdrop, hostbar, titledPanel } from '../../ui/page.js';
@@ -22,6 +22,7 @@ const FAN_PROFILES = ['silent', 'balance', 'performance', 'custom'];
 
 const PAGES = {
   idle: lazy(() => import('./idle.js')),
+  night: lazy(() => import('./night.js')),
   modules: lazy(() => import('./modules.js')),
   leds: lazy(() => import('./leds.js')),
   sound: lazy(() => import('./sound.js')),
@@ -65,6 +66,18 @@ function soundValue(a) {
   return out ? `${out.name} · ${Math.round((out.volume ?? 0) * 100)}` : '';
 }
 
+/** 夜间时段 under 主题 while it follows the night: the window, and a hold from 夜案. */
+function nightRow(n) {
+  const hold = n?.hold;
+  return linkRow({
+    label: t('settings.night'),
+    sub: true,
+    subText: hold ? t(hold.theme === 'dark' ? 'settings.nightHoldDark' : 'settings.nightHoldLight', { time: hold.until }) : '',
+    value: n ? `${n.from}–${n.to}` : '',
+    attrs: html` data-page="night"`,
+  });
+}
+
 function accountRow(acc) {
   if (acc?.signedIn) {
     const role = acc.admin ? t('account.admin') : t('account.user');
@@ -99,9 +112,10 @@ export default function settingsPage(ctx) {
       ${section('settings.secLook')}
       ${list([
         segRow({
-          iconName: 'circle-half', label: t('settings.theme'), current: getTheme(), attrs: html` data-act="theme"`,
-          options: [{ value: 'light', label: t('settings.themeLight') }, { value: 'dark', label: t('settings.themeDark') }],
+          iconName: 'circle-half', label: t('settings.theme'), current: getMode(), attrs: html` data-act="theme"`,
+          options: ['light', 'dark', 'night'].map((m) => ({ value: m, label: t(`settings.theme${m[0].toUpperCase()}${m.slice(1)}`) })),
         }),
+        getMode() === 'night' && nightRow(nightInfo()),
         segRow({
           iconName: 'translate', label: t('settings.language'), current: getLang(), attrs: html` data-act="lang"`,
           options: [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],

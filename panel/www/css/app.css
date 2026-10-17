@@ -1,6 +1,6 @@
 /* The panel's own CSS, on top of Ridgeline (tokens.css + bundle.css, never
    edited). Only what the shell and pages need beyond the components; what
-   the panel added while building 2.0 went back into Ridgeline (1.3.0–1.10.0). */
+   the panel added while building 2.0 went back into Ridgeline (1.3.0–1.12.0). */
 
 /* ---------- the screen ---------- */
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--rl-desk); }

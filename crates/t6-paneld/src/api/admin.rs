@@ -45,8 +45,8 @@ pub(super) async fn get_status(headers: HeaderMap) -> Response {
     Json(serde_json::json!({
         "panel": { "enabled": set.panel_enabled(), "active": kiosk_active() },
         "display": { "present": disp.present, "on": disp.on },
-        // Front-panel theme; empty/unset means light (as in /api/panel).
-        "theme": if set.theme.is_empty() { "light".to_string() } else { set.theme.clone() },
+        // Front-panel theme as chosen: light | dark | night (跟随夜间).
+        "theme": crate::night::mode(&set),
         "color_correction": set.color_correction(),
         "dim_after_s": set.dim_after_s(),
         "dim_percent": set.dim_percent(),

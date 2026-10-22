@@ -11,7 +11,7 @@
 // (scroll overshoot, first frame) and the Preview view.
 
 import { api } from './api.js';
-import { panel } from './panel.js';
+import { panel, refreshPanel } from './panel.js';
 import { save } from './storage.js';
 
 const THEMES = ['light', 'dark'];
@@ -54,6 +54,7 @@ function adopt(r) {
   if (panel.data) Object.assign(panel.data, { theme: r.theme, theme_mode: r.theme_mode, theme_night: r.theme_night });
   applyTheme(r.theme);
   if (panel.data) panel.changed.emit(panel.data);
+  refreshPanel(); // and not undone by a poll that left before the change
   return r;
 }
 

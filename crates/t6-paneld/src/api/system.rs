@@ -32,7 +32,9 @@ pub(super) async fn get_history(Query(q): Query<HistoryQuery>) -> Response {
 }
 
 pub(super) async fn get_panel(State(s): State<AppState>, headers: HeaderMap) -> Json<Value> {
-    let mut v = crate::panel::build();
+    // build() runs nmcli several times (0.4 s, seconds when Wi-Fi scans):
+    // off the async workers, or it holds up requests queued behind it there
+    let mut v = tokio::task::spawn_blocking(crate::panel::build).await.unwrap_or_default();
     v["session"] = session_value(&headers, s.shell_port);
     v["bluetooth"] = super::bluetooth::summary().await;
     Json(v)

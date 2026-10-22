@@ -307,7 +307,9 @@ pub fn info() -> Network {
         n.wifi.iface = Some(wl);
         if let Some(out) = run(
             "nmcli",
-            &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY,CHAN,RATE,FREQ", "device", "wifi"],
+            // --rescan no: by default nmcli scans first when the list is over 30 s
+            // old, which took seconds; NetworkManager keeps it fresh while connected
+            &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY,CHAN,RATE,FREQ", "device", "wifi", "list", "--rescan", "no"],
         ) {
             for line in out.lines() {
                 let f = split_terse(line);

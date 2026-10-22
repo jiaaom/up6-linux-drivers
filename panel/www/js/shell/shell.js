@@ -7,6 +7,7 @@
 import { html } from '../core/dom.js';
 import { userForgotten, watchSession } from '../data/session.js';
 import { mountControlCenter } from './control-center.js';
+import { mountDesk } from './desk.js';
 import { mountKeyboard } from './keyboard.js';
 import { mountLayers } from './layers.js';
 import { mountOffline } from './offline.js';
@@ -32,6 +33,7 @@ export function startShell(screen, firstTab = 'overview') {
   mountSwipe(screen);
   mountControlCenter(screen);
   const ready = startRouter(screen, dock, firstTab);
+  mountDesk(screen);
   // signed out: the folders that were open close (their names belong to that person)
   watchSession();
   userForgotten.on(() => resetTab('files'));

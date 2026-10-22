@@ -8,6 +8,15 @@ body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color
 input, textarea { -webkit-user-select: text; user-select: text; }
 #app { position: fixed; inset: 0; --rl-safe-top: 28px; } /* the app draws its own 28px status bar */
 
+/* ---------- the desk fading in as a page scrolls ---------- */
+/* Ridgeline's scroll-driven animation on the head's band leaks in the kiosk's
+   compositor on every re-render (hand-off › 13); js/shell/desk.js sets
+   --t6-desk instead. The status-bar mask is always on under
+   rl-backdrop--fixed, so nothing follows the --rl-scroll timeline: off too. */
+.rl-screen { timeline-scope: none; }
+.rl-screen > .rl-scroller { scroll-timeline: none; }
+.rl-panel__head::after { animation: none; opacity: var(--t6-desk, 0); }
+
 /* ---------- backend unreachable ---------- */
 /* covers everything, the keyboard included (z 60) */
 .t6-offline { position: absolute; inset: 0; z-index: 70; }

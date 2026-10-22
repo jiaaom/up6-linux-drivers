@@ -30,22 +30,28 @@ let misses = 0;
 let timer = 0;
 let inFlight = false;
 let again = false;
+// Bumped by refreshPanel (a change was just made): an answer to a poll that
+// was already on its way is from before it, so it is dropped, not shown.
+let gen = 0;
 
 async function poll() {
   clearTimeout(timer);
   if (inFlight) { again = true; return; }
   inFlight = true;
+  const mine = gen;
   try {
     const d = await api.get('panel');
     misses = 0;
-    panel.data = d;
-    save('panel', d);
-    if (!backend.online) {
-      backend.online = true;
-      backend.tries = 0;
-      backend.changed.emit();
+    if (mine === gen) {
+      panel.data = d;
+      save('panel', d);
+      if (!backend.online) {
+        backend.online = true;
+        backend.tries = 0;
+        backend.changed.emit();
+      }
+      panel.changed.emit(d);
     }
-    panel.changed.emit(d);
   } catch (e) {
     if (e.unreachable) {
       misses++;
@@ -67,6 +73,7 @@ async function poll() {
 
 /** Poll now (after a change the user just made, or a request that got no answer). */
 export function refreshPanel() {
+  gen++;
   poll();
 }
 

@@ -6,7 +6,7 @@
 //! later once a session exists.
 
 use serde_json::{json, Value};
-use t6_hw_rs::{battery::Battery, display::Display, fans, net, network, sensors, sharing, ssh, storage, thunderbolt};
+use t6_hw_rs::{battery::Battery, display::Display, fans, net, sensors, sharing, ssh, storage, thunderbolt};
 
 /// Round an optional temperature to a whole degree for display.
 fn deg(t: Option<f64>) -> Value {
@@ -123,7 +123,7 @@ pub fn build() -> Value {
         },
         "storage": vols,
         "net": net::counters(),
-        "network": network::info(),
+        "network": crate::netinfo::get(),
         "thunderbolt": thunderbolt::info(),
         "sharing": sharing::summary(),
         "ssh": { "enabled": ssh::enabled() },

@@ -114,6 +114,16 @@ pub fn load() -> Settings {
     std::fs::read_to_string(PATH).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
+/// Held by every setter from its `load` to its `save`. Requests run in
+/// parallel: without it two writes shared the temp file (one rename then
+/// failed, or moved a half-written file into place, which the next `load`
+/// read as defaults) and a change made meanwhile was lost.
+static WRITE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn write_lock() -> std::sync::MutexGuard<'static, ()> {
+    WRITE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn save(s: &Settings) -> Result<(), String> {
     std::fs::create_dir_all(DIR).map_err(|e| format!("{DIR}: {e}"))?;
     let body = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
@@ -131,6 +141,7 @@ pub fn set_screen_idle(dim_after_s: Option<u32>, dim_percent: Option<u32>, off_a
     check(dim_after_s, &DIM_AFTER_CHOICES, "dim_after_s")?;
     check(dim_percent, &DIM_PERCENT_CHOICES, "dim_percent")?;
     check(off_after_s, &OFF_AFTER_CHOICES, "off_after_s")?;
+    let _write = write_lock();
     let mut s = load();
     // write all three out, so the pre-2.0 value is no longer needed
     s.dim_after_s = Some(dim_after_s.unwrap_or(s.dim_after_s()));
@@ -143,6 +154,7 @@ pub fn set_screen_idle(dim_after_s: Option<u32>, dim_percent: Option<u32>, off_a
 
 /// Remember the normal brightness while dimmed (None once it is back).
 pub fn set_dimmed_from(level: Option<u32>) -> Result<(), String> {
+    let _write = write_lock();
     let mut s = load();
     if s.dimmed_from == level {
         return Ok(());
@@ -153,6 +165,7 @@ pub fn set_dimmed_from(level: Option<u32>) -> Result<(), String> {
 
 /// Persist the dashboard layout (widget order + hidden set).
 pub fn set_dashboard(order: Vec<String>, hidden: Vec<String>) -> Result<Settings, String> {
+    let _write = write_lock();
     let mut s = load();
     s.dashboard_order = order;
     s.dashboard_hidden = hidden;
@@ -165,6 +178,7 @@ pub fn set_language(code: String) -> Result<Settings, String> {
     if code != "zh" && code != "en" {
         return Err(format!("invalid language {code:?} (want zh|en)"));
     }
+    let _write = write_lock();
     let mut s = load();
     s.language = code;
     save(&s)?;
@@ -177,6 +191,7 @@ pub fn set_theme(theme: String) -> Result<Settings, String> {
     if !["light", "dark", "night"].contains(&theme.as_str()) {
         return Err(format!("invalid theme {theme:?} (want light|dark|night)"));
     }
+    let _write = write_lock();
     let mut s = load();
     s.theme = theme;
     s.theme_hold = None;
@@ -193,6 +208,7 @@ pub fn set_night(from: String, to: String) -> Result<Settings, String> {
     if f == t {
         return Err("the night window must not start and end at the same time".into());
     }
+    let _write = write_lock();
     let mut s = load();
     s.night_from = Some(from);
     s.night_to = Some(to);
@@ -204,6 +220,7 @@ pub fn set_night(from: String, to: String) -> Result<Settings, String> {
 /// 夜案 while following the night: hold the other theme until the window's
 /// next change (`on`), or go back to the window now.
 pub fn set_theme_hold(on: bool) -> Result<Settings, String> {
+    let _write = write_lock();
     let mut s = load();
     if on && s.theme != "night" {
         return Err("the theme does not follow the night".into());
@@ -215,6 +232,7 @@ pub fn set_theme_hold(on: bool) -> Result<Settings, String> {
 
 /// Persist the front-panel colour-range correction on/off.
 pub fn set_color_correction(on: bool) -> Result<Settings, String> {
+    let _write = write_lock();
     let mut s = load();
     s.color_correction = Some(on);
     save(&s)?;
@@ -223,6 +241,7 @@ pub fn set_color_correction(on: bool) -> Result<Settings, String> {
 
 /// Persist whether the on-device kiosk should run.
 pub fn set_panel_enabled(on: bool) -> Result<Settings, String> {
+    let _write = write_lock();
     let mut s = load();
     s.panel_enabled = Some(on);
     save(&s)?;

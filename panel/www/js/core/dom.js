@@ -62,10 +62,15 @@ export function capture(node, pointerId) {
 /** Resolve once `node` finishes its animation (or after `ms`, whichever is first). */
 export function afterAnimation(node, ms = 400) {
   return new Promise((resolve) => {
-    let done = false;
-    const finish = () => { if (!done) { done = true; resolve(); } };
-    node.addEventListener('animationend', (e) => { if (e.target === node) finish(); });
-    setTimeout(finish, ms);
+    // the listener goes with it: tab pages live for the whole session
+    const finish = () => {
+      node.removeEventListener('animationend', ended);
+      clearTimeout(timer);
+      resolve();
+    };
+    const ended = (e) => { if (e.target === node) finish(); };
+    node.addEventListener('animationend', ended);
+    const timer = setTimeout(finish, ms);
   });
 }
 

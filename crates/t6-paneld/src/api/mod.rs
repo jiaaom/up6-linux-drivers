@@ -193,7 +193,18 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
             .route(&p("/api/admin/panel/restart"), post(admin::post_restart))
             .route(&p("/api/admin/audio/repair"), post(audio::post_repair));
     }
-    r.with_state(state)
+    r.layer(axum::middleware::from_fn(network_changed)).with_state(state)
+}
+
+/// A request that may change the network (anything but a read under
+/// /api/network): /api/panel's cached reading is out of date once it's done.
+async fn network_changed(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let changes = req.method() != axum::http::Method::GET && req.uri().path().contains("/api/network/");
+    let res = next.run(req).await;
+    if changes {
+        crate::netinfo::invalidate();
+    }
+    res
 }
 
 /// The signed-in user as a JSON value (null when logged out / no gateway).
@@ -213,7 +224,13 @@ async fn index(State(s): State<AppState>) -> Response {
     serve(&s.www, "index.html")
 }
 
-async fn static_file(State(s): State<AppState>, Path(file): Path<String>) -> Response {
+async fn static_file(State(s): State<AppState>, Path(file): Path<String>, headers: HeaderMap) -> Response {
+    if crate::www::is_video(&file) {
+        let range = headers.get(header::RANGE).and_then(|v| v.to_str().ok()).map(str::to_owned);
+        return tokio::task::spawn_blocking(move || serve_video(&s.www, &file, range.as_deref()))
+            .await
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
     serve(&s.www, &file)
 }
 
@@ -241,6 +258,37 @@ fn serve(www: &crate::www::Www, name: &str) -> Response {
         )
             .into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// A video in parts, for `<video>` (a page's moving background).
+fn serve_video(www: &crate::www::Www, name: &str, range: Option<&str>) -> Response {
+    use crate::www::PartError;
+    match www.video(name, range) {
+        Ok(p) => {
+            let mut res = (
+                [
+                    (header::CONTENT_TYPE, p.ctype.to_string()),
+                    (header::ACCEPT_RANGES, "bytes".to_string()),
+                    (header::CACHE_CONTROL, "no-store".to_string()),
+                ],
+                Vec::new(),
+            )
+                .into_response();
+            if p.partial {
+                *res.status_mut() = StatusCode::PARTIAL_CONTENT;
+                let range = format!("bytes {}-{}/{}", p.start, p.start + p.body.len() as u64 - 1, p.total);
+                res.headers_mut().insert(header::CONTENT_RANGE, range.parse().unwrap());
+            }
+            *res.body_mut() = p.body.into();
+            res
+        }
+        Err(PartError::Unsatisfiable(total)) => (
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            [(header::CONTENT_RANGE, format!("bytes */{total}"))],
+        )
+            .into_response(),
+        Err(PartError::NotFound) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

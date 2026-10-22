@@ -87,6 +87,10 @@ payload_t6_panel() {
     log "bundling mpv"
     "$SCRIPT_DIR/mpv/bundle-mpv.sh" "$app/mpv" >/dev/null
     cp -r "$REPO/panel/mpv/config" "$REPO/panel/mpv/run-mpv.sh" "$app/mpv/"
+    # The kiosk's video decoding uses that libva too (run-kiosk.sh): a folder
+    # with only libva, so LD_LIBRARY_PATH brings in nothing else of mpv's.
+    mkdir -p "$app/app/libva"
+    ln -s ../../mpv/lib/libva.so.2 ../../mpv/lib/libva-drm.so.2 "$app/app/libva/"
 }
 
 build_package() {

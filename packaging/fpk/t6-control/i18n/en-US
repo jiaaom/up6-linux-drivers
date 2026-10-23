@@ -1,7 +1,7 @@
 [common]
 display_name="T6 Control Center"
 desc="Fan curves, LEDs, display brightness, battery charge limits and beeper of the UnifyDrive UP6 / ZSpace T6. Requires T6 Drivers."
-changelog="2.1.0: released together with T6 Front Panel 2.1; no changes of its own. 2.0.1: the page works again when fnOS is set to Chinese; since 1.2.0 it stopped with a "Page error" and showed no readings. 2.0.0: released together with T6 Front Panel 2.0; no changes of its own. Earlier versions: github.com/jiaaom/up6-linux-drivers/releases."
+changelog="2.2.0: released together with T6 Front Panel 2.2; no changes of its own. 2.1.0: released together with T6 Front Panel 2.1; no changes of its own. 2.0.1: the page works again when fnOS is set to Chinese; since 1.2.0 it stopped with a "Page error" and showed no readings. 2.0.0: released together with T6 Front Panel 2.0; no changes of its own. Earlier versions: github.com/jiaaom/up6-linux-drivers/releases."
 
 [entry]
 title="T6 Control Center"

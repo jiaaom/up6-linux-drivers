@@ -1,4 +1,4 @@
 [common]
 display_name="T6 Drivers"
 desc="Kernel drivers (DKMS) for the UnifyDrive UP6 / ZSpace T6 / PA60: fans, temperatures, LEDs, backlight, beeper, keys, battery charge control, touchscreen and HDMI-to-DSI panel bridge."
-changelog="2.1.0: released together with T6 Front Panel 2.1; no changes of its own. 2.0.0: released together with T6 Front Panel 2.0; no changes of its own. Earlier versions: github.com/jiaaom/up6-linux-drivers/releases."
+changelog="2.2.0: released together with T6 Front Panel 2.2; no changes of its own. 2.1.0: released together with T6 Front Panel 2.1; no changes of its own. 2.0.0: released together with T6 Front Panel 2.0; no changes of its own. Earlier versions: github.com/jiaaom/up6-linux-drivers/releases."

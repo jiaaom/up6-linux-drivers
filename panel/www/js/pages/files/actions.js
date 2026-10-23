@@ -13,6 +13,7 @@ import {
   baseName, clipboard, displayPath, favourites, itemsLabel, join, kindOf, parentOf, playable, recents, setFavourite,
 } from '../../data/files.js';
 import { closeLayer, confirm, openLayer, panelSheet, sheet, toast } from '../../shell/layers.js';
+import { holdGlass } from '../../shell/glass.js';
 import { startTask } from '../../shell/tasks.js';
 import { errorLine, textField } from '../../ui/fields.js';
 import { itemHead } from '../../ui/files.js';
@@ -26,7 +27,7 @@ export async function openFile(item, siblings = [item], folderTitle = '') {
   recents.push(item);
   if (playable(item) && window.playerBridge?.open) {
     const r = await window.playerBridge.open(item.path);
-    if (r?.ok) return;
+    if (r?.ok) { holdGlass('player', true); return; } // mpv covers the panel until it closes
   }
   openViewer(item, siblings.filter((x) => !x.dir), folderTitle);
 }

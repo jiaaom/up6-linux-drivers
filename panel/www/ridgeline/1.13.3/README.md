@@ -1,4 +1,4 @@
-# Ridgeline 1.12.0 (vendored)
+# Ridgeline 1.13.3 (vendored)
 
 The design system the panel UI is built on, copied here so this repository is
 self-contained. Do not edit these files: page-specific CSS goes in the panel's
@@ -11,6 +11,7 @@ directory (t6-paneld serves everything under `ridgeline/` as immutable).
 | `bundle.css` | every component, reading only the variables from `tokens.css` |
 | `fonts/` | EB Garamond, Source Sans 3, 汇文明朝体 GBK (GB2312 subset) |
 | `icons/light`, `icons/regular` | the Phosphor icons in use; `icons.json` lists them |
+| `Backdrop/liuli-glass.js` | 长虹琉璃, the fluted-glass backdrop: one WebGL2 shader (`RidgelineGlass.mount(canvas)`) |
 | `Dashboard/device-up6.png` | the UP6 line drawing for 总览 › 本机, a CSS mask that `bundle.css` loads |
 
 ## Licences and credits

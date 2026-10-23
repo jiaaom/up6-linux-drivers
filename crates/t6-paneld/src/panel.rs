@@ -166,6 +166,8 @@ pub fn build() -> Value {
             "off_after_s": set.off_after_s(),
             "color_correction": set.color_correction(),
         },
+        // 设置 › 外观: 长虹琉璃 moves, and stands still on battery
+        "backdrop": { "motion": set.backdrop_motion(), "battery_pause": set.backdrop_battery_pause() },
         "language": if set.language.is_empty() || set.language == "ja" { "zh".to_string() } else { set.language.clone() },
         "leds": leds,
         "status": status,

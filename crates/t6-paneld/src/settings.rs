@@ -57,6 +57,12 @@ pub struct Settings {
     /// set-drm-prop.py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_correction: Option<bool>,
+    /// 长虹琉璃 moves (设置 › 外观 › 动态背景). None = default = on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backdrop_motion: Option<bool>,
+    /// The glass stands still on battery (用电池时暂停). None = default = on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backdrop_battery_pause: Option<bool>,
     /// Run the on-device kiosk (front-panel app). None = default = on. The
     /// package's start/install scripts and t6-paneld's own startup read it,
     /// so "off" survives App Center restarts, upgrades and reboots.
@@ -103,6 +109,14 @@ impl Settings {
 
     pub fn color_correction(&self) -> bool {
         self.color_correction.unwrap_or(true)
+    }
+
+    pub fn backdrop_motion(&self) -> bool {
+        self.backdrop_motion.unwrap_or(true)
+    }
+
+    pub fn backdrop_battery_pause(&self) -> bool {
+        self.backdrop_battery_pause.unwrap_or(true)
     }
 
     pub fn panel_enabled(&self) -> bool {
@@ -235,6 +249,20 @@ pub fn set_color_correction(on: bool) -> Result<Settings, String> {
     let _write = write_lock();
     let mut s = load();
     s.color_correction = Some(on);
+    save(&s)?;
+    Ok(s)
+}
+
+/// Persist the glass backdrop's two switches (either may be left as it is).
+pub fn set_backdrop(motion: Option<bool>, battery_pause: Option<bool>) -> Result<Settings, String> {
+    let _write = write_lock();
+    let mut s = load();
+    if motion.is_some() {
+        s.backdrop_motion = motion;
+    }
+    if battery_pause.is_some() {
+        s.backdrop_battery_pause = battery_pause;
+    }
     save(&s)?;
     Ok(s)
 }

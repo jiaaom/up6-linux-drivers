@@ -1,6 +1,6 @@
 /* The panel's own CSS, on top of Ridgeline (tokens.css + bundle.css, never
    edited). Only what the shell and pages need beyond the components; what
-   the panel added while building 2.0 went back into Ridgeline (1.3.0–1.12.0). */
+   the panel added while building 2.0 went back into Ridgeline (1.3.0–1.13.3). */
 
 /* ---------- the screen ---------- */
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--rl-desk); }
@@ -8,15 +8,15 @@ body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color
 input, textarea { -webkit-user-select: text; user-select: text; }
 #app { position: fixed; inset: 0; --rl-safe-top: 28px; } /* the app draws its own 28px status bar */
 
-/* ---------- the desk fading in as a page scrolls ---------- */
-/* Ridgeline's scroll-driven animation on the head's band leaks in the kiosk's
-   compositor on every re-render (hand-off › 13); js/shell/desk.js sets
-   --t6-desk instead. The status-bar mask is always on under
-   rl-backdrop--fixed, so nothing follows the --rl-scroll timeline: off too. */
-.rl-screen { timeline-scope: none; }
-.rl-screen > .rl-scroller { scroll-timeline: none; }
-.rl-panel__head::after { animation: none; opacity: var(--t6-desk, 0); }
-
 /* ---------- backend unreachable ---------- */
 /* covers everything, the keyboard included (z 60) */
 .t6-offline { position: absolute; inset: 0; z-index: 70; }
+
+/* ---------- the status-bar mask over the glass ---------- */
+/* Ridgeline keeps the mask on under rl-backdrop--fixed: over the still sky it
+   painted the same sky, so it never showed. Over the moving glass it is a
+   frost, and an always-on one blurs the top 28px for nothing. Here it follows
+   --rl-desk-in (js/shell/desk.js): clear at the top, fully frosted by 24px of
+   scroll, three times as fast as the strip beside the slip, since the host
+   line reaches the status bar after about 24px. Ridgeline hand-off › 15. */
+.rl-screen.rl-backdrop--fixed.has-glass .rl-statusmask { opacity: calc(var(--rl-desk-in, 0) * 3); }

@@ -217,6 +217,20 @@ pub(super) async fn put_color_correction(Json(req): Json<ColorCorrectionReq>) ->
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct BackdropReq {
+    motion: Option<bool>,
+    battery_pause: Option<bool>,
+}
+
+/// 设置 › 外观 › 动态背景 and 用电池时暂停 (the panel's glass backdrop).
+pub(super) async fn put_backdrop(Json(req): Json<BackdropReq>) -> Response {
+    match crate::settings::set_backdrop(req.motion, req.battery_pause) {
+        Ok(s) => Json(serde_json::json!({ "motion": s.backdrop_motion(), "battery_pause": s.backdrop_battery_pause() })).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
 pub(super) async fn get_hwinfo() -> Json<t6_hw_rs::hwinfo::HwInfo> {
     Json(t6_hw_rs::hwinfo::info())
 }

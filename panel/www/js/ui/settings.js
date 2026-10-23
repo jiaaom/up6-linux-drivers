@@ -24,8 +24,8 @@ export function linkRow({ iconName, lead: leading, label, subText, value, sub: c
   return html`<a class="rl-set__row${child ? ' rl-set__row--sub' : ''}" href="#"${attrs}>${leading ?? lead(iconName)}<span class="rl-set__label">${label}${sub(subText)}</span>${value != null && value !== '' ? html`<span class="rl-set__value">${value}</span>` : ''}${icon('caret-right', 'regular', 'rl-set__go')}</a>`;
 }
 
-export function switchRow({ iconName, label, subText, checked, disabled = false, attrs = '' }) {
-  return html`<label class="rl-set__row">${lead(iconName)}<span class="rl-set__label">${label}${sub(subText)}</span><input class="rl-switch__input" type="checkbox" role="switch"${checked ? html` checked` : ''}${disabled ? html` disabled` : ''}${attrs}></label>`;
+export function switchRow({ iconName, label, subText, checked, disabled = false, sub: child = false, attrs = '' }) {
+  return html`<label class="rl-set__row${child ? ' rl-set__row--sub' : ''}">${lead(iconName)}<span class="rl-set__label">${label}${sub(subText)}</span><input class="rl-switch__input" type="checkbox" role="switch"${checked ? html` checked` : ''}${disabled ? html` disabled` : ''}${attrs}></label>`;
 }
 
 export function actionRow({ iconName, label, danger = false, attrs = '' }) {

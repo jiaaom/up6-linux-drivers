@@ -91,6 +91,7 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/settings/theme-hold"), put(put_theme_hold))
         .route(&p("/api/settings/language"), put(put_language))
         .route(&p("/api/settings/color-correction"), put(put_color_correction))
+        .route(&p("/api/settings/backdrop"), put(put_backdrop))
         .route(&p("/api/hwinfo"), get(get_hwinfo))
         .route(&p("/api/about"), get(get_about))
         .route(&p("/api/history"), get(get_history))

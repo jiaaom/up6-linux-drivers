@@ -107,7 +107,6 @@ export default function settingsPage(ctx) {
       ${list([
         sliderRow({ iconName: 'sun', label: t('settings.brightness'), value: brightness, valueText: `${brightness}%`, attrs: html` data-act="brightness"` }),
         linkRow({ iconName: 'timer', label: t('settings.idle'), value: idleValue(d), attrs: html` data-page="idle"` }),
-        switchRow({ iconName: 'drop-half', label: t('settings.colorCorrection'), subText: t('settings.colorCorrectionSub'), checked: d.screen?.color_correction, attrs: html` data-act="color"` }),
       ])}
       ${section('settings.secLook')}
       ${list([
@@ -120,6 +119,8 @@ export default function settingsPage(ctx) {
           iconName: 'translate', label: t('settings.language'), current: getLang(), attrs: html` data-act="lang"`,
           options: [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
         }),
+        switchRow({ iconName: 'sun', label: t('settings.backdrop'), subText: t('settings.backdropSub'), checked: d.backdrop?.motion !== false, attrs: html` data-act="backdrop"` }),
+        d.backdrop?.motion !== false && switchRow({ sub: true, label: t('settings.backdropBattery'), subText: t('settings.backdropBatterySub'), checked: d.backdrop?.battery_pause !== false, attrs: html` data-act="backdropBattery"` }),
         linkRow({ iconName: 'squares-four', label: t('settings.modules'), value: t('settings.modulesShown', { n: shown }), attrs: html` data-page="modules"` }),
       ])}
       ${section('settings.secHardware')}
@@ -198,9 +199,11 @@ export default function settingsPage(ctx) {
   // switches
   on(ctx.el, 'change', 'input[data-act]', (e, input) => {
     const act = input.dataset.act;
-    if (act === 'color') {
-      patch('screen', 'color_correction', input.checked);
-      setSwitch(input, 'settings/color-correction', { on: input.checked }, t('settings.colorCorrectionLater'));
+    if (act === 'backdrop' || act === 'backdropBattery') {
+      const key = act === 'backdrop' ? 'motion' : 'battery_pause';
+      patch('backdrop', key, input.checked);
+      setSwitch(input, 'settings/backdrop', { [key]: input.checked });
+      render(); // 用电池时暂停 shows only while 动态背景 is on
     } else if (act === 'ssh') {
       sshSwitch(input);
     }

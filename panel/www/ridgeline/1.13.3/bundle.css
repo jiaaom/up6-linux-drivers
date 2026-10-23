@@ -2326,3 +2326,51 @@ li:nth-child(even) > * > .rl-toc__lead img, .rl-toc__item:nth-child(even) .rl-to
 /* a child row is a step quieter: 15px label, no icon */
 .rl-set__row--sub { min-height: 48px; font-size: 15px; }
 .rl-set__block--sub .rl-set__head { font-size: 15px; }
+
+
+/* =====================================================================
+   1.13.0 — Backdrop › 长虹琉璃, the fluted-glass live backdrop.
+   ===================================================================== */
+
+/* The canvas sits behind everything on the screen and draws the sky (or the
+   lamp) itself, through the glass (components/Backdrop/liuli-glass.js). The
+   screen's own sky layers step aside. The status-bar mask and the strip beside
+   the title slip stop painting a copy of the sky (it would sit still over a
+   moving picture) and frost what is behind them instead: content that scrolls
+   under them blurs away, and the glass shows through, as through 琉璃. */
+.rl-glass-backdrop { position: absolute; inset: 0; z-index: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.rl-screen.has-glass > .rl-scroller,
+.rl-screen.has-glass > .rl-scroller.rl-silk { background: transparent; }
+.rl-screen.has-glass > .rl-scroller > .rl-backdrop { display: none; }
+.rl-screen.has-glass .rl-statusmask,
+.rl-screen.has-glass .rl-panel__head::after {
+  background: none; background-color: transparent;
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+}
+
+
+/* =====================================================================
+   1.13.1 — the desk strips follow --rl-desk-in, set by the app
+   (handoff/panel-2.0 › 13).
+   ===================================================================== */
+/* The strip beside the slip and the status-bar mask used scroll-driven
+   animations. An app that re-renders its pages leaves the old ones behind in
+   the compositor, which then walks more of them every frame: on the panel,
+   14ms a frame after a day. The strips now take their opacity from a custom
+   property the app sets from the scroller: 0 at the top, 1 from 72px of
+   scroll (Navigation › The desk strips). No scroll timelines remain. */
+.rl-screen, .rl-screen > .rl-scroller { timeline-scope: none; scroll-timeline: none; }
+.rl-panel__head::after { animation: none; opacity: var(--rl-desk-in, 0); }
+.rl-statusmask { animation: none; opacity: var(--rl-desk-in, 0); }
+.rl-screen.rl-backdrop--fixed .rl-statusmask { opacity: 1; }   /* under a still sky the mask is always on, as before */
+
+
+/* =====================================================================
+   1.13.2 — 长虹琉璃 on the device (handoff/panel-2.0 › 14).
+   ===================================================================== */
+/* A backdrop-filter is a backdrop root for everything inside it: by day the
+   panel's own blur stopped the strip beside the slip (inside the panel) from
+   seeing the glass, so rows stayed sharp under it. Over the glass the panel
+   drops its blur; its 80% paper still lets the glass show faintly, and the GPU
+   no longer re-blurs most of the screen on every glass frame (15% → 13%). */
+.rl-screen.has-glass .rl-panel { -webkit-backdrop-filter: none; backdrop-filter: none; }

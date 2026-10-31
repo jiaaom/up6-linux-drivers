@@ -35,6 +35,17 @@ beeper. Rust, no runtime dependencies.
   so scans and blips do not flash the LED. `wifi_hotspot = false` keeps
   the LED dark while this machine is a hotspot. The reason is in `status.json` (`wifi`) and in the Control
   Center. `T6_LEDD_FAKE_WIFI=<state>` forces a state for testing.
+
+  "Captive portal" and "no internet" come from NetworkManager's
+  connectivity check, which is off by default on Debian and fnOS (every
+  link then reads as reachable). `90-t6-connectivity.conf` turns it on
+  (Apple's probe page, every 60 s); the T6 Control package installs it to
+  `/etc/NetworkManager/conf.d/`, unless a `[connectivity]` URI is already
+  set, and removes it on uninstall. While a link is held behind a portal,
+  NetworkManager also moves the default route off it. IPv4 and IPv6 results
+  are merged so that a portal on IPv4 is not hidden by the "limited" IPv6
+  of a network without IPv6. To test without a hotel:
+  `sudo panel/tools/fake-captive-portal.sh up|status|down`.
 - Power button LED (`src/power.rs`): dark while the LCD backlight is on
   (the screen already shows the machine is on), white while it is off or
   when there is no backlight; red blink (1 Hz) when overheating, over the
@@ -91,4 +102,7 @@ sudo install -m 755 ../target/release/t6-ledd /usr/sbin/t6-ledd
 sudo install -m 644 t6-ledd.toml /etc/t6-ledd.toml
 sudo install -m 644 t6-ledd.service /etc/systemd/system/t6-ledd.service
 sudo systemctl daemon-reload && sudo systemctl enable --now t6-ledd
+# optional: captive-portal / no-internet detection (yellow LED)
+sudo install -m 644 90-t6-connectivity.conf /etc/NetworkManager/conf.d/
+sudo nmcli general reload conf
 ```

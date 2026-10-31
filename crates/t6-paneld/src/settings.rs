@@ -68,6 +68,13 @@ pub struct Settings {
     /// so "off" survives App Center restarts, upgrades and reboots.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_enabled: Option<bool>,
+    /// Wi-Fi networks (by SSID) whose sign-in page was recognised as one that
+    /// can be accepted automatically, with its kind ("meraki"); autoaccept.rs.
+    /// They are accepted automatically unless listed in `portal_auto_off`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub portal_kinds: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub portal_auto_off: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -274,6 +281,39 @@ pub fn set_panel_enabled(on: bool) -> Result<Settings, String> {
     s.panel_enabled = Some(on);
     save(&s)?;
     Ok(s)
+}
+
+/// Remember that `ssid`'s sign-in page can be accepted automatically.
+pub fn set_portal_kind(ssid: &str, kind: &str) -> Result<(), String> {
+    let _write = write_lock();
+    let mut s = load();
+    if s.portal_kinds.get(ssid).map(String::as_str) == Some(kind) {
+        return Ok(());
+    }
+    s.portal_kinds.insert(ssid.to_string(), kind.to_string());
+    save(&s)
+}
+
+/// Turn automatic acceptance of `ssid`'s sign-in page on or off.
+pub fn set_portal_auto(ssid: &str, on: bool) -> Result<(), String> {
+    let _write = write_lock();
+    let mut s = load();
+    s.portal_auto_off.retain(|x| x != ssid);
+    if !on {
+        s.portal_auto_off.push(ssid.to_string());
+    }
+    save(&s)
+}
+
+/// A forgotten Wi-Fi network: forget its sign-in page too.
+pub fn forget_portal(ssid: &str) -> Result<(), String> {
+    let _write = write_lock();
+    let mut s = load();
+    if s.portal_kinds.remove(ssid).is_none() && !s.portal_auto_off.iter().any(|x| x == ssid) {
+        return Ok(());
+    }
+    s.portal_auto_off.retain(|x| x != ssid);
+    save(&s)
 }
 
 #[cfg(test)]

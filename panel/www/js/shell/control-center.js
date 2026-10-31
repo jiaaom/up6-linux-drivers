@@ -35,6 +35,11 @@ const PAGES = {
 let screen = null;
 let band = null;
 let layer = null; // { entry, node, panel, paint, stop }
+// One finger drives the plate. Every pointer's events reach the listeners of a
+// drag, so a second finger would otherwise start a second plate over the first,
+// and only the newer one would ever close: the older stayed, an invisible scrim
+// over the whole screen that took every tap.
+let gesture = false;
 const audioLive = poller(audio);
 const live = [audioLive, poller(bluetooth), poller(leds)];
 
@@ -60,6 +65,13 @@ function settle(to) {
     };
     requestAnimationFrame(step);
   });
+}
+
+/** Take the plate up, then close it: the one it was (another may be up by then). */
+async function settleClosed() {
+  const own = layer;
+  await settle(0);
+  if (layer === own) close({ animate: false });
 }
 
 // ---------- what it shows ----------
@@ -280,24 +292,30 @@ function wire(node) {
 const CONTROLS = 'button, a, input, label, select, [role="switch"], [role="slider"], [data-toggle], .rl-slider, .rl-seg';
 
 function dragUp(e, target, { tapCloses }) {
+  if (gesture) return;
+  gesture = true;
+  const id = e.pointerId;
   const y0 = e.clientY;
   const h = layer.panel.offsetHeight;
   let moved = false;
-  capture(target, e.pointerId);
+  capture(target, id);
   const move = (ev) => {
+    if (ev.pointerId !== id) return;
     const dy = ev.clientY - y0;
     if (!moved && Math.abs(dy) > 6) moved = true;
     if (!moved) return;
     layer.node.classList.add('is-dragging');
     setPull(clamp(1 + Math.min(0, dy) / h));
   };
-  const up = async (ev) => {
+  const up = (ev) => {
+    if (ev.pointerId !== id) return;
+    gesture = false;
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
     target.removeEventListener('pointercancel', up);
     if (!layer) return;
     if (!moved) { if (tapCloses && ev.type === 'pointerup') close(); return; }
-    if (clamp(1 + (ev.clientY - y0) / h) < 1 - OPEN_AT) { await settle(0); close({ animate: false }); }
+    if (clamp(1 + (ev.clientY - y0) / h) < 1 - OPEN_AT) settleClosed();
     else settle(1);
   };
   target.addEventListener('pointermove', move);
@@ -335,6 +353,7 @@ export function close({ animate = true } = {}) {
   if (!layer) return;
   const { entry, stop } = layer;
   layer = null;
+  gesture = false; // a drag on the plate ends with it (its finger may never lift on it)
   stop();
   live.forEach((p) => p.stop());
   screen.classList.remove('is-cc-open');
@@ -343,12 +362,15 @@ export function close({ animate = true } = {}) {
 
 /** A drag that starts in the status-bar band pulls the plate down with the finger. */
 function pullFromBand(e) {
-  if (layer || topLayer()) return;
+  if (gesture || layer || topLayer()) return;
+  gesture = true;
+  const id = e.pointerId;
   const y0 = e.clientY;
   let started = false;
   let h = 0;
-  capture(band, e.pointerId);
+  capture(band, id);
   const move = (ev) => {
+    if (ev.pointerId !== id) return;
     const dy = ev.clientY - y0;
     if (!started) {
       if (dy < 6) return;
@@ -359,13 +381,15 @@ function pullFromBand(e) {
     }
     setPull(clamp(dy / h));
   };
-  const up = async (ev) => {
+  const up = (ev) => {
+    if (ev.pointerId !== id) return;
+    gesture = false;
     band.removeEventListener('pointermove', move);
     band.removeEventListener('pointerup', up);
     band.removeEventListener('pointercancel', up);
     if (!started || !layer) return;
     if (clamp((ev.clientY - y0) / h) > OPEN_AT) settle(1);
-    else { await settle(0); close({ animate: false }); }
+    else settleClosed();
   };
   band.addEventListener('pointermove', move);
   band.addEventListener('pointerup', up);

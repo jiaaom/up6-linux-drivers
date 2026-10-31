@@ -20,3 +20,38 @@ input, textarea { -webkit-user-select: text; user-select: text; }
    scroll, three times as fast as the strip beside the slip, since the host
    line reaches the status bar after about 24px. Ridgeline hand-off › 15. */
 .rl-screen.rl-backdrop--fixed.has-glass .rl-statusmask { opacity: calc(var(--rl-desk-in, 0) * 3); }
+
+/* ---------- status bar: a link without internet ---------- */
+/* Ridgeline's tag dot (an ochre diamond) on the top-right corner of the
+   16px Wi-Fi or wired icon: up, but a sign-in page or no internet. */
+.rl-statusbar__end > span:has(> .t6-alert) { position: relative; }
+.t6-alert { position: absolute; left: 12px; top: 1px; width: 6px; height: 6px; background: var(--ochre); transform: rotate(45deg); border-radius: 1px; }
+
+/* ---------- 连接方式: a tagged row ---------- */
+/* Ridgeline 1.13.3 moves the tag to the end (order 1) but leaves the chevron
+   at order 0, so the tag lands after the chevron; and the name never shrinks
+   (58 %), so a long tag ("Sign-in needed") runs off the card. Keep the
+   chevron last (name, leader, tag, chevron) and let the name give way.
+   (To fix in Ridgeline.) */
+.rl-set--toc .rl-set__row > .rl-set__go { order: 2; }
+.rl-set--toc .rl-set__row:has(> .rl-tag) > .rl-set__label { flex-shrink: 1; }
+
+/* ---------- Wi-Fi › sign-in page (captive portal) ----------
+   Built like the file preview (rl-viewer): a full-screen layer whose bar the
+   panel draws, with 关闭 always on it, and the page itself a separate view
+   Electron places over the stage (js/pages/network/portal.js). Unlike the
+   preview it follows the panel's theme: the page is a web page, not a
+   picture. The stage is white, the colour sign-in pages assume, so the
+   view meets it without a seam. No tab bar or control center meanwhile. */
+.t6-portal { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: var(--surface-100); }
+.t6-portal__bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); align-items: center; gap: 8px;
+  margin-top: var(--rl-safe-top); padding: 4px 12px 8px 16px; border-bottom: 1px solid var(--hairline); }
+.t6-portal__bar .rl-backlink { justify-self: start; }
+.t6-portal__bar .rl-btn--icon { justify-self: end; flex: none; width: 36px; height: 36px; min-height: 36px; }
+.t6-portal__title { display: grid; justify-items: center; min-width: 0; font-family: var(--font-sans); }
+.t6-portal__title > * { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.t6-portal__title b { font-weight: 600; font-size: 15px; line-height: 20px; color: var(--ink); }
+.t6-portal__title small { font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.t6-portal.is-loading .t6-portal__title small { opacity: .6; }
+.t6-portal__stage { flex: 1; min-height: 0; background: #fff; }
+.rl-screen.is-portal > .rl-dock, .rl-screen.is-portal > .rl-cc-band, .rl-screen.is-portal > .rl-statusmask { visibility: hidden; }

@@ -18,6 +18,7 @@ import { mountStatusbar } from './statusbar.js';
 import { mountSwipe } from './swipe.js';
 import { mountTabbar } from './tabbar.js';
 import { mountTasks } from './tasks.js';
+import { watchAutoAccept } from '../pages/network/portal.js';
 
 export function startShell(screen, firstTab = 'overview') {
   screen.innerHTML = String(html`<canvas class="rl-glass-backdrop" aria-hidden="true"></canvas>
@@ -31,6 +32,7 @@ export function startShell(screen, firstTab = 'overview') {
   mountTasks(screen.querySelector('.rl-statusbar'));
   mountLayers(screen, screen.querySelector('.rl-toast-region'));
   mountKeyboard(screen);
+  watchAutoAccept();
   mountOffline(screen);
   mountRemote(dock);
   mountSwipe(screen);

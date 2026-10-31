@@ -27,6 +27,67 @@ pub struct Ethernet {
     pub prefix: Option<u32>,
     pub gateway: Option<String>,
     pub dns: Vec<String>,
+    /// NetworkManager's connectivity check for this port; see [`Connectivity`].
+    pub connectivity: Connectivity,
+}
+
+/// Whether a connected link actually reaches the internet, from
+/// NetworkManager's connectivity check (enabled by the t6-control package
+/// with a 60 s interval). `Unknown` (check off, not run yet, or a device
+/// NetworkManager doesn't manage, like fnOS's OVS bridge) means: trust the
+/// link, as before the check existed.
+#[derive(Serialize, Default, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Connectivity {
+    #[default]
+    Unknown,
+    /// Connected, but nothing gets through.
+    None,
+    /// Behind a captive portal: a sign-in or "click Connect" page.
+    Portal,
+    /// Some traffic gets through, but the probe failed.
+    Limited,
+    Full,
+}
+
+impl Connectivity {
+    /// From an NMConnectivityState number (0 unknown … 4 full).
+    pub fn from_nm(n: u32) -> Self {
+        match n {
+            1 => Self::None,
+            2 => Self::Portal,
+            3 => Self::Limited,
+            4 => Self::Full,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// One NMConnectivityState from a device's IPv4 and IPv6 results. Not simply
+/// the larger: on a network without IPv6 (most hotels) IPv6 always reads
+/// 3 (limited), which would hide an IPv4 2 (portal).
+pub fn merge_nm_connectivity(ip4: u32, ip6: u32) -> u32 {
+    if ip4 == 4 || ip6 == 4 {
+        4
+    } else if ip4 == 2 || ip6 == 2 {
+        2
+    } else {
+        ip4.max(ip6)
+    }
+}
+
+/// A device's connectivity, trusted only while NetworkManager has it
+/// activated (state 100): it reports 1 (none) for devices it doesn't manage.
+fn device_connectivity(dev: &str) -> Connectivity {
+    let Some(out) = run("nmcli", &["-g", "GENERAL.STATE,GENERAL.IP4-CONNECTIVITY,GENERAL.IP6-CONNECTIVITY", "device", "show", dev]) else {
+        return Connectivity::Unknown;
+    };
+    let num = |l: Option<&str>| l.and_then(|l| l.split_whitespace().next()).and_then(|n| n.parse::<u32>().ok()).unwrap_or(0);
+    let mut lines = out.lines();
+    if num(lines.next()) != 100 {
+        return Connectivity::Unknown;
+    }
+    Connectivity::from_nm(merge_nm_connectivity(num(lines.next()), num(lines.next())))
 }
 
 #[derive(Serialize, Default)]
@@ -55,6 +116,8 @@ pub struct Wifi {
     pub channel: Option<u32>,
     /// Negotiated link rate as nmcli reports it, e.g. "270 Mbit/s".
     pub rate: Option<String>,
+    /// NetworkManager's connectivity check; see [`Connectivity`].
+    pub connectivity: Connectivity,
 }
 
 #[derive(Serialize, Default)]
@@ -198,6 +261,7 @@ fn ethernet_port(iface: &str) -> Ethernet {
         gateway: run("ip", &["route", "show", "default", "dev", &dev])
             .and_then(|o| tok_after(&o.split_whitespace().collect::<Vec<_>>(), "via")),
         dns: nmcli_field(&dev, "IP4.DNS"),
+        connectivity: device_connectivity(&dev),
     }
 }
 
@@ -330,6 +394,12 @@ pub fn info() -> Network {
         n.wifi.dbm = wifi_dbm(&n.wifi.iface);
     }
     n.hotspot = hotspot_status();
+    // The hotspot is the same NetworkManager device: no uplink to check.
+    if !n.hotspot.active {
+        if let Some(wl) = &n.wifi.iface {
+            n.wifi.connectivity = device_connectivity(wl);
+        }
+    }
     n.wireless = wireless();
     n
 }
@@ -499,6 +569,70 @@ pub fn disconnect() -> Result<(), String> {
 pub fn forget(ssid: &str) -> Result<(), String> {
     let name = saved_wifi_profile(ssid).ok_or("no saved network for that SSID")?;
     nmcli_ok(&["connection", "delete", "id", &name]).map(|_| ())
+}
+
+/// What the captive-portal proxy (t6-paneld) needs to reach a sign-in page
+/// over Wi-Fi whatever the routes say: the Wi-Fi interface, the IPv4 DNS
+/// servers its network handed out, and this machine's own IPv4 addresses
+/// (which the proxy refuses, so a web page can't reach the NAS through it).
+pub struct WifiUplink {
+    pub iface: String,
+    pub dns: Vec<std::net::Ipv4Addr>,
+    pub local: Vec<std::net::Ipv4Addr>,
+}
+
+/// The connected Wi-Fi's uplink, or None when Wi-Fi isn't connected.
+pub fn wifi_uplink() -> Option<WifiUplink> {
+    let iface = first_iface(&["wl"])?;
+    if sysfs(&iface, "carrier").as_deref() != Some("1") {
+        return None;
+    }
+    let dns = nmcli_field(&iface, "IP4.DNS").iter().filter_map(|d| d.parse().ok()).collect();
+    let local = run("ip", &["-4", "-o", "addr", "show"])
+        .map(|out| {
+            out.lines()
+                .filter_map(|l| tok_after(&l.split_whitespace().collect::<Vec<_>>(), "inet"))
+                .filter_map(|cidr| cidr.split('/').next()?.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(WifiUplink { iface, dns, local })
+}
+
+/// The connected Wi-Fi network as the sign-in keeper (t6-paneld
+/// autoaccept.rs) reads it every few seconds: two nmcli calls, not info()'s
+/// ten. None when Wi-Fi isn't connected, or is the hotspot.
+pub struct WifiLink {
+    pub iface: String,
+    pub ssid: String,
+    pub connectivity: Connectivity,
+}
+
+pub fn wifi_link() -> Option<WifiLink> {
+    let iface = first_iface(&["wl"])?;
+    let out = run("nmcli", &["-g", "GENERAL.STATE,GENERAL.CONNECTION,GENERAL.IP4-CONNECTIVITY,GENERAL.IP6-CONNECTIVITY", "device", "show", &iface])?;
+    let lines: Vec<&str> = out.lines().collect();
+    let num = |i: usize| lines.get(i).and_then(|l| l.split_whitespace().next()).and_then(|n| n.parse::<u32>().ok()).unwrap_or(0);
+    if num(0) != 100 {
+        return None;
+    }
+    let conn = lines.get(1)?.trim().replace("\\:", ":");
+    let profile = run("nmcli", &["-g", "802-11-wireless.ssid,802-11-wireless.mode", "connection", "show", "id", &conn])?;
+    let mut p = profile.lines();
+    let ssid = p.next()?.trim().replace("\\:", ":");
+    if ssid.is_empty() || p.next().map(str::trim) == Some("ap") {
+        return None;
+    }
+    let connectivity = Connectivity::from_nm(merge_nm_connectivity(num(2), num(3)));
+    Some(WifiLink { iface, ssid, connectivity })
+}
+
+/// Run NetworkManager's connectivity check now (on every device) instead of
+/// waiting for its interval, and return the Wi-Fi's result. Needs root:
+/// polkit refuses it to ordinary users.
+pub fn check_connectivity() -> Result<Connectivity, String> {
+    nmcli_ok(&["networking", "connectivity", "check"])?;
+    Ok(first_iface(&["wl"]).map(|wl| device_connectivity(&wl)).unwrap_or_default())
 }
 
 /// Turn the Wi-Fi radio on or off.
@@ -861,5 +995,16 @@ mod tests {
         assert_eq!(tok_after(&toks, "via").as_deref(), Some("10.0.0.1"));
         assert_eq!(tok_after(&toks, "dev").as_deref(), Some("enp0-ovs"));
         assert_eq!(tok_after(&toks, "src").as_deref(), Some("10.0.0.9"));
+    }
+    #[test]
+    fn connectivity_merge_keeps_portal() {
+        assert_eq!(merge_nm_connectivity(2, 3), 2); // hotel: portal on IPv4, no IPv6
+        assert_eq!(merge_nm_connectivity(3, 2), 2);
+        assert_eq!(merge_nm_connectivity(4, 3), 4);
+        assert_eq!(merge_nm_connectivity(3, 4), 4);
+        assert_eq!(merge_nm_connectivity(1, 3), 3);
+        assert_eq!(merge_nm_connectivity(0, 0), 0);
+        assert_eq!(Connectivity::from_nm(2), Connectivity::Portal);
+        assert_eq!(serde_json::to_string(&Connectivity::Portal).unwrap(), "\"portal\"");
     }
 }

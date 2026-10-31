@@ -42,7 +42,7 @@ function notes(s, pools, d, rate) {
   const fan = (s?.fans ?? []).find((f) => f.rpm);
   const warm = warmDisk(pools);
   const port = (d.network?.ethernet_ports ?? []).filter((p) => p.connected).reduce((m, p) => Math.max(m, p.speed_mbps ?? 0), 0);
-  const wired = net.wired(d.network)?.state === 'on';
+  const wired = ['on', 'wait'].includes(net.wired(d.network)?.state);
   const st = storageSummary(pools, d.storage);
   let flow = '';
   if (wired && rate) {

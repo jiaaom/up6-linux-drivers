@@ -3,12 +3,14 @@
 // an enterprise (802.1X) one for a user name and password, with 认证方式.
 // Wi-Fi and the hotspot share the card: turning Wi-Fi on stops the hotspot.
 
-import { api } from '../../core/api.js';
+import { api, request } from '../../core/api.js';
 import { html, on, painter } from '../../core/dom.js';
 import { icon } from '../../core/icons.js';
 import { t } from '../../core/i18n.js';
 import { panel, refreshPanel } from '../../core/panel.js';
 import { poller } from '../../core/resource.js';
+import { blocked } from '../../data/network.js';
+import { openPortal, setAutoAccept } from './portal.js';
 import { wifiScan } from '../../data/stores.js';
 import { confirm, sheet, toast } from '../../shell/layers.js';
 import { signalIcon } from '../../shell/statusbar.js';
@@ -120,6 +122,29 @@ function enterpriseDialog(ap) {
   });
 }
 
+/** The connected network's second line: what is wrong, else band and address. */
+function connectedSub(w) {
+  const issue = blocked(w.connectivity);
+  return issue ? t(`wifi.${issue}Sub`) : [w.band, w.ip].filter(Boolean).join(' · ');
+}
+
+/** Under a network that doesn't reach the internet: open its sign-in page. */
+function portalRow(w) {
+  const issue = blocked(w.connectivity);
+  if (!issue) return null;
+  return html`<a class="rl-set__row" href="#" data-portal>${icon('globe-hemisphere-west', 'light', 'rl-set__icon')}<span class="rl-set__label">${t('wifi.openPortal')}<span class="rl-set__sub">${t(issue === 'portal' ? 'wifi.openPortalSub' : 'wifi.openPortalMaybe')}</span></span>${icon('caret-right', 'regular', 'rl-set__go')}</a>`;
+}
+
+/** 自动确认登录页, for a network whose sign-in page t6-paneld recognised as one tap. */
+function autoRow(w) {
+  const a = w.portal_auto;
+  if (!a?.supported) return null;
+  const last = a.last;
+  let sub = t(a.on ? 'wifi.autoOnSub' : 'wifi.autoOffSub');
+  if (a.on && last) sub = last.ok ? t('wifi.autoLast', { at: last.at }) : t('wifi.autoFailed', { at: last.at, why: t(`wifi.autoWhy.${last.why}`) });
+  return switchRow({ label: t('wifi.autoAccept'), subText: sub, checked: a.on, attrs: html` data-autoaccept` });
+}
+
 export default function wifiPage(ctx) {
   const paint = painter(ctx.el);
   const scan = poller(wifiScan, 12000);
@@ -135,7 +160,7 @@ export default function wifiPage(ctx) {
     const scanning = wifiScan.status === 'loading' || wifiScan.status === 'refreshing';
     const body = html`<div class="rl-set">
       <ul class="rl-set__list" style="margin-top:6px"><li>${switchRow({ label: 'Wi-Fi', subText: t('wifi.switchSub'), checked: on, attrs: html` data-radio` })}</li></ul>
-      ${on && w.connected && current ? html`${section('wifi.secConnected')}${list([apRow(current, [w.band, w.ip].filter(Boolean).join(' · '))])}` : ''}
+      ${on && w.connected && current ? html`${section('wifi.secConnected')}${list([apRow(current, connectedSub(w)), portalRow(w), autoRow(w)])}` : ''}
       ${on ? html`${section('wifi.secNearby', scanning ? busyRing(t('wifi.scanning')) : '')}
         ${list([
           ...nearby.map((ap) => apRow(ap, nearbySub(ap))),
@@ -172,10 +197,25 @@ export default function wifiPage(ctx) {
       title: ap.ssid,
       sub: [w.band, w.ip, w.rate].filter(Boolean).join(' · '),
       actions: [
+        ...(blocked(w.connectivity) ? [
+          { id: 'portal', icon: 'globe-hemisphere-west', label: t('wifi.openPortal') },
+          { id: 'check', icon: 'arrows-clockwise', label: t('wifi.check') },
+        ] : []),
         { id: 'disconnect', icon: 'wifi-slash', label: t('wifi.disconnect') },
         { id: 'forget', icon: 'trash', label: t('wifi.forget'), danger: true },
       ],
     });
+    if (id === 'portal') { openPortal(); return; }
+    if (id === 'check') {
+      try {
+        // NetworkManager waits for the probe page, up to some 20 s on a bad network
+        const r = await request('network/connectivity/check', { method: 'POST', timeout: 30000 });
+        const issue = blocked(r.wifi);
+        toast(t(issue ? `wifi.check${issue === 'portal' ? 'Portal' : 'Offline'}` : 'wifi.checkOk'));
+      } catch (e) {
+        toast(t('wifi.checkFailed', { why: e.message }));
+      }
+    }
     if (id === 'disconnect') await api.post('network/wifi/disconnect').catch((e) => toast(t('common.failed', { why: e.message })));
     if (id === 'forget') {
       if (!(await confirm({ title: t('wifi.forgetTitle', { ssid: ap.ssid }), body: t('wifi.forgetBody'), action: t('wifi.forget'), kind: 'danger' }))) return;
@@ -202,6 +242,11 @@ export default function wifiPage(ctx) {
     const ap = (wifiScan.data ?? []).find((x) => x.ssid === a.dataset.ssid)
       ?? { ssid: a.dataset.ssid, in_use: true };
     choose(ap);
+  });
+  on(ctx.el, 'click', '[data-portal]', (e) => { e.preventDefault(); openPortal(); });
+  on(ctx.el, 'change', 'input[data-autoaccept]', async (e, input) => {
+    const ssid = panel.data?.network?.wifi?.ssid;
+    if (!ssid || !(await setAutoAccept(ssid, input.checked))) input.checked = !input.checked;
   });
   on(ctx.el, 'click', '[data-other]', async (e) => {
     e.preventDefault();

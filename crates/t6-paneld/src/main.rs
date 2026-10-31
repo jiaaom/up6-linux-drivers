@@ -13,6 +13,7 @@
 //! both surfaces; only the gateway one ever carries a signed-in user.
 
 mod api;
+mod autoaccept;
 mod autologin;
 mod backlight;
 mod firmware;
@@ -23,6 +24,7 @@ mod idle;
 mod netinfo;
 mod night;
 mod panel;
+mod portal;
 mod screensaver;
 mod settings;
 mod tasks;
@@ -131,6 +133,8 @@ async fn main() {
     screensaver::start();
     idle::start();
     history::start();
+    // Wi-Fi sign-in pages that take one tap: accepted by themselves (autoaccept.rs).
+    autoaccept::start();
     // Front-panel app turned off from the admin page: keep the screen dark at
     // boot too (it comes up lit; systemd-backlight restores the level).
     if !settings::load().panel_enabled() {

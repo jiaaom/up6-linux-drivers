@@ -2,8 +2,12 @@
 // layer. It rises when a text field takes focus and closes on a tap outside
 // the fields, a downward swipe on it, or Back. Return sends Enter to the
 // field; the page decides what Enter does. The tab bar hides while it is up.
+// It can also type into a page that isn't this one (typeInto: the captive
+// portal's sign-in page, a separate view); keyboardChanged tells such a
+// page's owner when the keyboard comes or goes, to make room for it.
 
 import { el, html, isText } from '../core/dom.js';
+import { emitter } from '../core/events.js';
 import { icon } from '../core/icons.js';
 import { langChanged, t } from '../core/i18n.js';
 import { swipeDown } from './layers.js';
@@ -33,6 +37,11 @@ const DOUBLE_TAP_MS = 400;
 let screen = null;
 let osk = null;
 let target = null;
+/** Typing into another view: { insert(text), del(), enter() }, else null. */
+let external = null;
+
+/** The keyboard came up or went down. */
+export const keyboardChanged = emitter();
 let layout = 'abc';
 let shift = 'off'; // off | once | lock
 let shiftAt = 0;
@@ -70,6 +79,10 @@ function caret(n) {
 }
 
 function edit(insert) {
+  if (external) {
+    if (insert == null) external.del(); else external.insert(insert);
+    return;
+  }
   if (!target) return;
   const v = target.value;
   let s = target.selectionStart ?? v.length;
@@ -102,7 +115,8 @@ function press(k) {
     case '@abc': layout = 'abc'; render(); return;
     case '@space': edit(' '); return;
     case '@return':
-      target?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (external) external.enter();
+      else target?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       return;
     default:
       edit(layout === 'abc' && shift !== 'off' ? k.toUpperCase() : k);
@@ -138,13 +152,31 @@ function show() {
   screen.classList.add('is-osk-open');
   screen.style.setProperty('--rl-osk-h', `${osk.offsetHeight}px`);
   requestAnimationFrame(reveal);
+  keyboardChanged.emit();
 }
 
 function close() {
+  external = null;
   if (!osk) return;
   osk.remove();
   osk = null;
   screen.classList.remove('is-osk-open');
+  keyboardChanged.emit();
+}
+
+/**
+ * Type into another view (`sink`: insert(text), del(), enter()), or stop
+ * doing so (null): the keyboard comes up or goes down with it.
+ */
+export function typeInto(sink) {
+  if (sink) {
+    if (isText(document.activeElement)) document.activeElement.blur();
+    target = null;
+    external = sink;
+    show();
+  } else if (external) {
+    close();
+  }
 }
 
 /** Close the keyboard by taking focus out of the field. */
@@ -156,10 +188,11 @@ export function hideKeyboard() {
 export function mountKeyboard(screenEl) {
   screen = screenEl;
   document.addEventListener('focusin', (e) => {
-    if (isText(e.target)) { target = e.target; show(); }
+    if (isText(e.target)) { external = null; target = e.target; show(); }
   });
   document.addEventListener('focusout', () => {
-    setTimeout(() => { if (!isText(document.activeElement)) { target = null; close(); } }, 60);
+    // typing into another view: this page losing focus to it is expected
+    setTimeout(() => { if (!external && !isText(document.activeElement)) { target = null; close(); } }, 60);
   });
   // a tap outside the fields and the keyboard closes it
   document.addEventListener('pointerdown', (e) => {

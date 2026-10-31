@@ -74,7 +74,12 @@ pub(super) struct WifiForgetReq {
 
 pub(super) async fn post_wifi_forget(Json(req): Json<WifiForgetReq>) -> Response {
     match t6_hw_rs::network::forget(&req.ssid) {
-        Ok(()) => Json(serde_json::json!({ "ok": true, "ssid": req.ssid })).into_response(),
+        Ok(()) => {
+            if let Err(e) = crate::settings::forget_portal(&req.ssid) {
+                eprintln!("forget {}: sign-in page settings: {e}", req.ssid);
+            }
+            Json(serde_json::json!({ "ok": true, "ssid": req.ssid })).into_response()
+        }
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
 }
@@ -89,6 +94,46 @@ pub(super) async fn put_wifi_radio(Json(req): Json<WifiRadioReq>) -> Response {
         Ok(()) => Json(serde_json::json!({ "on": req.on })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
+}
+
+/// Check whether the network reaches the internet now, rather than at
+/// NetworkManager's next check: the "check again" button, and after
+/// accepting a sign-in page. /api/panel then reads afresh.
+pub(super) async fn post_connectivity_check() -> Response {
+    let r = tokio::task::spawn_blocking(t6_hw_rs::network::check_connectivity).await.unwrap_or_else(|e| Err(e.to_string()));
+    net_result(r.map(|wifi| serde_json::json!({ "wifi": wifi })))
+}
+
+/// Start the captive-portal proxy (crate::portal) for the panel's sign-in
+/// view: `{"port": n}` on 127.0.0.1, or 400 when Wi-Fi isn't connected.
+pub(super) async fn post_portal_proxy() -> Response {
+    net_result(crate::portal::start().await.map(|port| serde_json::json!({ "port": port })))
+}
+
+#[derive(Deserialize)]
+pub(super) struct PortalAutoReq {
+    ssid: String,
+    on: bool,
+}
+
+/// Turn automatic acceptance of a network's sign-in page on or off
+/// (crate::autoaccept); on looks at once.
+pub(super) async fn put_portal_auto(Json(req): Json<PortalAutoReq>) -> Response {
+    match crate::settings::set_portal_auto(&req.ssid, req.on) {
+        Ok(()) => {
+            if req.on {
+                crate::autoaccept::wake();
+            }
+            Json(serde_json::json!({ "ssid": req.ssid, "on": req.on })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+/// The sign-in view closed: stop the proxy.
+pub(super) async fn delete_portal_proxy() -> Response {
+    crate::portal::stop();
+    Json(serde_json::json!({ "ok": true })).into_response()
 }
 
 #[derive(Deserialize)]

@@ -1,5 +1,6 @@
 #!/bin/bash
 . "$(dirname "$0")/common"
 install_daemons
+install_nm_connectivity
 install_webd
 exit 0

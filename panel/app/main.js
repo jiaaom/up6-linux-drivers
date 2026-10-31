@@ -134,6 +134,122 @@ ipcMain.handle('preview:close', async () => {
   return { ok: true };
 });
 
+// A captive portal's sign-in page (a hotel's or café's "Connect" page) in its
+// own WebContentsView, placed by the panel under its own bar like Preview
+// (www/js/pages/network/portal.js). Not an <iframe>: such pages forbid being
+// framed (X-Frame-Options), and they must be loaded over the Wi-Fi that needs
+// signing in, whatever the routes say. So the view gets its own in-memory
+// session whose every request goes through t6-paneld's portal proxy (bound
+// to the Wi-Fi interface, names from the Wi-Fi's DNS; crates/t6-paneld/src/
+// portal.rs), loopback included, and which can't download, open windows,
+// leave http(s) or get any permission. Closing it clears that session.
+// portal-preload.js only reports when a text field takes focus, so the
+// panel's keyboard can type into the page (portal:type).
+const PORTAL_PARTITION = 'portal'; // no "persist:": kept in memory only
+// Load this and the portal redirects it to its sign-in page; once signed in
+// it shows Apple's "Success".
+const PORTAL_START = 'http://captive.apple.com/hotspot-detect.html';
+let portalView = null;
+
+function portalSession() {
+  return session.fromPartition(PORTAL_PARTITION);
+}
+
+function createPortalView() {
+  const ses = portalSession();
+  ses.setPermissionRequestHandler((wc, permission, done) => done(false));
+  ses.setPermissionCheckHandler(() => false);
+  ses.on('will-download', (event) => event.preventDefault());
+  portalView = new WebContentsView({
+    webPreferences: {
+      partition: PORTAL_PARTITION,
+      preload: `${__dirname}/portal-preload.js`,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      // the panel's own zoom, so a phone-sized page reads like the panel
+      zoomFactor: mainWindow.webContents.getZoomFactor(),
+    },
+  });
+  portalView.setBackgroundColor('#ffffff'); // sign-in pages assume white; no flash while loading
+  mainWindow.contentView.addChildView(portalView);
+  routeNavKeys(portalView.webContents, PREVIEW_EXIT_KEYS);
+  const wc = portalView.webContents;
+  const web = (url) => /^https?:/i.test(url);
+  wc.setWindowOpenHandler(({ url }) => {
+    if (web(url)) wc.loadURL(url); // a "new window" opens here
+    return { action: 'deny' };
+  });
+  wc.on('will-navigate', (event, url) => { if (!web(url)) event.preventDefault(); });
+  wc.on('will-redirect', (event, url) => { if (!web(url)) event.preventDefault(); });
+  const send = (extra = {}) => {
+    if (!mainWindow || wc.getURL() === 'about:blank') return;
+    mainWindow.webContents.send('portal:state', { url: wc.getURL(), title: wc.getTitle(), loading: wc.isLoading(), ...extra });
+  };
+  for (const e of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated']) wc.on(e, () => send());
+  wc.on('did-fail-load', (event, code, description, url, isMainFrame) => {
+    if (isMainFrame && code !== -3) send({ error: description }); // -3: aborted by a redirect
+  });
+  ipcMain.on('portal:focus', (event, editable) => {
+    if (event.sender === wc && mainWindow) mainWindow.webContents.send('portal:focus', !!editable);
+  });
+}
+
+function placePortal(bounds) {
+  const z = mainWindow.webContents.getZoomFactor(); // bounds are the page's CSS px
+  portalView.setBounds({
+    x: Math.round(bounds.x * z), y: Math.round(bounds.y * z),
+    width: Math.round(bounds.width * z), height: Math.max(0, Math.round(bounds.height * z)),
+  });
+}
+
+ipcMain.handle('portal:open', async (event, { port, bounds }) => {
+  if (!mainWindow) return { ok: false, reason: 'no window' };
+  if (!portalView) createPortalView();
+  await portalSession().setProxy({ proxyRules: `http://127.0.0.1:${port}`, proxyBypassRules: '<-loopback>' });
+  placePortal(bounds);
+  portalView.setVisible(true);
+  portalView.webContents.loadURL(PORTAL_START);
+  return { ok: true };
+});
+ipcMain.handle('portal:place', async (event, { bounds }) => {
+  if (portalView) placePortal(bounds);
+  return { ok: true };
+});
+ipcMain.handle('portal:reload', async () => {
+  if (!portalView) return { ok: false };
+  const wc = portalView.webContents;
+  // after a failed load the URL may be the error page's; start again then
+  if (!/^https?:/i.test(wc.getURL())) wc.loadURL(PORTAL_START); else wc.reload();
+  return { ok: true };
+});
+ipcMain.handle('portal:close', async () => {
+  if (!portalView) return { ok: false };
+  portalView.setVisible(false);
+  portalView.webContents.loadURL('about:blank');
+  const ses = portalSession();
+  await ses.clearStorageData().catch(() => {});
+  await ses.clearCache().catch(() => {});
+  await ses.closeAllConnections().catch(() => {});
+  return { ok: true };
+});
+// The panel's keyboard typing into the page: { text } or { key: 'Backspace' | 'Enter' }.
+ipcMain.handle('portal:type', async (event, k) => {
+  if (!portalView) return { ok: false };
+  const wc = portalView.webContents;
+  wc.focus(); // a tap on the keyboard took focus to the panel's page
+  if (k.text) wc.insertText(String(k.text));
+  else if (k.key === 'Backspace') {
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+  } else if (k.key === 'Enter') {
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+    wc.sendInputEvent({ type: 'char', keyCode: '\r' });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+  }
+  return { ok: true };
+});
+
 // Video player: the bundled mpv (../mpv, see panel/mpv/README.md) runs as its
 // own Wayland window. appliance-compositor's shell stacks it above this window
 // (app-id "mpv", layer 10 in compositor.ini), gives it keyboard focus and brings the panel back

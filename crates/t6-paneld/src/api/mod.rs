@@ -126,6 +126,11 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         .route(&p("/api/network/wifi/radio"), put(put_wifi_radio))
         .route(&p("/api/network/wifi/profile"), get(get_wifi_profile))
         .route(&p("/api/network/wifi/profile"), put(put_wifi_profile))
+        .route(&p("/api/network/connectivity/check"), post(post_connectivity_check))
+        // The captive-portal sign-in view's proxy (over Wi-Fi), while it is open.
+        .route(&p("/api/network/portal/proxy"), post(post_portal_proxy).delete(delete_portal_proxy))
+        // Automatic acceptance of a Wi-Fi network's sign-in page, per network.
+        .route(&p("/api/network/portal/auto"), put(put_portal_auto))
         // Ethernet (wired) IPv4 config — DHCP/static + DNS on the OVS/wired
         // connection. Not login-gated (same physical-access model as Wi-Fi).
         .route(&p("/api/network/ethernet"), get(get_ethernet))

@@ -123,7 +123,7 @@ pub fn build() -> Value {
         },
         "storage": vols,
         "net": net::counters(),
-        "network": crate::netinfo::get(),
+        "network": network(&set),
         "thunderbolt": thunderbolt::info(),
         "sharing": sharing::summary(),
         "ssh": { "enabled": ssh::enabled() },
@@ -172,4 +172,17 @@ pub fn build() -> Value {
         "leds": leds,
         "status": status,
     })
+}
+
+/// The cached network reading, with the connected Wi-Fi's sign-in page
+/// state (autoaccept.rs) added as `wifi.portal_auto`.
+fn network(set: &crate::settings::Settings) -> Value {
+    let mut network = crate::netinfo::get();
+    let wifi = &network["wifi"];
+    if wifi["connected"] == true {
+        if let Some(ssid) = wifi["ssid"].as_str().map(str::to_string) {
+            network["wifi"]["portal_auto"] = crate::autoaccept::status(set, &ssid);
+        }
+    }
+    network
 }

@@ -2,4 +2,5 @@
 . "$(dirname "$0")/common"
 remove_webd
 remove_daemons
+remove_nm_connectivity
 exit 0

@@ -62,8 +62,8 @@ function netmap(d) {
   return html`<div class="rl-netmap">
     <svg class="rl-netmap__wires" viewBox="0 0 340 268" width="340" height="268" aria-hidden="true">${wires}</svg>
     <button class="rl-netmap__hub" style="left:${HUB[0]}px;top:${HUB[1]}px" aria-label="${t('net.address')}" data-address><b>${host}</b><small>${addr?.ip ?? t('net.noAddress')}</small><small>${host ? `${host}.local` : ''}</small></button>
-    ${spokes.wired ? node('wired', 'wired', spokes.wired, spokes.wired.state === 'on' ? 'plugs-connected' : 'plugs', t('net.wired')) : ''}
-    ${w ? node('wireless', w.hotspot ? 'hotspot' : 'wifi', w, w.hotspot ? 'broadcast' : w.state === 'on' ? 'wifi-high' : 'wifi-slash', w.hotspot ? t('net.hotspot') : 'Wi-Fi') : ''}
+    ${spokes.wired ? node('wired', 'wired', spokes.wired, spokes.wired.state !== 'off' ? 'plugs-connected' : 'plugs', t('net.wired')) : ''}
+    ${w ? node('wireless', w.hotspot ? 'hotspot' : 'wifi', w, w.hotspot ? 'broadcast' : w.state !== 'off' ? 'wifi-high' : 'wifi-slash', w.hotspot ? t('net.hotspot') : 'Wi-Fi') : ''}
     ${spokes.bluetooth ? node('bluetooth', 'bluetooth', spokes.bluetooth, 'bluetooth', t('net.bluetooth')) : ''}
     ${spokes.thunderbolt ? node('thunderbolt', 'thunderbolt', spokes.thunderbolt, 'lightning', t('net.thunderbolt')) : ''}
     ${legend(Object.values(spokes))}
@@ -72,8 +72,9 @@ function netmap(d) {
 
 function row(page, iconName, label, s) {
   if (!s) return null;
+  // a tag keeps the (empty) value: its dotted leader holds the row's tail on the right (Ridgeline › NetworkMap)
   const tail = s.tag
-    ? html`<span class="rl-tag rl-tag--warn"><span class="rl-tag__dot"></span>${s.tag}</span>`
+    ? html`<span class="rl-tag rl-tag--warn"><span class="rl-tag__dot"></span>${s.tag}</span><span class="rl-set__value"></span>`
     : s.value ? html`<span class="rl-set__value">${s.value}</span>` : '';
   return html`<a class="rl-set__row${s.state === 'on' ? ' is-on' : ''}" href="#" data-page="${page}">${icon(iconName, 'light', 'rl-set__icon')}<span class="rl-set__label">${label}${s.sub ? html`<span class="rl-set__sub">${s.sub}</span>` : ''}</span>${tail}${icon('caret-right', 'regular', 'rl-set__go')}</a>`;
 }
@@ -91,25 +92,28 @@ function sharingRow(d) {
   });
 }
 
-function pending(d) {
-  return [net.thunderbolt(thunderbolt.data), net.bluetooth(bluetooth.data)].filter((s) => s?.state === 'wait').length;
+/** What needs a look, in the order the status line opens it. */
+function waitingPages(d) {
+  const n = d.network;
+  const all = { wired: net.wired(n), wifi: net.wifiRow(n), thunderbolt: net.thunderbolt(thunderbolt.data), bluetooth: net.bluetooth(bluetooth.data) };
+  return Object.keys(all).filter((k) => all[k]?.state === 'wait');
 }
 
 /**
  * 连接's status line: is it reachable? No link at all first (err); no way
  * out but a local link in use, the hotspot or 雷电 (warn, opens 有线); then
- * devices waiting for an answer (雷电 / 蓝牙, opens the first); else 一切正常.
+ * what needs a look: a link without internet (有线 / Wi-Fi) or a device
+ * waiting for an answer (雷电 / 蓝牙), opening the first; else 一切正常.
  */
 function status(d, waiting) {
   const n = d.network ?? {};
-  if (d.network && net.wired(n)?.state !== 'on' && !n.wifi?.connected) {
+  if (d.network && net.wired(n)?.state !== 'on' && net.wired(n)?.state !== 'wait' && !n.wifi?.connected) {
     const local = n.hotspot?.active ? 'hotspot' : net.thunderbolt(thunderbolt.data)?.state === 'on' ? 'thunderbolt' : '';
     if (!local) return { level: 'err', text: t('net.status.offline') };
     return { level: 'warn', text: t(`net.status.noUplink.${local}`), attrs: html` data-page="wired"` };
   }
-  if (waiting) {
-    const first = net.thunderbolt(thunderbolt.data)?.state === 'wait' ? 'thunderbolt' : 'bluetooth';
-    return { level: 'warn', text: t('net.pending', { n: waiting }), attrs: html` data-page="${first}"` };
+  if (waiting.length) {
+    return { level: 'warn', text: t('net.pending', { n: waiting.length }), attrs: html` data-page="${waiting[0]}"` };
   }
   return { text: t('net.allGood') };
 }
@@ -150,7 +154,7 @@ export default function networkPage(ctx) {
   function render() {
     const d = panel.data ?? {};
     const n = d.network;
-    const waiting = pending(d);
+    const waiting = waitingPages(d);
     const body = html`${netmap(d)}<div class="rl-set rl-set--toc" style="padding-bottom:18px">
       ${section('net.secInterfaces')}
       ${list([

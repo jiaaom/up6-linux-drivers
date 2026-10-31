@@ -59,7 +59,8 @@ payload_t6_control() {
     # Daemon defaults and units, installed system-wide by cmd/install_callback.
     cp "$CRATES/t6-fand/t6-fand.toml" "$CRATES/t6-fand/t6-fand.service" \
        "$CRATES/t6-ledd/t6-ledd.toml" "$CRATES/t6-ledd/t6-ledd.service" \
-       "$CRATES/remoted/remoted.toml" "$CRATES/remoted/remoted.service" "$app/"
+       "$CRATES/remoted/remoted.toml" "$CRATES/remoted/remoted.service" \
+       "$CRATES/t6-ledd/90-t6-connectivity.conf" "$app/"
 }
 
 payload_t6_panel() {
@@ -76,7 +77,7 @@ payload_t6_panel() {
     # launched at boot by the t6-panel-kiosk unit (see fpk/t6-panel/cmd/common).
     # compositor.ini and compositor-pre-start are our appliance-compositor
     # registration (installed into /etc/appliance-compositor by cmd/common).
-    cp "$REPO/panel/app/"{main.js,preload.js,package.json,package-lock.json,run-kiosk.sh,set-drm-prop.py,compositor.ini,compositor-pre-start} "$app/app/"
+    cp "$REPO/panel/app/"{main.js,preload.js,portal-preload.js,package.json,package-lock.json,run-kiosk.sh,set-drm-prop.py,compositor.ini,compositor-pre-start} "$app/app/"
     chmod +x "$app/app/run-kiosk.sh" "$app/app/set-drm-prop.py" "$app/app/compositor-pre-start"
     [ -x "$REPO/panel/app/node_modules/electron/dist/electron" ] \
         || die "panel/app/node_modules/electron missing — run 'npm ci' in panel/app first"

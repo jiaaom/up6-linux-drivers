@@ -7,6 +7,8 @@
 //   short  the few words under the map node
 //   sub    the list row's second line
 //   value  the list row's value
+//   tag    (instead of value) something to look at, e.g. 需要登录
+// A wired or Wi-Fi link that is up but doesn't reach the internet is 'wait'.
 
 import { t } from '../core/i18n.js';
 
@@ -16,6 +18,16 @@ export const speedLong = (mbps) => (!mbps ? '' : mbps >= 1000 ? `${+(mbps / 1000
 
 const join = (...parts) => parts.filter(Boolean).join(' · ');
 
+/**
+ * A connected link that doesn't reach the internet, by NetworkManager's
+ * connectivity check: 'portal' (a sign-in page is in the way), 'offline', or
+ * '' (fine, or not known: trust the link).
+ */
+export function blocked(connectivity) {
+  if (connectivity === 'portal') return 'portal';
+  return connectivity === 'none' || connectivity === 'limited' ? 'offline' : '';
+}
+
 export function wired(net) {
   const ports = net?.ethernet_ports ?? [];
   if (!ports.length) return null;
@@ -24,6 +36,10 @@ export function wired(net) {
     return { state: 'off', short: t('net.unplugged'), sub: t(ports.length > 1 ? 'net.unpluggedAll' : 'net.unplugged'), value: t('net.notConnected') };
   }
   const fastest = up.reduce((a, b) => ((b.speed_mbps ?? 0) > (a.speed_mbps ?? 0) ? b : a));
+  // blocked only when no connected port reaches the internet
+  const issues = up.map((p) => blocked(p.connectivity));
+  const issue = issues.every(Boolean) ? (issues.includes('portal') ? 'portal' : 'offline') : '';
+  if (issue) return { state: 'wait', short: t(`net.issue.${issue}`), sub: join(speedLong(fastest.speed_mbps), fastest.ip), tag: t(`net.issue.${issue}`) };
   return { state: 'on', short: speedShort(fastest.speed_mbps), sub: join(speedLong(fastest.speed_mbps), fastest.ip), value: t('net.connected') };
 }
 
@@ -36,6 +52,8 @@ export function wireless(net, hotspotClients) {
     return { hotspot: true, state: 'on', short: n ? t('net.devices', { n }) : h.ssid, sub: '', value: '' };
   }
   const w = net.wifi ?? {};
+  const issue = w.connected && blocked(w.connectivity);
+  if (issue) return { state: 'wait', short: t(`net.issue.${issue}`), sub: join(w.ssid, w.ip), tag: t(`net.issue.${issue}`) };
   if (w.connected) return { state: 'on', short: w.ssid, sub: join(w.band, w.ip), value: t('net.connected') };
   if (w.enabled) return { state: 'off', short: t('net.notConnected'), sub: t('net.wifiSearching'), value: t('net.notConnected') };
   return { state: 'off', short: t('net.off'), sub: t('net.wifiOff'), value: t('net.off') };

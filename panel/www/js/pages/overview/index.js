@@ -135,7 +135,7 @@ export default function overviewPage(ctx) {
     const last = (p) => (p.length ? p[p.length - 1][1] : 0);
     const [v, u] = rateParts(last(rx));
     const eth = net.wired(d.network);
-    const link = eth?.state === 'on' ? `${net.speedShort((d.network.ethernet_ports ?? []).filter((p) => p.connected).reduce((m, p) => Math.max(m, p.speed_mbps ?? 0), 0))}bE` : d.network?.wifi?.connected ? 'Wi-Fi' : '';
+    const link = ['on', 'wait'].includes(eth?.state) ? `${net.speedShort((d.network.ethernet_ports ?? []).filter((p) => p.connected).reduce((m, p) => Math.max(m, p.speed_mbps ?? 0), 0))}bE` : d.network?.wifi?.connected ? 'Wi-Fi' : '';
     return cell(html`${sec('board.network', { go: true })}${figure(v, `${u} ↓`)}
       ${sparkOf('rx', { width: 150, height: 30, label: t('board.rxSpark', { range: t(`range.${range}`) }), area: false })}
       ${cap([link, `↑ ${rateParts(last(tx)).join(' ')}`].filter(Boolean).join(' · '))}`, { open: 'network' });

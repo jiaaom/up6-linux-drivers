@@ -187,8 +187,8 @@ struct NmDevice {
     /// NMDeviceState number (10 unmanaged, 20 unavailable, 30 disconnected,
     /// 40-90 activating, 100 activated, 110 deactivating, 120 failed).
     state: u32,
-    /// Best of IPv4/IPv6 NMConnectivityState (0 unknown, 1 none, 2 portal,
-    /// 3 limited, 4 full).
+    /// IPv4 and IPv6 NMConnectivityState merged (0 unknown, 1 none, 2 portal,
+    /// 3 limited, 4 full); see `t6_hw_rs::network::merge_nm_connectivity`.
     connectivity: u32,
     has_ip: bool,
     connection: Option<String>,
@@ -615,7 +615,7 @@ fn parse_device(iface: &str, text: &str) -> NmDevice {
     NmDevice {
         iface: iface.to_string(),
         state: num(0),
-        connectivity: num(1).max(num(2)),
+        connectivity: t6_hw_rs::network::merge_nm_connectivity(num(1), num(2)),
         has_ip: v4 || v6,
         connection,
         access_point: false,
@@ -641,6 +641,9 @@ mod tests {
         let d = parse_device("wlan0", t);
         assert_eq!((d.state, d.connectivity, d.has_ip), (100, 4, true));
         assert_eq!(d.connection.as_deref(), Some("My:Net"));
+        // Behind a portal on a network without IPv6: still a portal.
+        let t = "100 (connected)\n2 (portal)\n3 (limited)\nHotel\n10.0.0.158/24\nfe80\\:\\:1/64\n";
+        assert_eq!(parse_device("wlan0", t).connectivity, 2);
         let t = "30 (disconnected)\n1 (none)\n1 (none)\n\n\nfe80\\:\\:1/64\n";
         let d = parse_device("wlan0", t);
         assert_eq!((d.state, d.has_ip, d.connection), (30, false, None));

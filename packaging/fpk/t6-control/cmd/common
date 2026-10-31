@@ -10,6 +10,9 @@ WEBD_UNIT_FILE=/etc/systemd/system/$WEBD_UNIT.service
 # remoted (BLE remote -> keyboard) is generic, not T6-specific.
 DAEMONS=(t6-fand t6-ledd remoted)
 
+# NetworkManager's connectivity check (Wi-Fi light, front panel); see the file.
+NM_CONNECTIVITY_CONF=/etc/NetworkManager/conf.d/90-t6-connectivity.conf
+
 fail() {
     echo "$*" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
     exit 1
@@ -31,6 +34,26 @@ install_daemons() {
         systemctl enable "$d" >/dev/null 2>&1
         systemctl restart "$d" || fail "$d failed to start (journalctl -u $d)."
     done
+}
+
+# Turn on NetworkManager's connectivity check, unless a [connectivity] uri
+# already comes from another file: that is the user's own choice.
+install_nm_connectivity() {
+    local own
+    own=$(PATH=$PATH:/usr/sbin NetworkManager --print-config 2>/dev/null | sed -n '/^\[connectivity\]/,/^\[/p' | grep -c '^uri=')
+    if [ "$own" -gt 0 ] && [ ! -f "$NM_CONNECTIVITY_CONF" ]; then
+        logger -t t6-control "NetworkManager connectivity check already configured; left as it is"
+        return 0
+    fi
+    mkdir -p "$(dirname "$NM_CONNECTIVITY_CONF")"
+    install -m 644 "$TRIM_APPDEST/90-t6-connectivity.conf" "$NM_CONNECTIVITY_CONF"
+    nmcli general reload conf >/dev/null 2>&1 || true
+}
+
+remove_nm_connectivity() {
+    [ -f "$NM_CONNECTIVITY_CONF" ] || return 0
+    rm -f "$NM_CONNECTIVITY_CONF"
+    nmcli general reload conf >/dev/null 2>&1 || true
 }
 
 # Remove the services and binaries. The configuration files hold user

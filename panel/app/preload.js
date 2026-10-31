@@ -13,6 +13,21 @@ contextBridge.exposeInMainWorld('previewBridge', {
   close: () => ipcRenderer.invoke('preview:close'),
 });
 
+// A captive portal's sign-in page in its own view (see main.js): `open` takes
+// t6-paneld's portal proxy port and the screen rect under the panel's bar,
+// `place` moves it (the keyboard came or went), `type` sends the panel
+// keyboard's keys. `onState` gets { url, title, loading, error? } as the page
+// loads; `onFocus` whether a text field in it has focus.
+contextBridge.exposeInMainWorld('portalBridge', {
+  open: (port, bounds) => ipcRenderer.invoke('portal:open', { port, bounds }),
+  place: (bounds) => ipcRenderer.invoke('portal:place', { bounds }),
+  reload: () => ipcRenderer.invoke('portal:reload'),
+  close: () => ipcRenderer.invoke('portal:close'),
+  type: (k) => ipcRenderer.invoke('portal:type', k),
+  onState: (cb) => ipcRenderer.on('portal:state', (event, state) => cb(state)),
+  onFocus: (cb) => ipcRenderer.on('portal:focus', (event, editable) => cb(editable)),
+});
+
 // Video player (bundled mpv, a separate Wayland window above this one; see
 // main.js). `open` starts it on an absolute file path; `onClosed` fires when
 // it exits and the panel is on top again.

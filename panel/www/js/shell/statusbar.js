@@ -7,6 +7,7 @@ import { html, raw } from '../core/dom.js';
 import { icon } from '../core/icons.js';
 import { langChanged, t } from '../core/i18n.js';
 import { panel } from '../core/panel.js';
+import { blocked } from '../data/network.js';
 
 let bar = null;
 
@@ -30,11 +31,18 @@ export function signalIcon(percent, label) {
   return html`<svg class="rl-signal" viewBox="0 0 48 48" role="img" aria-label="${label}">${arc(3, 'M6 19a25 25 0 0 1 36 0')}${arc(2, 'M12.5 26.5a16 16 0 0 1 23 0')}${arc(1, 'M18.5 33.5a7.5 7.5 0 0 1 11 0')}<circle cx="24" cy="39.5" r="2.2"/></svg>`;
 }
 
+/** An ochre diamond on the icon's corner: the link is up but doesn't reach the internet. */
+function alert(connectivity) {
+  const issue = blocked(connectivity);
+  return issue ? html`<i class="t6-alert" role="img" aria-label="${t(`net.issue.${issue}`)}"></i>` : '';
+}
+
 /**
  * Every connection in use, side by side (Ridgeline Navigation › Status bar ›
  * Connections): 蓝牙 · Wi-Fi or 热点 · 有线, least to most important. Off, or
  * on but not connected, shows nothing. With no network at all: wifi-slash
- * when Wi-Fi is off (the reason), else cloud-slash.
+ * when Wi-Fi is off (the reason), else cloud-slash. A link that is up but
+ * doesn't reach the internet (a sign-in page, no internet) gets an alert.
  */
 function connections(d) {
   const net = d?.network;
@@ -48,11 +56,11 @@ function connections(d) {
     const n = hs.devices ?? 0;
     out.push(html`<span aria-label="${t('status.hotspot', { n })}">${icon('broadcast')}${n > 0 ? n : ''}</span>`);
   } else if (wifi?.connected) {
-    out.push(html`<span>${signalIcon(wifi.signal ?? 0, t('status.wifi', { n: wifi.signal ?? 0 }))}</span>`);
+    out.push(html`<span>${signalIcon(wifi.signal ?? 0, t('status.wifi', { n: wifi.signal ?? 0 }))}${alert(wifi.connectivity)}</span>`);
   }
   if (eth?.connected) {
     const speed = linkSpeed(eth.speed_mbps);
-    out.push(html`<span aria-label="${t('status.wired', { speed })}">${icon('plugs-connected')}${speed}</span>`);
+    out.push(html`<span aria-label="${t('status.wired', { speed })}">${icon('plugs-connected')}${alert(eth.connectivity)}${speed}</span>`);
   }
   if (!hs?.active && !wifi?.connected && !eth?.connected) {
     out.push(wifi && wifi.enabled === false

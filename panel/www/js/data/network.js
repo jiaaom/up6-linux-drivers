@@ -36,8 +36,14 @@ export function wired(net) {
     return { state: 'off', short: t('net.unplugged'), sub: t(ports.length > 1 ? 'net.unpluggedAll' : 'net.unplugged'), value: t('net.notConnected') };
   }
   const fastest = up.reduce((a, b) => ((b.speed_mbps ?? 0) > (a.speed_mbps ?? 0) ? b : a));
+  // a port sharing the NAS's internet has no uplink of its own to judge
+  const shared = up.filter((p) => p.share?.active);
+  if (shared.length === up.length) {
+    const n = shared.reduce((m, p) => m + (p.share.clients ?? 0), 0);
+    return { state: 'on', short: t('net.sharingShort'), sub: t('net.sharingWired', { n }), value: t('net.connected') };
+  }
   // blocked only when no connected port reaches the internet
-  const issues = up.map((p) => blocked(p.connectivity));
+  const issues = up.filter((p) => !p.share?.active).map((p) => blocked(p.connectivity));
   const issue = issues.every(Boolean) ? (issues.includes('portal') ? 'portal' : 'offline') : '';
   if (issue) return { state: 'wait', short: t(`net.issue.${issue}`), sub: join(speedLong(fastest.speed_mbps), fastest.ip), tag: t(`net.issue.${issue}`) };
   return { state: 'on', short: speedShort(fastest.speed_mbps), sub: join(speedLong(fastest.speed_mbps), fastest.ip), value: t('net.connected') };
@@ -106,7 +112,7 @@ export const speedLinkText = (link) => link ?? '';
 
 /** The address people reach the NAS on: wired first, then Wi-Fi, then the hotspot's. */
 export function mainAddress(net) {
-  const eth = (net?.ethernet_ports ?? []).find((p) => p.connected && p.ip);
+  const eth = (net?.ethernet_ports ?? []).find((p) => p.connected && p.ip && !p.share?.active);
   if (eth) return { ip: eth.ip, gateway: eth.gateway, dns: eth.dns };
   if (net?.wifi?.connected) return { ip: net.wifi.ip, gateway: net.wifi.gateway, dns: net.wifi.dns };
   return null;

@@ -45,8 +45,9 @@ Tested on x86-64 Debian 12 and on FygoOS / fnOS (kernel 6.18).
 - **FygoOS / fnOS packages** take care of their own dependencies: they automatically install what is missing.
 - **Plain Debian** (kernel modules): DKMS and headers for the running kernel,
   `sudo apt install dkms linux-headers-$(uname -r)`.
-- Optional, Wi-Fi **hotspot**: `sudo apt install dnsmasq-base iptables` (DHCP
-  and NAT for NetworkManager's shared mode).
+- Optional, Wi-Fi **hotspot** and **sharing the internet through a wired
+  port**: `sudo apt install dnsmasq-base iptables` (DHCP and NAT for
+  NetworkManager's shared mode).
 
 ### For building
 

@@ -2,6 +2,9 @@
 // the address as facts; 手动 turns the same rows into inputs, saved as soon as
 // they make a whole address — on an unplugged port too, for when a cable goes in.
 // Ports are named by interface and kind, never by where they sit on the box.
+// A port can also share the NAS's internet with a device plugged into it
+// (分享网络, until a restart; t6_hw_rs::network::share_start): then it hands
+// out addresses itself, so its own address settings step aside.
 
 import { api } from '../../core/api.js';
 import { html, on, painter } from '../../core/dom.js';
@@ -10,10 +13,25 @@ import { t } from '../../core/i18n.js';
 import { panel, refreshPanel } from '../../core/panel.js';
 import { resource } from '../../core/resource.js';
 import { speedLong } from '../../data/network.js';
-import { toast } from '../../shell/layers.js';
+import { confirm, toast } from '../../shell/layers.js';
 import { addressRows, maskOf, readAddress } from '../../ui/address.js';
 import { subpage } from '../../ui/page.js';
-import { foot, list, note, pressSegment, section, segRow } from '../../ui/settings.js';
+import { foot, list, note, pressSegment, section, segRow, switchRow } from '../../ui/settings.js';
+
+/** 分享网络给这个网口: on, off, or why it can't be (fnOS's bridge, already on a network). */
+function shareRow(port) {
+  const s = port.share ?? {};
+  let sub = t('wired.shareOff');
+  if (s.active) sub = port.connected ? t('wired.shareOn', { n: s.clients ?? 0 }) : t('wired.shareWaiting');
+  else if (s.blocked) sub = t(`wired.shareBlocked.${s.blocked}`);
+  return switchRow({ label: t('wired.share'), subText: sub, checked: !!s.active, disabled: !s.active && !!s.blocked, attrs: html` data-share` });
+}
+
+/** How the NAS itself is online, for the sharing dialog: another wired port, else Wi-Fi. */
+function uplinkName(net, iface) {
+  if ((net?.ethernet_ports ?? []).some((p) => p.iface !== iface && p.connected && p.ip && !p.share?.active)) return t('net.wired');
+  return net?.wifi?.connected ? 'Wi-Fi' : '';
+}
 
 function portBlock(port, i, cfg, editing) {
   const manual = (editing ?? cfg?.method) === 'manual';
@@ -29,11 +47,15 @@ function portBlock(port, i, cfg, editing) {
     </div>
     <ul class="rl-kv rl-kv--set"><li><span>${icon('gauge')}${t('wired.speed')}</span><b>${speedLong(port.speed_mbps) || '—'}</b></li><li><span>${icon('fingerprint')}MAC</span><b>${(port.mac ?? '—').toUpperCase()}</b></li></ul>
   </div>`;
+  const sharing = !!port.share?.active;
   return html`${section(`wired.port${i + 1}`)}
     <div data-port="${port.iface}">${list([
       head,
-      segRow({ label: t('wired.method'), current: manual ? 'manual' : 'auto', options: [{ value: 'auto', label: t('wired.auto') }, { value: 'manual', label: t('wired.manual') }], attrs: html` data-method` }),
-      html`<div class="rl-port__addr">${addressRows(shown, manual)}</div>`,
+      shareRow(port),
+      sharing
+        ? html`<ul class="rl-kv rl-kv--set"><li><span>${icon('globe-hemisphere-west')}${t('wired.shareAddr')}</span><b>${port.ip ?? '—'}</b></li></ul>`
+        : segRow({ label: t('wired.method'), current: manual ? 'manual' : 'auto', options: [{ value: 'auto', label: t('wired.auto') }, { value: 'manual', label: t('wired.manual') }], attrs: html` data-method` }),
+      sharing ? null : html`<div class="rl-port__addr">${addressRows(shown, manual)}</div>`,
     ])}</div>`;
 }
 
@@ -71,6 +93,26 @@ export default function wiredPage(ctx) {
     configOf(iface).refresh();
     refreshPanel();
   }
+
+  on(ctx.el, 'change', 'input[data-share]', async (e, input) => {
+    const iface = input.closest('[data-port]').dataset.port;
+    const on = input.checked;
+    if (on) {
+      input.checked = false;
+      const via = uplinkName(panel.data?.network, iface);
+      const ok = await confirm({ title: t('wired.shareTitle', { iface }), body: t(via ? 'wired.shareBody' : 'wired.shareBodyOffline', { via }), action: t('wired.shareAction') });
+      if (!ok) return;
+      input.checked = true;
+    }
+    try {
+      await api.post('network/ethernet/share', { iface, on });
+      if (on) toast(t('wired.shareStarted', { iface }));
+    } catch (err) {
+      input.checked = !on;
+      toast(t('common.failed', { why: err.message }));
+    }
+    refreshPanel();
+  });
 
   on(ctx.el, 'click', '[data-method] .rl-seg__btn', (e, b) => {
     const iface = b.closest('[data-port]').dataset.port;

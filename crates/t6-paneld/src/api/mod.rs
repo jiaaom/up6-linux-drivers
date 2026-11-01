@@ -135,6 +135,8 @@ pub fn router(www: crate::www::Www, web: crate::www::Www, prefix: &str, shell_po
         // connection. Not login-gated (same physical-access model as Wi-Fi).
         .route(&p("/api/network/ethernet"), get(get_ethernet))
         .route(&p("/api/network/ethernet"), post(post_ethernet))
+        // Sharing the NAS's internet through a wired port (until a reboot).
+        .route(&p("/api/network/ethernet/share"), post(post_ethernet_share))
         // Wi-Fi hotspot (AP mode). Not login-gated (physical-access model).
         .route(&p("/api/network/hotspot"), get(get_hotspot))
         .route(&p("/api/network/hotspot"), post(post_hotspot))

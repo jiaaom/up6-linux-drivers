@@ -1,6 +1,6 @@
 #!/bin/sh
 # Pretend the Wi-Fi network sits behind a captive portal, to test the
-# sign-in detection (docs/captive-portal-plan.md) without a hotel:
+# sign-in detection (crates/t6-ledd/README.md) without a hotel:
 #
 #   sudo panel/tools/fake-captive-portal.sh up      # Wi-Fi now "needs sign-in"
 #   sudo panel/tools/fake-captive-portal.sh up meraki  # the same, as a Meraki page

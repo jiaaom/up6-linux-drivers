@@ -130,6 +130,23 @@ pub(super) async fn put_portal_auto(Json(req): Json<PortalAutoReq>) -> Response 
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct ShareReq {
+    iface: String,
+    on: bool,
+}
+
+/// Share the NAS's internet through a wired port, or stop
+/// (t6_hw_rs::network::share_start: until a reboot).
+pub(super) async fn post_ethernet_share(Json(req): Json<ShareReq>) -> Response {
+    let r = tokio::task::spawn_blocking(move || {
+        if req.on { t6_hw_rs::network::share_start(&req.iface) } else { t6_hw_rs::network::share_stop(&req.iface) }
+    })
+    .await
+    .unwrap_or_else(|e| Err(e.to_string()));
+    net_result(r.map(|_| serde_json::json!({ "ok": true })))
+}
+
 /// The sign-in view closed: stop the proxy.
 pub(super) async fn delete_portal_proxy() -> Response {
     crate::portal::stop();

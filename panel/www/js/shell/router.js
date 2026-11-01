@@ -36,10 +36,29 @@ import { skeleton, skeletonRows } from '../ui/states.js';
 
 const lazies = []; // every lazy() made so far, for warm()
 
+/** Reload the panel at most this often to get over a module that failed to load. */
+const RELOAD_EVERY_MS = 60000;
+
+/**
+ * A module failed to load (t6-paneld not up yet at boot, say). Chromium keeps
+ * a failed import() failed for the page's life, so retrying can't help and the
+ * page would stay a skeleton: reload the panel instead, once a minute at most.
+ */
+function failedToLoad(e) {
+  console.error('page module failed to load', e);
+  let last = 0;
+  try { last = Number(sessionStorage.getItem('t6-reload-at')) || 0; } catch { /* no storage */ }
+  const wait = Math.max(0, last + RELOAD_EVERY_MS - Date.now());
+  setTimeout(() => {
+    try { sessionStorage.setItem('t6-reload-at', String(Date.now())); } catch { /* no storage */ }
+    location.reload();
+  }, wait);
+}
+
 /** A page whose module is loaded the first time it opens (or by warm()). */
 export function lazy(load) {
   const f = { lazy: load, mod: null };
-  f.ready = () => (f.mod ? Promise.resolve(f.mod) : load().then((m) => (f.mod = m)));
+  f.ready = () => (f.mod ? Promise.resolve(f.mod) : load().then((m) => (f.mod = m), (e) => { failedToLoad(e); throw e; }));
   lazies.push(f);
   return f;
 }
@@ -51,7 +70,9 @@ function warm() {
   const next = () => {
     while (i < lazies.length && lazies[i].mod) i++;
     if (i >= lazies.length) return;
-    lazies[i].ready().catch(() => {}).finally(() => idle(next));
+    // past this one even when it failed: a failed import fails again at once,
+    // and retrying it here was a busy loop (failedToLoad deals with it)
+    lazies[i++].ready().catch(() => {}).finally(() => idle(next));
   };
   idle(next);
 }

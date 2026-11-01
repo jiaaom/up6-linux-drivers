@@ -29,6 +29,20 @@ pub struct Ethernet {
     pub dns: Vec<String>,
     /// NetworkManager's connectivity check for this port; see [`Connectivity`].
     pub connectivity: Connectivity,
+    /// Sharing this NAS's internet through the port; see [`share_start`].
+    pub share: Share,
+}
+
+/// Whether a wired port shares the NAS's internet, or why it can't.
+#[derive(Serialize, Default, Clone)]
+pub struct Share {
+    pub active: bool,
+    /// Why it can't be turned on: "ovs" (in an Open vSwitch bridge: fnOS's
+    /// port), "unmanaged" (NetworkManager doesn't manage it), "uplink" (it is
+    /// on a network already); None when it can.
+    pub blocked: Option<String>,
+    /// Devices that got an address from it and are there now.
+    pub clients: usize,
 }
 
 /// Whether a connected link actually reaches the internet, from
@@ -249,6 +263,7 @@ fn ethernet_port(iface: &str) -> Ethernet {
     let dev = l3_dev(iface);
     let usb = is_usb(iface);
     let (ip, prefix) = dev_ipv4(&dev).map(|(i, p)| (Some(i), p)).unwrap_or_default();
+    let share = share_status(iface);
     Ethernet {
         connected: sysfs(iface, "carrier").as_deref() == Some("1"),
         iface: Some(iface.to_string()),
@@ -261,7 +276,9 @@ fn ethernet_port(iface: &str) -> Ethernet {
         gateway: run("ip", &["route", "show", "default", "dev", &dev])
             .and_then(|o| tok_after(&o.split_whitespace().collect::<Vec<_>>(), "via")),
         dns: nmcli_field(&dev, "IP4.DNS"),
-        connectivity: device_connectivity(&dev),
+        // a shared port has no uplink of its own to check
+        connectivity: if share.active { Connectivity::Unknown } else { device_connectivity(&dev) },
+        share,
     }
 }
 
@@ -967,6 +984,134 @@ fn hotspot_clients(wl: &str) -> Vec<HotspotClient> {
         clients.push(HotspotClient { name, ip: f[2].to_string(), mac: f[1].to_string() });
     }
     clients
+}
+
+// ---- Sharing the NAS's internet through a wired port ------------------------
+//
+// For a device without Wi-Fi plugged into a port of the NAS, which itself is
+// online over Wi-Fi (a hotel, behind its sign-in page). NetworkManager's
+// `ipv4.method shared` on the port, as the hotspot does: the port becomes
+// 10.42.x.1/24, NM's dnsmasq hands out addresses and answers DNS, and NAT
+// takes the device out through whatever carries the NAS's default route
+// (Wi-Fi, when that is all there is). Behind a sign-in page the device rides
+// on the NAS's acceptance (t6-paneld autoaccept.rs).
+//
+// The profile is kept in memory only (`save no`): sharing ends at a reboot,
+// so a port that later goes back onto a real network never hands out
+// addresses there. It stays across unplugging and plugging in until then.
+// Docker leaves the iptables FORWARD policy at DROP, which NM's own nftables
+// rules can't override, so the port also gets two ACCEPT rules there
+// (comment "t6-share"), gone at a reboot too. Not for a port in an Open
+// vSwitch bridge (fnOS's built-in port: fnOS owns it), nor for one that is on
+// a network already (it would hand out addresses on someone else's network).
+
+const SHARE_PREFIX: &str = "t6-share-";
+const SHARE_RULE: &str = "t6-share";
+
+fn share_conn(iface: &str) -> String {
+    format!("{SHARE_PREFIX}{iface}")
+}
+
+/// The NM device's state number and active connection.
+fn device_state(iface: &str) -> (u32, String) {
+    let out = run("nmcli", &["-g", "GENERAL.STATE,GENERAL.CONNECTION", "device", "show", iface]).unwrap_or_default();
+    let mut lines = out.lines();
+    let state = lines.next().and_then(|l| l.split_whitespace().next()).and_then(|n| n.parse().ok()).unwrap_or(0);
+    let conn = lines.next().unwrap_or("").trim().replace("\\:", ":");
+    (state, conn)
+}
+
+fn in_ovs(iface: &str) -> bool {
+    std::fs::read_link(format!("/sys/class/net/{iface}/master"))
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .is_some_and(|m| m == "ovs-system")
+        || std::path::Path::new(&format!("/sys/class/net/{iface}-ovs")).exists()
+}
+
+fn share_status(iface: &str) -> Share {
+    let mut s = Share::default();
+    if in_ovs(iface) {
+        s.blocked = Some("ovs".into());
+        return s;
+    }
+    let (state, conn) = device_state(iface);
+    s.active = conn == share_conn(iface);
+    if s.active {
+        s.clients = hotspot_clients(iface).len();
+    } else if state <= 10 {
+        s.blocked = Some("unmanaged".into());
+    } else if dev_ipv4(iface).is_some() {
+        s.blocked = Some("uplink".into());
+    }
+    s
+}
+
+fn share_rules(iface: &str) -> [Vec<&str>; 2] {
+    [
+        vec!["FORWARD", "-i", iface, "-m", "comment", "--comment", SHARE_RULE, "-j", "ACCEPT"],
+        vec!["FORWARD", "-o", iface, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-m", "comment", "--comment", SHARE_RULE, "-j", "ACCEPT"],
+    ]
+}
+
+/// Share the NAS's internet through wired port `iface` (until `share_stop`
+/// or a reboot). The port may be unplugged: it starts sharing when a cable
+/// goes in.
+pub fn share_start(iface: &str) -> Result<(), String> {
+    if iface.is_empty() || !iface.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return Err("bad interface name".into());
+    }
+    let kind = run("nmcli", &["-g", "GENERAL.TYPE", "device", "show", iface]).unwrap_or_default();
+    if kind.trim() != "ethernet" {
+        return Err(format!("{iface} is not a wired port NetworkManager knows"));
+    }
+    let st = share_status(iface);
+    if st.active {
+        return Ok(());
+    }
+    match st.blocked.as_deref() {
+        Some("ovs") => return Err(format!("{iface} belongs to fnOS's network bridge (Open vSwitch)")),
+        Some("unmanaged") => return Err(format!("NetworkManager doesn't manage {iface}")),
+        Some("uplink") => return Err(format!("{iface} is on a network already; sharing would hand out addresses there")),
+        _ => {}
+    }
+    let name = share_conn(iface);
+    let _ = nmcli_ok(&["connection", "delete", "id", &name]); // a leftover
+    for rule in share_rules(iface) {
+        let mut check = vec!["-C"];
+        check.extend(&rule);
+        if run("iptables", &check).is_none() {
+            let mut insert = vec!["-I"];
+            insert.extend(&rule);
+            run("iptables", &insert).ok_or("iptables refused the forwarding rule")?;
+        }
+    }
+    nmcli_ok(&[
+        "connection", "add", "type", "ethernet", "ifname", iface, "con-name", &name,
+        "ipv4.method", "shared", "ipv6.method", "disabled",
+        "connection.autoconnect", "yes", "connection.autoconnect-priority", "100",
+        "save", "no",
+    ])?;
+    // with a cable in, take the port over now; without, NM does when one goes in
+    if sysfs(iface, "carrier").as_deref() == Some("1") {
+        nmcli_ok(&["--wait", "15", "connection", "up", "id", &name])?;
+    }
+    Ok(())
+}
+
+/// Stop sharing through `iface`; NetworkManager puts its usual profile back.
+pub fn share_stop(iface: &str) -> Result<(), String> {
+    let name = share_conn(iface);
+    let gone = nmcli_ok(&["connection", "delete", "id", &name]);
+    for rule in share_rules(iface) {
+        let mut delete = vec!["-D"];
+        delete.extend(&rule);
+        while run("iptables", &delete).is_some() {}
+    }
+    if gone.is_err() && share_status(iface).active {
+        return gone.map(|_| ());
+    }
+    Ok(())
 }
 
 /// Start the hotspot again with the name, password and band it was last set up with.

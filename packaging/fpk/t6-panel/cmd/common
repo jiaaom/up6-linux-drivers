@@ -29,6 +29,9 @@ COMPOSITOR_ETC=/etc/appliance-compositor
 CLIENT_NAME=t6-panel
 # Touches must stay on the built-in screen when a TV is attached too: weston
 # maps an input device to the output named in its udev WL_OUTPUT property.
+# Since compositor 1.2.0 our fragment's [touchscreen] section says the same
+# (and appliance-touch respects this rule); the rule stays for older
+# compositors until the panel requires 1.2.0.
 TOUCH_RULE=/etc/udev/rules.d/90-t6-panel-touch.rules
 
 check_compositor() {
